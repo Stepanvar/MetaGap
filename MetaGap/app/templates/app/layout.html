@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>{{title}}</title>
+	<!-- Meta tags -->
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="robots" content="noindex, nofollow">
+	<!-- Static file loading -->
+	{% load static %}
+	<link rel="stylesheet" type="text/css" href="{% static 'app/content/site.css' %}" />
+	<link rel="stylesheet" type="text/css" href="{% static 'app/content/datatables.css' %}" /><!-- Move it-->
+	<link rel="stylesheet" type="text/css" href="{% static 'app/content/mdb.min.css' %}" /> <!-- MDB5 CSS -->
+	{% load bootstrap5 %}
+	{% bootstrap_css %}
+	{% bootstrap_javascript %}
+	{% block head %}{% endblock head %} <!-- Block for additional head content -->
+</head>
+
+<body>
+	<nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top">
+		<div class="container-fluid">
+			<!-- Brand/logo -->
+			<a class="navbar-brand" href="/">MetaGap</a>
+
+			<!-- Toggler/collapsible Button -->
+			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+				<span class="navbar-toggler-icon"></span>
+			</button>
+
+			<!-- Navbar links -->
+			<div class="collapse navbar-collapse" id="navbarResponsive">
+				<ul class="navbar-nav ms-auto">
+					<li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Home</a></li>
+					<li class="nav-item"><a class="nav-link" href="{% url 'about' %}">About</a></li>
+					<li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">Contact</a></li>
+					<!-- Include login partial here -->
+					{% include 'app/loginpartial.html' %}
+				</ul>
+			</div>
+		</div>
+	</nav>
+
+	<!-- Breadcrumbs -->
+	{% block breadcrumbs %}
+	<nav aria-label="breadcrumb">
+		<div class="container">
+			<ol class="breadcrumb">
+				{% for breadcrumb in breadcrumbs %}
+				<li class="breadcrumb-item{% if forloop.last %} active{% endif %}">
+					{% if not forloop.last %}
+					<a href="{{ breadcrumb.url }}">{{ breadcrumb.title }}</a>
+					{% else %}
+					{{ breadcrumb.title }}
+					{% endif %}
+				</li>
+				{% endfor %}
+			</ol>
+		</div>
+	</nav>
+	{% endblock breadcrumbs %}
+
+	<!-- Main Content -->
+	<div class="container body-content">
+		{% block content %}{% endblock content %}
+		<hr />
+		<footer>
+			{% block footer %}{% endblock footer %}
+			<p>&copy; {{ year }}</p>
+		</footer>
+	</div>
+
+	<!-- Scripts -->
+<script src="{% static 'app/scripts/jquery-1.10.2.js' %}"></script>
+<script src="{% static 'app/scripts/mdb.min.js' %}"></script><!-- MDB5 JS -->
+<script src="{% static 'app/scripts/respond.js' %}"></script>
+<script src="{% static 'app/scripts/bootstrap.js' %}"></script>
+<script src="{% static 'app/scripts/modernizr-2.6.2.js' %}"></script>
+	<script src="{% static 'app/scripts/datatables.js' %}"></script>
+	{% block scripts %}{% endblock scripts %}
+</body>
+</html>

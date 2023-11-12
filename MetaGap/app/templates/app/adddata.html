@@ -1,0 +1,52 @@
+{% extends "app/layout.html" %}
+{% block content %}
+<div class="container my-4">
+	<h1>Add Data</h1>
+	<form action="." method="post">
+		{% csrf_token %}
+		<div class="mb-3 row">
+			<label for="common_name" class="col-sm-2 col-form-label">Common Name:</label>
+			<div class="col-sm-10">
+				<input type="text" class="form-control" id="common_name" name="common_name" required>
+			</div>
+		</div>
+		<div class="mb-3 row">
+			<label for="common_description" class="col-sm-2 col-form-label">Common Description:</label>
+			<div class="col-sm-10">
+				<textarea class="form-control" id="common_description" name="common_description" required></textarea>
+			</div>
+		</div>
+		<div class="mb-3 row">
+			<label for="common_contact_info" class="col-sm-2 col-form-label">Common Contact Info:</label>
+			<div class="col-sm-10">
+				<input type="text" class="form-control" id="common_contact_info" name="common_contact_info" required>
+			</div>
+		</div>
+		<div class="mb-3 row">
+			<label for="phenotype_name" class="col-sm-2 col-form-label">Phenotype Name:</label>
+			<div class="col-sm-10">
+				<input type="text" class="form-control" id="phenotype_name" name="phenotype_name" required>
+			</div>
+		</div>
+		<div class="mb-3 row">
+			<label for="phenotype_description" class="col-sm-2 col-form-label">Phenotype Description:</label>
+			<div class="col-sm-10">
+				<textarea class="form-control" id="phenotype_description" name="phenotype_description" required></textarea>
+			</div>
+		</div>
+		<div class="mb-3 row">
+			<label for="genotype_name" class="col-sm-2 col-form-label">Genotype Name:</label>
+			<div class="col-sm-10">
+				<input type="text" class="form-control" id="genotype_name" name="genotype_name" required>
+			</div>
+		</div>
+		<div class="mb-3 row">
+			<label for="genotype_description" class="col-sm-2 col-form-label">Genotype Description:</label>
+			<div class="col-sm-10">
+				<textarea class="form-control" id="genotype_description" name="genotype_description" required></textarea>
+			</div>
+		</div>
+		<button type="submit" class="btn btn-primary">Save</button>
+	</form>
+</div>
+{% endblock %}

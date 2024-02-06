@@ -10,16 +10,19 @@
 	<link rel="stylesheet" href="{% static 'app/content/site.css' %}" type="text/css">
 	<!-- MDB5 CSS -->
 	<link rel="stylesheet" href="{% static 'app/content/mdb.min.css' %}" type="text/css">
+	{% load bootstrap5 %}
+	{% bootstrap_css %}
+	{% bootstrap_javascript %}
 </head>
 <body>
-	<header class="bg-light fixed-top">
-		<nav class="navbar navbar-expand-lg navbar-light">
+	<header class="bg-dark fixed-top">
+		<nav class="navbar navbar-expand-lg navbar-dark">
 			<a class="navbar-brand" href="{% url 'home' %}">MetaGap</a>
 			<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
 			</button>
 			<div class="collapse navbar-collapse" id="navbarResponsive">
-				<ul class="navbar-nav ml-auto">
+				<ul class="navbar-nav ms-auto">
 					<li class="nav-item"><a class="nav-link" href="{% url 'about' %}">About</a></li>
 					<li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">Contact</a></li>
 					{% include 'loginpartial.html' %}
@@ -41,6 +44,9 @@
 	<!-- Scripts -->
 	<script src="{% static 'app/scripts/jquery.min.js' %}"></script>
 	<script src="{% static 'app/scripts/bootstrap.bundle.min.js' %}"></script>
+	<!-- MDB5 JS -->
+	<script src="{% static 'app/scripts/popper.min.js' %}"></script>
+	<script src="{% static 'app/scripts/bootstrap.min.js' %}"></script>
 	<script src="{% static 'app/scripts/mdb.min.js' %}"></script>
 	{% block scripts %}
 	<!-- Additional scripts can be included here -->

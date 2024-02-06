@@ -6,32 +6,32 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
 
-    initial = True
+	initial = True
 
-    dependencies = [
-    ]
+	dependencies = [
+	]
 
-    operations = [
-        migrations.CreateModel(
-            name='Genotype',
-            fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-            ],
-        ),
-        migrations.CreateModel(
-            name='Phenotype',
-            fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-            ],
-        ),
-        migrations.CreateModel(
-            name='Common',
-            fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('contact_info', models.CharField(max_length=255)),
-                ('description', models.TextField()),
-                ('genotype', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.genotype')),
-                ('phenotype', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.phenotype')),
-            ],
-        ),
-    ]
+	operations = [
+		migrations.CreateModel(
+			name='Genotype',
+			fields=[
+				('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+			],
+		),
+		migrations.CreateModel(
+			name='Phenotype',
+			fields=[
+				('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+			],
+		),
+		migrations.CreateModel(
+			name='Common',
+			fields=[
+				('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+				('contact_info', models.CharField(max_length=255)),
+				('description', models.TextField()),
+				('genotype', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.genotype')),
+				('phenotype', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.phenotype')),
+			],
+		),
+	]

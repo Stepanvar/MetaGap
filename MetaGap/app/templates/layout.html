@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="robots" content="noindex, nofollow">
+	<title>{{ title }}</title>
+	<!-- Static file links for CSS -->
+	<link rel="stylesheet" href="{% static 'app/content/site.css' %}" type="text/css">
+	<!-- MDB5 CSS -->
+	<link rel="stylesheet" href="{% static 'app/content/mdb.min.css' %}" type="text/css">
+</head>
+<body>
+	<header class="bg-light fixed-top">
+		<nav class="navbar navbar-expand-lg navbar-light">
+			<a class="navbar-brand" href="{% url 'home' %}">MetaGap</a>
+			<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+				<span class="navbar-toggler-icon"></span>
+			</button>
+			<div class="collapse navbar-collapse" id="navbarResponsive">
+				<ul class="navbar-nav ml-auto">
+					<li class="nav-item"><a class="nav-link" href="{% url 'about' %}">About</a></li>
+					<li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">Contact</a></li>
+					{% include 'loginpartial.html' %}
+				</ul>
+			</div>
+		</nav>
+	</header>
+	<main role="main" class="container mt-5">
+		{% block breadcrumbs %}
+		<!-- Breadcrumbs can be dynamically generated here -->
+		{% endblock breadcrumbs %}
+		{% block content %}
+		<!-- Main content will be inserted here -->
+		{% endblock content %}
+	</main>
+	<footer class="footer">
+		<p>© Your Site 2024</p>
+	</footer>
+	<!-- Scripts -->
+	<script src="{% static 'app/scripts/jquery.min.js' %}"></script>
+	<script src="{% static 'app/scripts/bootstrap.bundle.min.js' %}"></script>
+	<script src="{% static 'app/scripts/mdb.min.js' %}"></script>
+	{% block scripts %}
+	<!-- Additional scripts can be included here -->
+	{% endblock scripts %}
+</body>
+</html>

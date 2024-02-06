@@ -5,44 +5,44 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('app', '0002_alter_common_id_alter_genotype_id_alter_phenotype_id'),
-    ]
+	dependencies = [
+		('app', '0002_alter_common_id_alter_genotype_id_alter_phenotype_id'),
+	]
 
-    operations = [
-        migrations.RenameField(
-            model_name='common',
-            old_name='genotype',
-            new_name='gen',
-        ),
-        migrations.RenameField(
-            model_name='common',
-            old_name='phenotype',
-            new_name='phen',
-        ),
-        migrations.AddField(
-            model_name='common',
-            name='name',
-            field=models.CharField(blank=True, max_length=255),
-        ),
-        migrations.AddField(
-            model_name='genotype',
-            name='description',
-            field=models.TextField(blank=True, default=''),
-        ),
-        migrations.AddField(
-            model_name='genotype',
-            name='name',
-            field=models.CharField(blank=True, max_length=255),
-        ),
-        migrations.AddField(
-            model_name='phenotype',
-            name='description',
-            field=models.TextField(blank=True, default=''),
-        ),
-        migrations.AddField(
-            model_name='phenotype',
-            name='name',
-            field=models.CharField(blank=True, max_length=255),
-        ),
-    ]
+	operations = [
+		migrations.RenameField(
+			model_name='common',
+			old_name='genotype',
+			new_name='gen',
+		),
+		migrations.RenameField(
+			model_name='common',
+			old_name='phenotype',
+			new_name='phen',
+		),
+		migrations.AddField(
+			model_name='common',
+			name='name',
+			field=models.CharField(blank=True, max_length=255),
+		),
+		migrations.AddField(
+			model_name='genotype',
+			name='description',
+			field=models.TextField(blank=True, default=''),
+		),
+		migrations.AddField(
+			model_name='genotype',
+			name='name',
+			field=models.CharField(blank=True, max_length=255),
+		),
+		migrations.AddField(
+			model_name='phenotype',
+			name='description',
+			field=models.TextField(blank=True, default=''),
+		),
+		migrations.AddField(
+			model_name='phenotype',
+			name='name',
+			field=models.CharField(blank=True, max_length=255),
+		),
+	]

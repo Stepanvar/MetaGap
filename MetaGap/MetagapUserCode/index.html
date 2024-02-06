@@ -4,7 +4,7 @@
 	<h1>Genomic Database</h1>
 </div>
 <main class="container my-5">
-    <form method="post" action="{% url 'home' %}" class="d-flex input-group w-auto">
+    <form method="post" action="{% url 'results' %}" class="d-flex input-group w-auto">
         {% csrf_token %}
         <input type="search" class="form-control" name="search" placeholder="Type query" aria-label="Search">
         <button class="btn btn-primary" type="submit">

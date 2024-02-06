@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+	{% block content %}
+<div class="text-center" style="margin-top: 100px;">
+	<h1>Genomic Database</h1>
+</div>
+<main class="container my-5">
+	<form method="get" action="{% url 'results' %}" class="d-flex input-group w-auto">
+		{% csrf_token %}
+		<input type="search" class="form-control" name="query" placeholder="Type query" aria-label="Search">
+		<button class="btn btn-primary" type="submit">
+			Search
+		</button>
+	</form>
+
+</main>
+	{% endblock %}

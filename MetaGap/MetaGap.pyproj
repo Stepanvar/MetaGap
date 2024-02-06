@@ -53,17 +53,18 @@
     <Folder Include="app\static\app\fonts\" />
     <Folder Include="app\static\app\scripts\" />
     <Folder Include="app\templates\" />
-    <Folder Include="app\templates\app\" />
     <Folder Include="MetaGap\" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="app\static\app\content\mdb.min.css" />
+    <Content Include="app\static\app\scripts\datatables.js" />
+    <Content Include="app\static\app\scripts\datatables.min.js" />
     <Content Include="app\static\app\scripts\mdb.min.js" />
-    <Content Include="app\templates\app\adddata.html" />
-    <Content Include="app\templates\app\form_template.html" />
-    <Content Include="app\templates\app\profile.html" />
-    <Content Include="app\templates\app\results.html" />
-    <Content Include="app\templates\app\signup.html" />
+    <Content Include="app\templates\adddata.html" />
+    <Content Include="app\templates\form_template.html" />
+    <Content Include="app\templates\profile.html" />
+    <Content Include="app\templates\results.html" />
+    <Content Include="app\templates\signup.html" />
     <Content Include="requirements.txt" />
     <Content Include="db.sqlite3" />
     <Content Include="app\static\app\content\site.css" />
@@ -84,12 +85,12 @@
     <Content Include="app\static\app\scripts\respond.js" />
     <Content Include="app\static\app\scripts\respond.min.js" />
     <Content Include="app\static\app\scripts\_references.js" />
-    <Content Include="app\templates\app\about.html" />
-    <Content Include="app\templates\app\contact.html" />
-    <Content Include="app\templates\app\index.html" />
-    <Content Include="app\templates\app\layout.html" />
-    <Content Include="app\templates\app\login.html" />
-    <Content Include="app\templates\app\loginpartial.html" />
+    <Content Include="app\templates\about.html" />
+    <Content Include="app\templates\contact.html" />
+    <Content Include="app\templates\index.html" />
+    <Content Include="app\templates\layout.html" />
+    <Content Include="app\templates\login.html" />
+    <Content Include="app\templates\loginpartial.html" />
   </ItemGroup>
   <ItemGroup>
     <None Include="readme.html">

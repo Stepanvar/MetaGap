@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+{% load static %}
+{% block content %}
+{% if user.is_authenticated %}
+<h1>Profile</h1>
+<a href="{% url 'adddata' %}">Add data</a>
+{% if common_list %}
+<h2>Your Data</h2>
+<div class="table-responsive">
+	<table id="userDataTable" class="table">
+		<thead>
+			<tr>
+				{% for field in common_list.first.get_fields %}
+				<th>{{ field.verbose_name.title }}</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+			{% for common in common_list %}
+			<tr>
+				{% for value in common.get_field_values %}
+				<td>{{ value }}</td>
+				{% endfor %}
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+{% else %}
+<p>No data found.</p>
+{% endif %}
+{% else %}
+<p><a href="{% url 'login' %}">Please log in.</a></p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'app/scripts/datatables.min.js' %}"></script>
+<script>
+	$(document).ready(function () {
+		$('#userDataTable').DataTable();
+	});
+</script>
+{% endblock %}

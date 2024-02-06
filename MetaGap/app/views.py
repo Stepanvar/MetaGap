@@ -1,159 +1,135 @@
-"""
-Definition of views.
-"""
+from tkinter import SEL
+from django.db import models
+from django.views.generic import ListView, CreateView, TemplateView
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models.functions import Cast
+from .models import PopulationFrequency, Common, UserData
+from .forms import (
+	CustomUserCreationForm,
+	PopulationFrequencyForm,
+	CommonForm,
+	SearchForm,
+)
+from django.urls import reverse_lazy
+from django.db.models import Q, CharField
 
-from datetime import datetime
-from django.contrib.auth.views import LoginView, LogoutView
-from django.http import HttpRequest
-from django.shortcuts import render, redirect   
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth import authenticate, login, logout
-from django.db.models import Q
-from django import template
-from app import forms
-from .models import Phenotype, Genotype, Common, UserData
-register = template.Library()
-# try this
-@register.filter(name='custom_date')
-def custom_date(value):
-    return value.strftime("%d %b, %Y")
 
-def home(request):
-    """Renders the home page."""
-    assert isinstance(request, HttpRequest)
-    if request.method == 'POST':
-        query = request.POST.get('search', '')
-        common_results = Common.objects.filter(
-        Q(name__icontains=query) | Q(description__icontains=query) | Q(contact_info__icontains=query) |
-        Q(phen__name__icontains=query) | Q(phen__description__icontains=query) |
-        Q(gen__name__icontains=query) | Q(gen__description__icontains=query)
-    )
-        combined_results = []
+class CommonListView(ListView):
+	model = Common
+	template_name = "common_list.html"
+	context_object_name = "commons"
 
-        for common in common_results:
-            result = {
-                'name': common.name,
-                'phen': common.phen.name,
-                'gen': common.gen.name,
-                'contact_info': common.contact_info,
-                'desc': common.description
-            }
-            combined_results.append(result)
-        return render(request, 'app/results.html', {'results': combined_results})
-    else:
-        return render(
-        request,
-        'app/index.html',
-        {
-            'title':'Home Page',
-            'year': datetime.now().year,
-        }
-    )
 
-def contact(request):
-    """Renders the contact page."""
-    assert isinstance(request, HttpRequest)
-    return render(
-        request,
-        'app/contact.html',
-        {
-            'title':'Contact',
-            'message':'Your contact page.',
-            'year':datetime.now().year,
-        }
-    )
+class CommonCreateView(CreateView):
+	model = Common
+	form_class = CommonForm
+	template_name = "form_template.html"
+	success_url = reverse_lazy("common_list")
 
-def about(request):
-    """Renders the about page."""
-    assert isinstance(request, HttpRequest)
-    return render(
-        request,
-        'app/about.html',
-        {
-            'title':'About',
-            'message':'Your application description page.',
-            'year':datetime.now().year,
-        }
-    )
 
-def results(request):
-    results = request.GET.get('results')
-    return render(request, 'app/results.html', {'title':'Results',
-                                                'results': results})
- 
-def signup(request):
-    if request.method == 'POST':
-        form = forms.BootstrapUserCreationForm(request.POST)
-        if form.is_valid():
-            form.save()
-            username = form.cleaned_data.get('username')
-            password = form.cleaned_data.get('password1')
-            user = authenticate(username=username, password=password)
-            login(request)
-            return redirect('app/home')
-    else:
-        form = forms.BootstrapUserCreationForm()
-    return render(request, 'app/signup.html', {'form': form})
+# Additional views for search and profile management
+class HomePageView(TemplateView):
+	template_name = "index.html"
 
-def login(request):
-    return LoginView.as_view(
-            template_name="app/login.html",
-            authentication_form=forms.BootstrapAuthenticationForm,
-            extra_context={
-                "title": "Log in",
-                "year": datetime.now().year,
-            },
-        ) (request)
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		context["form"] = SearchForm()
+		return context
 
-def logout(request):
-    return LogoutView.as_view(next_page="/") (request)
 
-@login_required
-def delete_user(request):
-    user = request.user
-    user.delete()
-    return redirect("app/login")
+class SearchResultView(ListView):
+	template_name = "results.html"
+	model = Common
+	context_object_name = "results"
+	def get_queryset(self):
+		form = SearchForm(self.request.GET)
+		if form.is_valid():
+			query = form.cleaned_data['query']
+			query_list = query.split()
+			c_queries = Q()
+			pf_queries = Q()
+			for word in query_list:
+				c_queries |= self.model_query(Common, word)
+				pf_queries |= self.model_query(PopulationFrequency, word)
+			com_results = Common.objects.filter(c_queries)
+			pf_results = PopulationFrequency.objects.filter(pf_queries)
+			return list(com_results) + list(pf_results)
+		else:
+			return Common.objects.none()
+	def model_query(self, model, query_word):
+		queries = Q()
+		for field in model._meta.fields:
+			if isinstance(field, (models.CharField, models.TextField)):
+				queries |= Q(**{f"{field.name}__icontains": query_word})
+			# else:
+			# 	# Cast the field to a string and search
+			# 	queries |= Q(**{f'{field.name}__icontains': Cast(field.name, output_field=CharField())})
+		return queries
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		context['search_form'] = SearchForm(self.request.GET or None)
+		return context
 
-@login_required(login_url='/login/')
-def profile(request):
-    if request.method == 'POST':
-       return delete_user(request)
-    user_data = UserData.objects.filter(user=request.user).first()
-    if user_data is not None:
-        common_list = user_data.commons.all()
-    else:
-        common_list = []
-    return render(request, 'app/profile.html', {'title':'Profile',
-                                                'common_list': common_list})
+class ProfileView(LoginRequiredMixin, TemplateView):
+	template_name = "profile.html"
 
-@login_required
-def adddata(request):
-    if request.method == 'POST':
-        # Create and save the phenotype and genotype instances first
-        phenotype = Phenotype(
-            name=request.POST['phenotype_name'], 
-            description=request.POST['phenotype_description']
-        )
-        phenotype.save()
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		user_data = UserData.objects.filter(user=self.request.user).first()
+		if user_data:
+			context["common_list"] = user_data.commons.all()
+		return context
 
-        genotype = Genotype(
-            name=request.POST['genotype_name'], 
-            description=request.POST['genotype_description']
-        )
-        genotype.save()
 
-        # Now create the common instance with references to the saved phenotype and genotype
-        common = Common(
-            name=request.POST['common_name'], 
-            description=request.POST['common_description'], 
-            contact_info=request.POST['common_contact_info'],
-            phen=phenotype,
-            gen=genotype
-        )
-        common.save()
+class AddDataView(LoginRequiredMixin, CreateView):
+	model = Common
+	template_name = "adddata.html"
+	form_class = CommonForm
+	second_form_class = PopulationFrequencyForm
+	success_url = reverse_lazy("profile")
 
-        # Associate the common instance with the user
-        user_data = UserData.objects.filter(user=request.user).first()
-        user_data.commons.add(common)
-        return redirect('profile')
-    return render(request, 'app/adddata.html')
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		if "form2" not in context:
+			context["form2"] = self.second_form_class()
+		return context
+
+	def post(self, request, *args, **kwargs):
+		self.object = None
+		form = self.get_form()
+		form2 = self.second_form_class(request.POST)
+		if form.is_valid() and form2.is_valid():
+			return self.form_valid(form, form2)
+		else:
+			return self.form_invalid(form, form2)
+
+	def form_valid(self, form, form2):
+		pf = form2.save()
+		com = form.save(commit=False)
+		com.population_frequency = pf
+		com.save()
+		response = super().form_valid(form)
+		# Handle UserData association as before
+		user_data, created = UserData.objects.get_or_create(user=self.request.user)
+		user_data.commons.add(self.object)
+		return response
+
+	def form_invalid(self, form, form2):
+		return self.render_to_response(self.get_context_data(form=form, form2=form2))
+
+
+class UserRegistrationView(CreateView):
+	form_class = CustomUserCreationForm
+	template_name = "signup.html"
+	success_url = reverse_lazy("login")
+
+
+class ContactView(TemplateView):
+	template_name = "contact.html"
+
+
+class AboutView(TemplateView):
+	template_name = "about.html"
+
+
+# Ensure to update URL configurations to include paths for these new views.

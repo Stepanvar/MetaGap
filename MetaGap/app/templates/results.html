@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-5">
+	<h1>Search Results</h1>
+	{% if results %}
+	<div class="table-responsive">
+		<table id="userDataTable" class="table">
+			<thead>
+				<tr>
+					{% for field in results.first.get_fields %}
+					<th>{{ field.verbose_name.title }}</th>
+					{% endfor %}
+				</tr>
+			</thead>
+			<tbody>
+				{% for result in results %}
+				<tr>
+					{% for value in result.get_field_values %}
+					<td>{{ value }}</td>
+					{% endfor %}
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+	{% else %}
+	<p>No results found.</p>
+	{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+	$(document).ready(function () {
+		$('#resultTable').DataTable();
+	});
+</script>
+{% endblock %}

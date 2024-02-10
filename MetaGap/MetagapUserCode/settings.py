@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.admindocs",
-    "bootstrap5",
+    'bootstrap5',
 ]
 
 # Middleware framework

@@ -1,0 +1,10 @@
+{% extends 'layout.html' %}
+
+{% block title %}Edit Profile - MetaGaP{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+	<h2>Edit Profile</h2>
+	{% include 'form_template.html' with form=form %}
+</div>
+{% endblock %}

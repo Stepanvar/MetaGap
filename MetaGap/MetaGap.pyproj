@@ -34,7 +34,16 @@
   <ItemGroup>
     <Compile Include="app\forms.py" />
     <Compile Include="app\models.py" />
+    <Compile Include="app\tables.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="app\admin.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="app\tests.py" />
+    <Compile Include="app\urls.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="app\views.py" />
     <Compile Include="app\__init__.py" />
     <Compile Include="app\migrations\__init__.py" />
@@ -51,8 +60,10 @@
     <Folder Include="app\static\app\" />
     <Folder Include="app\static\app\content\" />
     <Folder Include="app\static\app\fonts\" />
+    <Folder Include="app\static\app\css\" />
     <Folder Include="app\static\app\scripts\" />
     <Folder Include="app\templates\" />
+    <Folder Include="app\templates\app\" />
     <Folder Include="MetaGap\" />
   </ItemGroup>
   <ItemGroup>
@@ -60,10 +71,16 @@
     <Content Include="app\static\app\scripts\datatables.js" />
     <Content Include="app\static\app\scripts\datatables.min.js" />
     <Content Include="app\static\app\scripts\mdb.min.js" />
+    <Content Include="app\static\app\css\styles.css" />
     <Content Include="app\templates\adddata.html" />
+    <Content Include="app\templates\base.html" />
+    <Content Include="app\templates\confirm_delete.html" />
+    <Content Include="app\templates\edit_profile.html" />
     <Content Include="app\templates\form_template.html" />
+    <Content Include="app\templates\import_data.html" />
     <Content Include="app\templates\profile.html" />
     <Content Include="app\templates\results.html" />
+    <Content Include="app\templates\search_form.html" />
     <Content Include="app\templates\signup.html" />
     <Content Include="libman.json" />
     <Content Include="requirements.txt" />

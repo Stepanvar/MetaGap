@@ -1,16 +1,14 @@
-{% extends "layout.html" %}
-	{% block content %}
-<div class="text-center" style="margin-top: 100px;">
-	<h1>Genomic Database</h1>
-</div>
-<main class="container my-5">
-	<form method="get" action="{% url 'results' %}" class="d-flex input-group w-auto">
-		{% csrf_token %}
-		<input type="search" class="form-control" name="query" placeholder="Type query" aria-label="Search">
-		<button class="btn btn-primary" type="submit">
-			Search
-		</button>
-	</form>
+{% extends 'layout.html' %}
 
-</main>
-	{% endblock %}
+{% block title %}Home - MetaGaP{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+	<h1>Welcome to MetaGaP</h1>
+	<p>Manage allele frequencies and sample group metadata with ease.</p>
+	{% url 'search_results' as search_action %}
+	{% with form_title="Search" form_method="get" form_action=search_action submit_button_label="Search" %}
+	{% include 'form_template.html' %}
+	{% endwith %}
+</div>
+{% endblock %}

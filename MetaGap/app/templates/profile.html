@@ -1,43 +1,22 @@
-{% extends "layout.html" %}
-{% load static %}
+{% extends 'layout.html' %}
+
+{% block title %}Profile - MetaGaP{% endblock %}
+
 {% block content %}
-{% if user.is_authenticated %}
-<h1>Profile</h1>
-<a href="{% url 'adddata' %}">Add data</a>
-{% if common_list %}
-<h2>Your Data</h2>
-<div class="table-responsive">
-	<table id="userDataTable" class="table">
-		<thead>
-			<tr>
-				{% for field in common_list.first.get_fields %}
-				<th>{{ field.verbose_name.title }}</th>
-				{% endfor %}
-			</tr>
-		</thead>
-		<tbody>
-			{% for common in common_list %}
-			<tr>
-				{% for value in common.get_field_values %}
-				<td>{{ value }}</td>
-				{% endfor %}
-			</tr>
-			{% endfor %}
-		</tbody>
-	</table>
+<div class="container mt-5">
+	<h2>Your Profile</h2>
+	<p><strong>Username:</strong> {{ user.username }}</p>
+	<p><strong>Email:</strong> {{ user.email }}</p>
+	<hr>
+	{% with form_title="Import Data" %}
+	{% include 'form_template.html' with form=import_form %}
+	{% endwith %}
+	<hr>
+	<h3>Export Data</h3>
+	<a href="{% url 'home' %}" class="btn btn-success">Export Data</a>
+	<hr>
+	<h3>Account Settings</h3>
+	<a href="{% url 'home' %}" class="btn btn-primary">Edit Profile</a>
+	<a href="{% url 'home' %}" class="btn btn-danger">Delete Account</a>
 </div>
-{% else %}
-<p>No data found.</p>
-{% endif %}
-{% else %}
-<p><a href="{% url 'login' %}">Please log in.</a></p>
-{% endif %}
-{% endblock %}
-{% block scripts %}
-<script src="{% static 'app/scripts/datatables.min.js' %}"></script>
-<script>
-	$(document).ready(function () {
-		$('#userDataTable').DataTable();
-	});
-</script>
 {% endblock %}

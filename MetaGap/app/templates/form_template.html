@@ -1,34 +1,43 @@
-{% extends 'layout.html' %}
-
-{% block title %}Add New Data{% endblock %}
-
+<!-- app/templates/form_template.html -->
 {% block content %}
-<div class="container mt-4">
+<div class="mt-4">
 	<div class="row">
-		<div class="col-md-8 offset-md-2">
-			<h2 class="mb-4">{% block form_title %}Add New Data{% endblock %}</h2>
-			<form method="post" novalidate>
+		<div class="col-md-8">
+			{% if form_title %}
+			<h2 class="mb-4">{{ form_title }}</h2>
+			{% endif %}
+			<form method="{{ form_method|default:'post' }}"
+				  action="{{ form_action|default:'' }}"
+				  enctype="{{ form_enctype|default:'application/x-www-form-urlencoded' }}"
+				  novalidate>
 				{% csrf_token %}
-				{% block form_fields %}
-					{% for field in form %}
-						<div class="mb-3">
-							<label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-							{% if field.help_text %}
-								<small class="form-text text-muted">{{ field.help_text }}</small>
-							{% endif %}
-							{{ field }}
-							{% if field.errors %}
-								{% for error in field.errors %}
-									<div class="invalid-feedback" style="display: block;">
-										{{ error }}
-									</div>
-								{% endfor %}
-							{% endif %}
-						</div>
+				{% if form.non_field_errors %}
+				<div class="alert alert-danger" role="alert">
+					{% for error in form.non_field_errors %}
+					{{ error }}
 					{% endfor %}
-				{% endblock form_fields %}
-				<button type="submit" class="btn btn-primary">Submit</button>
-				<a href="{% block back_url %}#{% endblock %}" class="btn btn-secondary">Back</a>
+				</div>
+				{% endif %}
+				{% for field in form %}
+				<div class="mb-3">
+					{{ field.label_tag }}
+					{% if field.help_text %}
+					<small class="form-text text-muted">{{ field.help_text }}</small>
+					{% endif %}
+					{{ field }}
+					{% if field.errors %}
+					{% for error in field.errors %}
+					<div class="invalid-feedback" style="display: block;">
+						{{ error }}
+					</div>
+					{% endfor %}
+					{% endif %}
+				</div>
+				{% endfor %}
+				<button type="submit" class="btn btn-primary">{{ submit_button_label|default:"Submit" }}</button>
+				{% block extra_buttons %}
+				<!-- Additional buttons can be added here -->
+				{% endblock %}
 			</form>
 		</div>
 	</div>

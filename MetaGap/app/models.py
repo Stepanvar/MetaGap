@@ -1,147 +1,107 @@
-"""
-Definition of models.
-"""
+# app/models.py
 
 from django.db import models
 from django.contrib.auth.models import User
 
-# Create your models here.
+class SampleGroup(models.Model):
+    """
+    Model representing a group of samples along with their metadata.
+    """
+    name = models.CharField(max_length=255)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    doi = models.CharField(max_length=100, blank=True, null=True)
+
+    # Metadata fields from VCF headers
+    source_lab = models.CharField(max_length=255, blank=True, null=True)
+    contact_email = models.EmailField(blank=True, null=True)
+    contact_phone = models.CharField(max_length=20, blank=True, null=True)
+    device_type = models.CharField(max_length=100, blank=True, null=True)
+    device_id = models.CharField(max_length=100, blank=True, null=True)
+    tissue = models.CharField(max_length=100, blank=True, null=True)
+    species = models.CharField(max_length=100, blank=True, null=True)
+    storage_temperature = models.CharField(max_length=50, blank=True, null=True)
+    storage_duration = models.CharField(max_length=50, blank=True, null=True)
+    absence_of_relatives = models.BooleanField(default=False)
+    preparation_method = models.CharField(max_length=255, blank=True, null=True)
+    preparation_kit = models.CharField(max_length=255, blank=True, null=True)
+    is_transcriptome = models.BooleanField(default=False)
+    sequencing_type = models.CharField(max_length=100, blank=True, null=True)
+    analysis_software = models.CharField(max_length=100, blank=True, null=True)
+    analysis_version = models.CharField(max_length=50, blank=True, null=True)
+    total_samples = models.IntegerField(blank=True, null=True)
+    phenotype = models.CharField(max_length=255, blank=True, null=True)
+    inclusion_criteria = models.TextField(blank=True, null=True)
+    exclusion_criteria = models.TextField(blank=True, null=True)
+    ancestry = models.CharField(max_length=255, blank=True, null=True)
+
+    # Comments
+    comments = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
 
 
-class PopulationFrequency(models.Model):
-	name = models.CharField(max_length=255, blank=True)
-	locus = models.CharField(max_length=255, blank=True)
-	chromosome = models.IntegerField(default=0)
-	position = models.IntegerField(default=0)
-	minor_allele_frequency = models.FloatField(default=0.0)
-	minor_allele = models.CharField(max_length=255, blank=True)
-	major_allele = models.CharField(max_length=255, blank=True)
-	major_allele_frequency = models.FloatField(default=0.0)
-	description = models.TextField(blank=True)
+class AlleleFrequency(models.Model):
+    """
+    Model representing allele frequency data along with variant information.
+    """
+    sample_group = models.ForeignKey(SampleGroup, on_delete=models.CASCADE)
+    chrom = models.CharField(max_length=10)
+    pos = models.IntegerField()
+    variant_id = models.CharField(max_length=100, blank=True, null=True)
+    ref = models.CharField(max_length=50)
+    alt = models.CharField(max_length=50)
+    qual = models.FloatField(blank=True, null=True)
+    filter = models.CharField(max_length=50, blank=True, null=True)
 
-	def get_fields(self):
-		"""Returns a list of all field names on the instance."""
-		return [
-			field
-			for field in self._meta.get_fields()
-			if field.concrete and not field.many_to_many
-		]
+    # INFO field as a JSON field to store AF, DP, MQ, etc.
+    info = models.JSONField()
 
-	def get_field_values(self):
-		"""Returns a list of values for all fields on the instance, including detailed values for ForeignKey fields."""
-		field_values = []
-		for field in self.get_fields():
-			value = getattr(self, field.name, "")
-			if isinstance(value, models.Model):  # It's a ForeignKey
-				# Fetch detailed values from the related model instance
-				related_field_values = value.get_detailed_field_values()
-				field_values.append(f"{field.name}: {related_field_values}")
-			else:
-				field_values.append(value)
-		return field_values
+    # Additional comments
+    comments = models.TextField(blank=True, null=True)
 
-	def get_detailed_field_values(self):
-		"""Returns a string combining all field values of the model instance, for detailed representation."""
-		details = []
-		for field in self._meta.get_fields():
-			# Skip reverse relations or many-to-many fields to avoid complex recursion
-			if field.auto_created or field.many_to_many:
-				continue
-			value = getattr(self, field.name, "")
-			details.append(f"{field.verbose_name.title()}: {value}")
-		return '; '.join(details)
-
-	def __str__(self):
-		return self.name
+    def __str__(self):
+        return f"{self.chrom}:{self.pos} {self.ref}>{self.alt}"
 
 
-class Genotype(models.Model):
-	name = models.CharField(max_length=255, blank=True)
-	description = models.TextField(blank=True)
+class QualityControlMetrics(models.Model):
+    """
+    Model representing quality control metrics associated with a sample group.
+    """
+    sample_group = models.OneToOneField(SampleGroup, on_delete=models.CASCADE)
 
-	def get_fields(self):
-		"""Returns a list of all field names on the instance."""
-		return [
-			field
-			for field in self._meta.get_fields()
-			if field.concrete and not field.many_to_many
-		]
+    # Sample Collection and Preservation
+    dna_integrity = models.FloatField(blank=True, null=True)
+    rna_integrity = models.FloatField(blank=True, null=True)
+    contamination_level = models.CharField(max_length=50, blank=True, null=True)
+    storage_conditions = models.CharField(max_length=255, blank=True, null=True)
 
-	def get_field_values(self):
-		"""Returns a list of values for all fields on the instance."""
-		field_values = []
-		for field in self.get_fields():
-			value = getattr(self, field.name, "")
-			if isinstance(value, models.Model):  # It's a ForeignKey
-				value = str(
-					value
-				)  # Use str to get a simple representation of the related model
-			field_values.append(value)
-		return field_values
+    # DNA/RNA Extraction and Quantification
+    extraction_yield = models.CharField(max_length=50, blank=True, null=True)
+    sample_purity = models.CharField(max_length=50, blank=True, null=True)
+    library_yield = models.CharField(max_length=50, blank=True, null=True)
 
-	def __str__(self):
-		return self.name
+    # Library Preparation QC
+    fragment_size_distribution = models.CharField(max_length=50, blank=True, null=True)
+    pcr_duplication_rate = models.CharField(max_length=50, blank=True, null=True)
+    phred_quality_score = models.CharField(max_length=50, blank=True, null=True)
+    percent_passing_filter = models.CharField(max_length=50, blank=True, null=True)
 
+    # Sequencing QC
+    coverage_depth = models.CharField(max_length=50, blank=True, null=True)
+    base_calling_accuracy = models.CharField(max_length=50, blank=True, null=True)
+    per_base_sequence_quality = models.CharField(max_length=50, blank=True, null=True)
+    per_sequence_gc_content = models.CharField(max_length=50, blank=True, null=True)
 
-class Common(models.Model):
-	name = models.CharField(max_length=255, blank=True)
-	description = models.TextField()
-	contact_info = models.CharField(max_length=255)
-	population_frequency = models.ForeignKey(
-		PopulationFrequency, on_delete=models.CASCADE, related_name="commons_population_frequency", blank=True, default=""
-	)
+    # Alignment and BAM File QC
+    mapping_quality = models.CharField(max_length=50, blank=True, null=True)
+    alignment_percentage = models.CharField(max_length=50, blank=True, null=True)
+    insert_size_distribution = models.CharField(max_length=50, blank=True, null=True)
 
-	def get_fields(self):
-		"""Returns a list of all field names on the instance."""
-		return [
-			field
-			for field in self._meta.get_fields()
-			if field.concrete and not field.many_to_many
-		]
+    # Variant Calling and gVCF QC
+    variant_call_quality = models.CharField(max_length=50, blank=True, null=True)
+    depth_of_coverage = models.CharField(max_length=50, blank=True, null=True)
+    genotype_quality = models.CharField(max_length=50, blank=True, null=True)
 
-	def get_field_values(self):
-		"""Returns a list of values for all fields on the instance, including detailed values for ForeignKey fields."""
-		field_values = []
-		for field in self.get_fields():
-			value = getattr(self, field.name, "")
-			if isinstance(value, models.Model):  # It's a ForeignKey
-				# Fetch detailed values from the related model instance
-				related_field_values = value.get_detailed_field_values()
-				field_values.append(f"{field.name}: {related_field_values}")
-			else:
-				field_values.append(value)
-		return field_values
-
-	def get_detailed_field_values(self):
-		"""Returns a string combining all field values of the model instance, for detailed representation."""
-		details = []
-		for field in self._meta.get_fields():
-			# Skip reverse relations or many-to-many fields to avoid complex recursion
-			if field.auto_created or field.many_to_many:
-				continue
-			value = getattr(self, field.name, "")
-			details.append(f"{field.verbose_name.title()}: {value}")
-		return '; '.join(details)
-
-	def __str__(self):
-		return self.name
-
-
-class UserData(models.Model):
-	user = models.ForeignKey(User, on_delete=models.CASCADE)
-	commons = models.ManyToManyField(Common, related_name="user_data")
-
-	def __str__(self):
-		return self.user.username
-
-
-# class DataSubmission(models.Model):
-#	 user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='submissions')
-#	 title = models.CharField(max_length=255)
-#	 description = models.TextField()
-#	 file_upload = models.FileField(upload_to='submissions/', blank=True, null=True)
-#	 created_at = models.DateTimeField(auto_now_add=True)
-#	 updated_at = models.DateTimeField(auto_now=True)
-
-#	 def __str__(self):
-#		 return f'{self.title} by {self.user.username}'
+    def __str__(self):
+        return f"QC Metrics for {self.sample_group.name}"

@@ -1,0 +1,19 @@
+from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib.auth import views as auth_views
+from . import views
+
+urlpatterns = [
+    path('', views.HomePageView.as_view(), name='home'),
+    path('search/', views.SearchResultsView.as_view(), name='search_results'),
+    path("contact/", views.ContactView.as_view(), name="contact"),
+    path("about/", views.AboutView.as_view(), name="about"),
+    path("signup/", views.UserRegistrationView.as_view(), name="signup"),
+    path("login/", auth_views.LoginView.as_view(template_name="login.html"), name="login"),
+    path("logout/", auth_views.LogoutView.as_view(next_page="/"), name="logout"),
+    path("profile/", views.ProfileView.as_view(), name="profile"),
+    path("allelefrequencies/", views.AlleleFrequencyListView.as_view(), name="allelefrequency_list"),
+    path("samplegroups/", views.SampleGroupListView.as_view(), name="samplegroup_list"),
+    path("import/", views.ImportDataView.as_view(), name="import_data"),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

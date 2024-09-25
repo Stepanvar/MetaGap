@@ -1,38 +1,21 @@
-{% extends "layout.html" %}
+{% extends 'layout.html' %}
+{% load django_tables2 %}
+
+{% block title %}Search Results - MetaGaP{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-	<h1>Search Results</h1>
-	{% if results %}
-	<div class="table-responsive">
-		<table id="userDataTable" class="table">
-			<thead>
-				<tr>
-					{% for field in results.first.get_fields %}
-					<th>{{ field.verbose_name.title }}</th>
-					{% endfor %}
-				</tr>
-			</thead>
-			<tbody>
-				{% for result in results %}
-				<tr>
-					{% for value in result.get_field_values %}
-					<td>{{ value }}</td>
-					{% endfor %}
-				</tr>
-				{% endfor %}
-			</tbody>
-		</table>
-	</div>
-	{% else %}
+	<h2>Search Results for "{{ query }}"</h2>
+	{% if sample_group_table %}
+	<h3>Sample Groups</h3>
+	{% render_table sample_group_table %}
+	{% endif %}
+	{% if allele_table %}
+	<h3>Allele Frequencies</h3>
+	{% render_table allele_table %}
+	{% endif %}
+	{% if not sample_group_table and not allele_table %}
 	<p>No results found.</p>
 	{% endif %}
 </div>
-{% endblock %}
-{% block scripts %}
-<script>
-	$(document).ready(function () {
-		$('#resultTable').DataTable();
-	});
-</script>
 {% endblock %}

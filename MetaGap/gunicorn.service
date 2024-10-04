@@ -1,0 +1,17 @@
+[Unit]
+Description=Gunicorn daemon for MetaGap
+After=network.target
+
+[Service]
+User=s-zuev
+Group=www-data
+WorkingDirectory=/home/s-zuev/MetaGap/MetaGap
+ExecStart=/home/s-zuev/MetaGap/MetaGap/venv/bin/gunicorn \
+          --access-logfile - \
+          --workers 3 \
+          --bind 127.0.0.1:8000 \
+          MetaGap.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
+

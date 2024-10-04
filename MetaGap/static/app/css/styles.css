@@ -1,0 +1,8 @@
+/* app/static/app/css/styles.css */
+
+/* Add top padding to account for fixed navbar */
+body {
+	padding-top: 70px; /* Adjust the value based on navbar height */
+}
+
+/* Other custom styles */

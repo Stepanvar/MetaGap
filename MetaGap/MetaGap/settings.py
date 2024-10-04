@@ -39,8 +39,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     # Third-party apps
+    "django_bootstrap5",
     "django_tables2",
-    "bootstrap5",
+
     # Your apps
     "app",
 ]

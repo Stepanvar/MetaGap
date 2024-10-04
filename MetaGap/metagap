@@ -1,0 +1,17 @@
+server {
+    listen 8001;
+    server_name 194.34.99.42 localhost 127.0.0.1;
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        root /home/s-zuev/MetaGap/MetaGap;
+    }
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+
+        proxy_pass http://127.0.0.1:8000;
+    }
+}
+

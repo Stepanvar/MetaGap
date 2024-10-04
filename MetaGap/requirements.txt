@@ -4,13 +4,13 @@ certifi==2024.8.30
 charset-normalizer==3.3.2
 Django==5.1.1
 django-allauth==65.0.1
-django-bootstrap5
+django-bootstrap5==24.3
 django-tables2==2.7.0
 docutils==0.21.2
+gunicorn==23.0.0
 idna==3.10
-pip==24.2
+packaging==24.1
 requests==2.32.3
-setuptools==75.1.0
 soupsieve==2.6
 sqlparse==0.5.1
 typing_extensions==4.12.2

@@ -5,6 +5,7 @@
 {% block content %}
 <div class="container mt-5">
 	<h2>Sign Up</h2>
+	{% csrf_token %}
 	{% include 'form_template.html' with form=form %}
 </div>
 {% endblock %}

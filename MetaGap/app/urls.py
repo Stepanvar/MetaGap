@@ -13,7 +13,5 @@ urlpatterns = [
     path("login/", auth_views.LoginView.as_view(template_name="login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(next_page="/"), name="logout"),
     path("profile/", views.ProfileView.as_view(), name="profile"),
-    path("allelefrequencies/", views.AlleleFrequencyListView.as_view(), name="allelefrequency_list"),
-    path("samplegroups/", views.SampleGroupListView.as_view(), name="samplegroup_list"),
     path("import/", views.ImportDataView.as_view(), name="import_data"),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

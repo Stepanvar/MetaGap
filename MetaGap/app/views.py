@@ -10,7 +10,6 @@ from django.shortcuts import render
 from django_tables2 import SingleTableView, RequestConfig
 from .models import AlleleFrequency, SampleGroup
 from .forms import CustomUserCreationForm, SearchForm, ImportDataForm
-from .tables import AlleleFrequencyTable, SampleGroupTable
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.views.generic.edit import FormView
@@ -18,7 +17,6 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
 from django.conf import settings
 import os
-from .models import AlleleFrequency, SampleGroup
 from .forms import (
     CustomUserCreationForm,
     SearchForm,
@@ -27,19 +25,48 @@ from .forms import (
     DeleteAccountForm,
     SampleGroupForm
 )
+# views.py
+from django.shortcuts import render
+from django_tables2 import RequestConfig
 from .models import AlleleFrequency, SampleGroup
-from .tables import AlleleFrequencyTable, SampleGroupTable
+from django.views.generic import ListView
+from django_tables2 import RequestConfig
+from .tables import create_dynamic_table
 
-class AlleleFrequencyListView(SingleTableView):
-    model = AlleleFrequency
-    table_class = AlleleFrequencyTable
-    template_name = "allelefrequency_list.html"
-
-
-class SampleGroupListView(SingleTableView):
+class SampleGroupTableView(ListView):
     model = SampleGroup
-    table_class = SampleGroupTable
-    template_name = "samplegroup_list.html"
+    template_name = "sample_group_table.html"
+    context_object_name = "sample_groups"
+    paginate_by = 10
+
+    def get_queryset(self):
+        # Optimize query by selecting related AlleleFrequency objects
+        return super().get_queryset().select_related("allele_frequency")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Get the dynamically created table class
+        SampleGroupTable = create_combined_table(SampleGroup)
+        table = SampleGroupTable(self.get_queryset())
+        RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(table)
+        context["table"] = table
+        return context
+
+from django_filters.views import FilterView
+from django_tables2.views import SingleTableMixin
+
+class SearchResultsView(SingleTableMixin, FilterView):
+    template_name = 'results.html'
+    model = SampleGroup
+    context_object_name = 'sample_groups'
+    paginate_by = 10
+
+    # Dynamically create a table class that includes all related fields.
+    table_class = create_dynamic_table(SampleGroup, table_name="CombinedTable", include_related=True)
+
+    def get_queryset(self):
+        # Adjust the queryset if needed (for example, using select_related/prefetch_related)
+        return SampleGroup.objects.all()
 
 
 class HomePageView(TemplateView):
@@ -53,50 +80,6 @@ class HomePageView(TemplateView):
         form = SearchForm()
         return self.render_to_response({'form': form})
 
-
-class SearchResultsView(TemplateView):
-    template_name = 'results.html'
-
-    def get(self, request, *args, **kwargs):
-        form = SearchForm(request.GET)
-        query = ''
-        allele_table = None
-        sample_group_table = None
-
-        if form.is_valid():
-            query = form.cleaned_data['query']
-            if query:
-                # Search in AlleleFrequency model
-                allele_qs = AlleleFrequency.objects.filter(
-                    Q(chrom__icontains=query) |
-                    Q(ref__icontains=query) |
-                    Q(alt__icontains=query) |
-                    Q(variant_id__icontains=query)
-                )
-
-                # Search in SampleGroup model
-                sample_group_qs = SampleGroup.objects.filter(
-                    Q(name__icontains=query) |
-                    Q(doi__icontains=query) |
-                    Q(source_lab__icontains=query)
-                )
-
-                # Create tables
-                allele_table = AlleleFrequencyTable(allele_qs)
-                sample_group_table = SampleGroupTable(sample_group_qs)
-
-                # Configure tables for the request (for pagination and sorting)
-                RequestConfig(request, paginate={"per_page": 10}).configure(allele_table)
-                RequestConfig(request, paginate={"per_page": 10}).configure(sample_group_table)
-
-        context = {
-            'query': query,
-            'allele_table': allele_table,
-            'sample_group_table': sample_group_table,
-            'form': form,
-        }
-        return self.render_to_response(context)
-
 class ProfileView(LoginRequiredMixin, TemplateView):
     template_name = "profile.html"
 
@@ -106,18 +89,6 @@ class ProfileView(LoginRequiredMixin, TemplateView):
         sample_groups = SampleGroup.objects.filter(created_by=self.request.user)
         context["sample_groups"] = sample_groups
         return context
-
-
-class AddSampleGroupView(LoginRequiredMixin, CreateView):
-    model = SampleGroup
-    form_class = SampleGroupForm  # You'll need to create this form
-    template_name = "adddata.html"
-    success_url = reverse_lazy("samplegroup_list")
-
-    def form_valid(self, form):
-        form.instance.created_by = self.request.user
-        return super().form_valid(form)
-
 
 class UserRegistrationView(CreateView):
     form_class = CustomUserCreationForm
@@ -131,33 +102,6 @@ class ContactView(TemplateView):
 
 class AboutView(TemplateView):
     template_name = "about.html"
-
-
-class SearchResultView(ListView):
-    template_name = "results.html"
-    model = AlleleFrequency
-    context_object_name = "results"
-
-    def get_queryset(self):
-        form = SearchForm(self.request.GET)
-        if form.is_valid():
-            query = form.cleaned_data["query"]
-            query_list = query.split()
-            queries = Q()
-            for word in query_list:
-                queries |= Q(chrom__icontains=word)
-                queries |= Q(ref__icontains=word)
-                queries |= Q(alt__icontains=word)
-                # Add more fields as needed
-            return AlleleFrequency.objects.filter(queries)
-        return AlleleFrequency.objects.none()
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["search_form"] = SearchForm(self.request.GET or None)
-        context["results_table"] = self.get_queryset()  # Pass queryset for the table
-        return context
-
 
 class ProfileView(TemplateView):
     template_name = "profile.html"

@@ -1,21 +1,39 @@
-{% extends 'layout.html' %}
+{% extends "layout.html" %}
 {% load django_tables2 %}
 
 {% block title %}Search Results - MetaGaP{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-	<h2>Search Results for "{{ query }}"</h2>
-	{% if sample_group_table %}
-	<h3>Sample Groups</h3>
-	{% render_table sample_group_table %}
-	{% endif %}
-	{% if allele_table %}
-	<h3>Allele Frequencies</h3>
-	{% render_table allele_table %}
-	{% endif %}
-	{% if not sample_group_table and not allele_table %}
-	<p>No results found.</p>
-	{% endif %}
+    <h2>Search Results</h2>
+    {% render_table table %}
 </div>
+
+<!-- Include jQuery and DataTables via CDN -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.min.css">
+<script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    $('table').DataTable({
+        initComplete: function () {
+            this.api().columns().every(function () {
+                var column = this;
+                // Create a select dropdown for each column header
+                var select = $('<select><option value="">All</option></select>')
+                    .appendTo($(column.header()).empty())
+                    .on('change', function () {
+                        var val = $.fn.dataTable.util.escapeRegex($(this).val());
+                        column.search(val ? '^' + val + '$' : '', true, false).draw();
+                    });
+                // Populate the dropdown with unique values from the column
+                column.data().unique().sort().each(function (d) {
+                    select.append('<option value="'+d+'">'+d+'</option>');
+                });
+            });
+        }
+    });
+});
+</script>
 {% endblock %}

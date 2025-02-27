@@ -24,7 +24,7 @@ SECRET_KEY = "d41fd69e-d104-46c6-82d0-1ee7cf4eb8d3"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['194.34.99.42', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['10.2.0.33', '194.34.99.42', 'localhost', '127.0.0.1']
 
 # Application references
 # https://docs.djangoproject.com/en/2.1/ref/settings/#std:setting-INSTALLED_APPS
@@ -126,3 +126,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 LOGIN_REDIRECT_URL = 'profile'
 LOGOUT_REDIRECT_URL = 'home'
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://127.0.0.1:8000',
+    'http://localhost:8001',
+    'http://127.0.0.1',
+    'http://localhost',
+]
+

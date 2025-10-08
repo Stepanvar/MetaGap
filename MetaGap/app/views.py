@@ -369,9 +369,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "total_samples": ["samples", "sample_count", "n_samples"],
             "inclusion_criteria": ["inclusion", "inclusioncriteria"],
             "exclusion_criteria": ["exclusion", "exclusioncriteria"],
-            "tissue": ["tissue_type"],
-            "collection_method": ["collection", "method"],
-            "storage_conditions": ["storage", "storage_conditions"],
             "comments": ["description", "notes"],
         },
         "input_quality": {
@@ -445,7 +442,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "run_specific_calibration": ["calibration"],
         },
         "bioinfo_alignment": {
-            "software": ["aligner", "software"],
+            "tool": ["aligner", "software", "tool"],
             "params": ["parameters", "params"],
             "ref_genome_version": ["reference_version"],
             "recalibration_settings": ["recalibration", "recal_settings"],
@@ -474,7 +471,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "pacbio_seq": "instrument",
         "iontorrent_seq": "instrument",
         "platform_independent": "instrument",
-        "bioinfo_alignment": "software",
+        "bioinfo_alignment": "tool",
         "bioinfo_variant_calling": "tool",
         "bioinfo_post_proc": "normalization",
     }

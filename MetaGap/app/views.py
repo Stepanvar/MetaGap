@@ -1,8 +1,8 @@
 """Application views."""
 
+import json
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple
-from pathlib import Path
 
 import pysam
 from django.conf import settings
@@ -11,7 +11,6 @@ from django.contrib.auth import logout
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
 from django.db import models as django_models
-from django.db import transaction
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from django_filters.views import FilterView
@@ -292,6 +291,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "bioinfo_alignment": BioinfoAlignment,
         "bioinfo_variant_calling": BioinfoVariantCalling,
         "bioinfo_post_proc": BioinfoPostProc,
+        "input_quality": InputQuality,
     }
 
     METADATA_FIELD_ALIASES = {
@@ -315,10 +315,12 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "dna_concentration": ["dna_conc", "dna_concentration_ng_ul", "concentration"],
             "rna_concentration": ["rna_conc", "rna_concentration_ng_ul"],
             "notes": ["note", "comment", "comments"],
+            "additional_metrics": ["metrics", "additional_metrics"],
         },
         "reference_genome_build": {
             "build_name": ["name", "reference", "build"],
             "build_version": ["version", "build_version"],
+            "additional_info": ["additional", "additional_info"],
         },
         "genome_complexity": {
             "size": ["genome_size", "size_bp"],
@@ -394,6 +396,22 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "normalization": ["normalisation", "normalization_method"],
             "harmonization": ["harmonisation", "harmonization_method"],
         },
+    }
+
+    SECTION_PRIMARY_FIELD = {
+        "reference_genome_build": "build_name",
+        "genome_complexity": "size",
+        "sample_origin": "tissue",
+        "material_type": "material_type",
+        "library_construction": "kit",
+        "illumina_seq": "instrument",
+        "ont_seq": "instrument",
+        "pacbio_seq": "instrument",
+        "iontorrent_seq": "instrument",
+        "platform_independent": "instrument",
+        "bioinfo_alignment": "software",
+        "bioinfo_variant_calling": "tool",
+        "bioinfo_post_proc": "normalization",
     }
 
     INFO_FIELD_MAP = {
@@ -510,12 +528,236 @@ class ImportDataView(LoginRequiredMixin, FormView):
         file_path: str,
         organization_profile: Any,
     ) -> SampleGroup:
-        return SampleGroup.objects.create(
-            name=metadata.get("name")
-            or os.path.splitext(os.path.basename(file_path))[0],
-            created_by=organization_profile,
-            comments=metadata.get("description"),
+        group_data, _, _ = self._extract_section_data(
+            metadata, "sample_group", SampleGroup
         )
+
+        fallback_name = os.path.splitext(os.path.basename(file_path))[0]
+        name = group_data.pop("name", None) or metadata.get("name") or fallback_name
+        comments = (
+            group_data.pop("comments", None)
+            or metadata.get("comments")
+            or metadata.get("description")
+        )
+
+        sample_group = SampleGroup.objects.create(
+            name=name,
+            created_by=organization_profile,
+            comments=comments,
+            **group_data,
+        )
+
+        update_fields: list[str] = []
+        for section, model_cls in self.METADATA_MODEL_MAP.items():
+            section_data, section_consumed, additional = self._extract_section_data(
+                metadata, section, model_cls
+            )
+
+            if not section_data and additional is None:
+                continue
+
+            payload = {key: value for key, value in section_data.items() if value is not None}
+            if additional is not None:
+                additional_field = self._resolve_additional_field(model_cls)
+                if additional_field:
+                    existing = payload.get(additional_field)
+                    if isinstance(existing, dict) and isinstance(additional, dict):
+                        payload[additional_field] = {**existing, **additional}
+                    elif existing is None:
+                        payload[additional_field] = additional
+                    else:
+                        payload[additional_field] = additional
+
+            if not payload:
+                continue
+
+            instance = model_cls.objects.create(**payload)
+            setattr(sample_group, section, instance)
+            update_fields.append(section)
+
+        if update_fields:
+            sample_group.save(update_fields=update_fields)
+
+        return sample_group
+
+    def _extract_section_data(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        model_cls: Any,
+    ) -> Tuple[Dict[str, Any], set[str], Optional[Dict[str, Any]]]:
+        alias_map = self.METADATA_FIELD_ALIASES.get(section, {})
+        section_data: Dict[str, Any] = {}
+        consumed: set[str] = set()
+
+        for field_name, aliases in alias_map.items():
+            model_field = self._get_model_field(model_cls, field_name)
+            if model_field is None:
+                continue
+            key = self._find_metadata_key(metadata, section, field_name, aliases)
+            if key is None:
+                continue
+            raw_value = metadata[key]
+            section_data[field_name] = self._coerce_model_value(model_field, raw_value)
+            consumed.add(key)
+
+        primary_field = self.SECTION_PRIMARY_FIELD.get(section)
+        if (
+            primary_field
+            and primary_field not in section_data
+            and section in metadata
+        ):
+            model_field = self._get_model_field(model_cls, primary_field)
+            if model_field is not None:
+                section_data[primary_field] = self._coerce_model_value(
+                    model_field, metadata[section]
+                )
+                consumed.add(section)
+
+        additional = self._build_additional_payload(metadata, section, consumed)
+        return section_data, consumed, additional
+
+    @staticmethod
+    def _get_model_field(model_cls: Any, field_name: str) -> Optional[django_models.Field]:
+        try:
+            return model_cls._meta.get_field(field_name)
+        except django_models.FieldDoesNotExist:  # pragma: no cover - defensive
+            return None
+
+    def _find_metadata_key(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        field_name: str,
+        aliases: Iterable[str],
+    ) -> Optional[str]:
+        ordered_aliases = [field_name.lower()]
+        for alias in aliases:
+            normalized_alias = alias.lower()
+            if normalized_alias not in ordered_aliases:
+                ordered_aliases.append(normalized_alias)
+
+        normalized_variants: list[str] = []
+        for candidate in ordered_aliases:
+            for variant in (
+                candidate,
+                candidate.replace(" ", "_"),
+                candidate.replace("-", "_"),
+            ):
+                if variant not in normalized_variants:
+                    normalized_variants.append(variant)
+
+        parts = section.split("_")
+        section_variants_set: set[str] = set()
+
+        def build_section_variants(index: int, current: str) -> None:
+            current += parts[index]
+            if index == len(parts) - 1:
+                section_variants_set.add(current)
+                return
+            build_section_variants(index + 1, current + "_")
+            build_section_variants(index + 1, current)
+
+        if parts:
+            build_section_variants(0, "")
+        else:  # pragma: no cover - defensive
+            section_variants_set.add(section)
+
+        section_variants = list(section_variants_set)
+        section_variants.sort(key=len)
+
+        prefixes: list[str] = []
+        for variant in section_variants:
+            for suffix in ("_", "."):
+                candidate_prefix = f"{variant}{suffix}"
+                if candidate_prefix not in prefixes:
+                    prefixes.append(candidate_prefix)
+        prefixes.append("")
+
+        for candidate in normalized_variants:
+            for prefix in prefixes:
+                key = f"{prefix}{candidate}" if prefix else candidate
+                if key in metadata:
+                    return key
+        return None
+
+    def _coerce_model_value(
+        self, field: django_models.Field, value: Any
+    ) -> Optional[Any]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped == "":
+                return None
+        else:
+            stripped = value
+
+        if isinstance(field, django_models.IntegerField):
+            try:
+                return int(stripped)
+            except (TypeError, ValueError):
+                return None
+        if isinstance(field, django_models.FloatField):
+            try:
+                return float(stripped)
+            except (TypeError, ValueError):
+                return None
+        if isinstance(field, django_models.JSONField):
+            if isinstance(stripped, str):
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
+            return stripped
+        return stripped
+
+    def _build_additional_payload(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        consumed: Iterable[str],
+    ) -> Optional[Dict[str, Any]]:
+        consumed_set = set(consumed)
+        prefixes = (f"{section}_", f"{section}.")
+        additional: Dict[str, Any] = {}
+
+        for key, value in metadata.items():
+            if key in consumed_set:
+                continue
+            for prefix in prefixes:
+                if key.startswith(prefix):
+                    trimmed = key[len(prefix) :]
+                    additional[trimmed] = self._coerce_additional_value(value)
+                    break
+
+        return additional or None
+
+    @staticmethod
+    def _coerce_additional_value(value: Any) -> Any:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped == "":
+                return None
+            try:
+                return json.loads(stripped)
+            except json.JSONDecodeError:
+                pass
+            try:
+                return int(stripped)
+            except ValueError:
+                try:
+                    return float(stripped)
+                except ValueError:
+                    return stripped
+        return value
+
+    @staticmethod
+    def _resolve_additional_field(model_cls: Any) -> Optional[str]:
+        for candidate in ("additional_info", "additional_metrics", "additional"):
+            if hasattr(model_cls, candidate):
+                return candidate
+        return None
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}

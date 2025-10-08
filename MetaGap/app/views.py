@@ -390,9 +390,23 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "gc_content": ["gc", "gc_percent"],
         },
         "sample_origin": {
-            "tissue": ["tissue_type"],
-            "collection_method": ["collection", "method"],
-            "storage_conditions": ["storage", "storage_conditions"],
+            "tissue": [
+                "tissue_type",
+                "sample_group_tissue",
+                "samplegroup_tissue",
+            ],
+            "collection_method": [
+                "collection",
+                "method",
+                "sample_group_collection_method",
+                "samplegroup_collection_method",
+            ],
+            "storage_conditions": [
+                "storage",
+                "storage_conditions",
+                "sample_group_storage_conditions",
+                "samplegroup_storage_conditions",
+            ],
             "time_stored": ["time", "storage_time"],
         },
         "material_type": {

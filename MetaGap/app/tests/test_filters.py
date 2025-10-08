@@ -82,14 +82,14 @@ class SampleGroupFilterTests(TestCase):
             sample_origin=self.other_origin,
         )
 
-    def test_search_matches_sample_origin_tissue_field(self):
+    def test_search_matches_sample_origin_tissue(self):
         qs = filters.SampleGroupFilter(
             {"query": "Kidney"}, queryset=SampleGroup.objects.all()
         ).qs
 
         self.assertEqual(list(qs), [self.group])
 
-    def test_search_matches_sample_origin_collection_method_field(self):
+    def test_search_matches_sample_origin_collection_method(self):
         qs = filters.SampleGroupFilter(
             {"query": "Biopsy"}, queryset=SampleGroup.objects.all()
         ).qs

@@ -26,5 +26,10 @@ urlpatterns = [
         views.SampleGroupUpdateView.as_view(),
         name="sample_group_edit",
     ),
+    path(
+        "profile/sample-groups/<int:pk>/export/",
+        views.export_sample_group_variants,
+        name="sample_group_export",
+    ),
     path("import/", views.ImportDataView.as_view(), name="import_data"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

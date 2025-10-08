@@ -23,6 +23,7 @@ import logging
 import datetime
 import shutil
 import re
+import copy
 from collections import OrderedDict
 
 try:
@@ -481,9 +482,110 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
 def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False):
     valid_vcfs = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
+    reference_samples = None
+    reference_contigs = None
+    reference_info_defs = None
+    reference_format_defs = None
     for file_path in glob.glob(os.path.join(input_dir, "*.vcf")):
         if validate_vcf(file_path, ref_genome, vcf_version, verbose):
-            valid_vcfs.append(file_path)
+            preprocessed_file = preprocess_vcf(file_path)
+            reader = None
+            try:
+                reader = vcfpy.Reader.from_path(preprocessed_file)
+            except Exception as exc:
+                handle_critical_error(
+                    f"Failed to reopen {file_path} after validation: {exc}."
+                )
+            try:
+                header = reader.header
+
+                current_samples = list(header.samples.names)
+                current_contigs = copy.deepcopy(header.contigs)
+                current_info_defs = copy.deepcopy(header.info_defs)
+                current_format_defs = copy.deepcopy(header.format_defs)
+
+                if reference_samples is None:
+                    reference_samples = current_samples
+                    reference_contigs = current_contigs
+                    reference_info_defs = current_info_defs
+                    reference_format_defs = current_format_defs
+                else:
+                    if current_samples != reference_samples:
+                        handle_critical_error(
+                            "Sample names differ between VCF shards. MetaGap assumes vertical "
+                            "concatenation of shards, so headers and sample ordering must match. "
+                            f"Expected samples: {reference_samples}; found in {file_path}: {current_samples}."
+                        )
+                    if current_contigs != reference_contigs:
+                        handle_critical_error(
+                            "Contig definitions differ between VCF shards. MetaGap assumes vertical "
+                            "concatenation of shards, so headers must match across shards. "
+                            f"Expected contigs: {list(reference_contigs.keys())}; found in {file_path}: "
+                            f"{list(current_contigs.keys())}."
+                        )
+                    if current_info_defs != reference_info_defs:
+                        handle_critical_error(
+                            "INFO field definitions differ between VCF shards. MetaGap assumes "
+                            "vertical concatenation of shards, so headers must match across shards. "
+                            f"Expected INFO IDs: {list(reference_info_defs.keys())}; found in {file_path}: "
+                            f"{list(current_info_defs.keys())}."
+                        )
+                    if current_format_defs != reference_format_defs:
+                        handle_critical_error(
+                            "FORMAT field definitions differ between VCF shards. MetaGap assumes "
+                            "vertical concatenation of shards, so headers must match across shards. "
+                            f"Expected FORMAT IDs: {list(reference_format_defs.keys())}; found in {file_path}: "
+                            f"{list(current_format_defs.keys())}."
+                        )
+
+                contig_order = {name: idx for idx, name in enumerate(header.contigs.keys())}
+                last_contig_index = None
+                last_position = None
+                last_contig_name = None
+                for record in reader:
+                    chrom = record.CHROM
+                    pos = record.POS
+                    if chrom not in contig_order:
+                        handle_critical_error(
+                            f"Encountered unknown contig '{chrom}' in {file_path}. MetaGap assumes vertical "
+                            "concatenation of shards with consistent headers."
+                        )
+                    contig_index = contig_order[chrom]
+                    if last_contig_index is None:
+                        last_contig_index = contig_index
+                        last_position = pos
+                        last_contig_name = chrom
+                        continue
+
+                    if contig_index < last_contig_index or (
+                        contig_index == last_contig_index and pos < last_position
+                    ):
+                        handle_critical_error(
+                            f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
+                            f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
+                            "so input shards must already be sorted."
+                        )
+
+                    if contig_index == last_contig_index:
+                        last_position = pos
+                        last_contig_name = chrom
+                    else:
+                        last_contig_index = contig_index
+                        last_position = pos
+                        last_contig_name = chrom
+                valid_vcfs.append(file_path)
+            finally:
+                if reader is not None and hasattr(reader, "close"):
+                    try:
+                        reader.close()
+                    except Exception:
+                        pass
+                if (
+                    preprocessed_file != file_path
+                    and preprocessed_file is not None
+                    and os.path.exists(preprocessed_file)
+                ):
+                    os.remove(preprocessed_file)
         else:
             log_message(f"File {file_path} failed validation and is skipped.", verbose)
     if not valid_vcfs:

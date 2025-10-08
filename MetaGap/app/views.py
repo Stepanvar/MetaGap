@@ -13,7 +13,7 @@ from django.core.files.storage import default_storage
 from django.db import models as django_models
 from django.db import transaction
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, FormView, ListView, TemplateView
+from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from django_filters.views import FilterView
 from django_tables2 import RequestConfig
 from django_tables2.views import SingleTableMixin
@@ -24,6 +24,7 @@ from .forms import (
     DeleteAccountForm,
     EditProfileForm,
     ImportDataForm,
+    SampleGroupForm,
     SearchForm,
 )
 from .models import (
@@ -213,6 +214,33 @@ class ContactView(TemplateView):
 
 class AboutView(TemplateView):
     template_name = "about.html"
+
+
+class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
+    """Allow organisation members to edit their sample group metadata."""
+
+    model = SampleGroup
+    form_class = SampleGroupForm
+    template_name = "sample_group_form.html"
+    success_url = reverse_lazy("profile")
+
+    def get_queryset(self):
+        """Restrict editing to groups owned by the user's organisation."""
+
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+        if organization_profile is None:
+            return SampleGroup.objects.none()
+        return SampleGroup.objects.filter(created_by=organization_profile)
+
+    def get_form_kwargs(self) -> Dict[str, Any]:
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        messages.success(self.request, "Sample group metadata updated successfully.")
+        return super().form_valid(form)
+
 
 class ImportDataView(LoginRequiredMixin, FormView):
     """Handle ingestion of VCF uploads into the relational schema."""

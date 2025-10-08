@@ -1,4 +1,3 @@
-<!-- app/templates/layout.html -->
 {% extends 'base.html' %}
 
 {% block body %}
@@ -9,8 +8,8 @@
                         <a class="navbar-brand" href="{% url 'home' %}">{{ SITE_NAME }}</a>
                         <button class="navbar-toggler"
                                 type="button"
-                                data-mdb-toggle="collapse"
-                                data-mdb-target="#navbarNav"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#navbarNav"
                                 aria-controls="navbarNav"
                                 aria-expanded="false"
                                 aria-label="Toggle navigation">
@@ -30,23 +29,19 @@
 		</div>
 	</nav>
 </header>
-
+{% endblock %}
 <!-- Breadcrumbs -->
 {% block breadcrumbs %}
 <nav aria-label="breadcrumb">
-	<ol class="breadcrumb m-3">
-		<li class="breadcrumb-item">
-			<a href="{% url 'home' %}">Home</a>
-		</li>
-		{% block breadcrumb_items %}
-		<!-- Additional breadcrumb items can be added here -->
-		{% endblock %}
-	</ol>
+  <ol class="breadcrumb m-3">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+    {% block breadcrumb_items %}{% endblock %}
+  </ol>
 </nav>
 {% endblock %}
 
 <!-- Main Content -->
-<main role="main" class="container my-4 main-content">
+<main id="main-content" role="main" class="container my-4 main-content">
 	{% block content %}
 	<!-- Page-specific content will be injected here -->
 	{% endblock %}

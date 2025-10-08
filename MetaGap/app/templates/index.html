@@ -1,10 +1,10 @@
 {% extends 'layout.html' %}
 
-{% block title %}Home - MetaGaP{% endblock %}
+{% block title %}Home - {{ SITE_NAME }}{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-	<h1>Welcome to MetaGaP</h1>
+      <h1>Welcome to {{ SITE_NAME }}</h1>
 	<p>Manage allele frequencies and sample group metadata with ease.</p>
 	{% url 'search_results' as search_action %}
 	{% with form_title="Search" form_method="get" form_action=search_action submit_button_label="Search" %}

@@ -6,7 +6,7 @@
 	{% load django_bootstrap5 %}
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{% block title %}MetaGaP{% endblock %}</title>
+        <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
         <!-- MDB5 CSS -->
         <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.2.0/mdb.min.css"
               rel="stylesheet" />
@@ -20,7 +20,7 @@
 	<link rel="stylesheet" href="{% static 'app/css/styles.css' %}">
 	{% block extra_head %}{% endblock %}
 </head>
-<body>
+<body style="--color-primary: {{ SITE_COLORS.primary|default:'#1f6feb' }}; --color-secondary: {{ SITE_COLORS.secondary|default:'#2ea043' }};">
 {% block body %}
 <!-- Content will be injected here -->
 {% endblock %}

@@ -10,7 +10,7 @@ It replicates the bash script functionality:
   - Logs execution details to a log file.
 
 Requirements:
-  pip install vcfpy
+pip install vcfpy
 """
 
 import os

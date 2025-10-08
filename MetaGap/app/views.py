@@ -407,6 +407,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 format_instance, format_sample = self._create_format_instance(record.samples)
 
                 allele = AlleleFrequency.objects.create(
+                    sample_group=sample_group,
                     chrom=record.chrom,
                     pos=record.pos,
                     variant_id=record.id,
@@ -426,10 +427,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
                     format_instance.save(update_fields=["additional"])
 
                 created_alleles.append(allele)
-
-        if created_alleles and sample_group.allele_frequency is None:
-            sample_group.allele_frequency = created_alleles[0]
-            sample_group.save(update_fields=["allele_frequency"])
 
         return sample_group
 

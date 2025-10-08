@@ -12,6 +12,12 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 
 import os, dj_database_url
 
+
+def _split_env_list(name: str, default: str) -> list[str]:
+    """Return a clean list from a comma-separated environment variable."""
+
+    return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,8 +26,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEBUG = os.getenv("DEBUG","1") == "1"
 SECRET_KEY = os.getenv("SECRET_KEY","dev-secret")
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS","localhost,127.0.0.1,*.github.dev").split(",")
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS","https://*.github.dev").split(",")
+ALLOWED_HOSTS = _split_env_list(
+    "ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,*.github.dev"
+)
+CSRF_TRUSTED_ORIGINS = _split_env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "https://*.github.dev,http://0.0.0.0:8000,http://localhost:8000",
+)
 DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL","sqlite:///db.sqlite3"),

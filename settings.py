@@ -106,7 +106,6 @@ AUTH_PASSWORD_VALIDATORS = [
 		"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
 	},
 ]
-AUTH_USER_MODEL = 'MetaGaP.CustomUser'
 # Internationalization
 # https://docs.djangoproject.com/en/2.1/topics/i18n/
 LANGUAGE_CODE = "en-us"

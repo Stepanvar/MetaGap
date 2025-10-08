@@ -1,6 +1,16 @@
-{% extends "layout.html" %}
+{% extends "base.html" %}
 
-{% block title %}Edit Sample Group - MetaGaP{% endblock %}
+{% block title %}Edit Sample Group - {{ SITE_NAME }}{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb" class="mt-2">
+        <ol class="breadcrumb bg-transparent px-0 mb-4">
+                <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'profile' %}">Profile</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Edit Sample Group</li>
+        </ol>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">

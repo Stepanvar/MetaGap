@@ -1,0 +1,40 @@
+<!-- app/templates/form_template.html -->
+<div class="mt-4">
+        <div class="row">
+                <div class="col-md-8">
+                        {% if form_title %}
+                        <h2 class="mb-4">{{ form_title }}</h2>
+                        {% endif %}
+                        <form method="{{ form_method|default:'post' }}"
+                              action="{{ form_action|default:'' }}"
+                              enctype="{{ form_enctype|default:'application/x-www-form-urlencoded' }}"
+                              novalidate>
+                                {% if form_method|default:'post'|lower != 'get' %}
+                                {% csrf_token %}
+                                {% endif %}
+                                {% if form.non_field_errors %}
+                                <div class="alert alert-danger" role="alert">
+                                        {% for error in form.non_field_errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                </div>
+                                {% endif %}
+                                {% for field in form %}
+                                <div class="mb-3">
+                                        {{ field.label_tag }}
+                                        {% if field.help_text %}
+                                        <small class="form-text text-muted">{{ field.help_text }}</small>
+                                        {% endif %}
+                                        {{ field }}
+                                        {% if field.errors %}
+                                        {% for error in field.errors %}
+                                        <div class="invalid-feedback" style="display: block;">{{ error }}</div>
+                                        {% endfor %}
+                                        {% endif %}
+                                </div>
+                                {% endfor %}
+                                <button type="submit" class="btn btn-primary">{{ submit_button_label|default:"Submit" }}</button>
+                        </form>
+                </div>
+        </div>
+</div>

@@ -1,8 +1,139 @@
 /* app/static/app/css/styles.css */
 
+:root {
+        --color-primary: #1f6feb;
+        --color-secondary: #2ea043;
+        --color-primary-contrast: #ffffff;
+        --color-secondary-contrast: #ffffff;
+        --color-link-hover: #184ab7;
+}
+
 /* Add top padding to account for fixed navbar */
 body {
-	padding-top: 70px; /* Adjust the value based on navbar height */
+        padding-top: 70px; /* Adjust the value based on navbar height */
+}
+
+.navbar .navbar-brand {
+        color: var(--color-primary);
+        font-weight: 600;
+}
+
+.navbar .navbar-brand:hover,
+.navbar .navbar-brand:focus {
+        color: var(--color-secondary);
+}
+
+a {
+        color: var(--color-primary);
+}
+
+a:hover,
+a:focus {
+        color: var(--color-link-hover);
+}
+
+.btn-primary {
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+        color: var(--color-primary-contrast);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+        background-color: var(--color-secondary);
+        border-color: var(--color-secondary);
+        color: var(--color-secondary-contrast);
+}
+
+.btn-outline-primary {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+        color: var(--color-secondary-contrast);
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+}
+
+}
+
+/* Skip link styling */
+.skip-link {
+        position: absolute;
+        left: 0.5rem;
+        top: -4rem;
+        background-color: #0b5ed7;
+        color: #ffffff;
+        padding: 0.75rem 1.25rem;
+        z-index: 1000;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        transition: top 0.2s ease-in-out;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+        top: 0.5rem;
+        outline: 3px solid #ffffff;
+        outline-offset: 2px;
+}
+
+/* Accessible focus indicators */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.navbar-toggler:focus-visible {
+        outline: 3px solid #0b5ed7;
+        outline-offset: 2px;
+        box-shadow: none;
+}
+
+/* High contrast link styling */
+a,
+.nav-link {
+        color: #0a58ca;
+}
+
+a:hover,
+a:focus,
+.nav-link:hover,
+.nav-link:focus {
+        color: #084298;
+}
+
+/* High contrast button styling */
+.btn-primary {
+        background-color: #0b5ed7;
+        border-color: #0b5ed7;
+        color: #ffffff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary:focus-visible,
+.btn-primary:disabled {
+        background-color: #084298;
+        border-color: #084298;
+        color: #ffffff;
+}
+
+.btn-outline-primary {
+        color: #0b5ed7;
+        border-color: #0b5ed7;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus,
+.btn-outline-primary:active,
+.btn-outline-primary:focus-visible {
+        color: #ffffff;
+        background-color: #0b5ed7;
+        border-color: #0b5ed7;
 }
 
 /* Other custom styles */

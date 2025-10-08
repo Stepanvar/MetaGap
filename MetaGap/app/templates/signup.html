@@ -1,6 +1,6 @@
-{% extends 'layout.html' %}
+{% extends 'base.html' %}
 
-{% block title %}Sign Up - MetaGaP{% endblock %}
+{% block title %}Sign Up - {{ SITE_NAME }}{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
@@ -8,4 +8,3 @@
         {% include 'partials/form.html' with form=form submit_button_label="Create Account" extra_actions=form_extra_actions|default:'' %}
 </div>
 {% endblock %}
-

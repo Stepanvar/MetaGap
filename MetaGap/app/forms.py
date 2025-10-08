@@ -4,6 +4,42 @@ from django.contrib.auth.models import User
 
 from .models import OrganizationProfile, SampleGroup
 
+
+class _OrganizationProfileFormMixin:
+    """Shared helpers for deferring :class:`OrganizationProfile` updates."""
+
+    _pending_organization_name_attr = "_pending_organization_name"
+
+    def _store_pending_profile_update(self, organization_name: str) -> None:
+        """Defer profile creation until ``save_m2m`` runs."""
+
+        setattr(self, self._pending_organization_name_attr, organization_name)
+        original_save_m2m = getattr(self, "save_m2m", None)
+
+        def deferred_save_m2m():
+            if callable(original_save_m2m):
+                original_save_m2m()
+            self._apply_pending_organization_update()
+
+        self.save_m2m = deferred_save_m2m
+
+    def _update_organization_profile(self, organization_name: str) -> None:
+        if self.instance.pk:
+            OrganizationProfile.objects.update_or_create(
+                user=self.instance,
+                defaults={"organization_name": (organization_name or None)},
+            )
+
+    def _apply_pending_organization_update(self) -> None:
+        if hasattr(self, self._pending_organization_name_attr):
+            organization_name = getattr(self, self._pending_organization_name_attr, "").strip()
+            self._update_organization_profile(organization_name)
+            self._clear_pending_organization_name()
+
+    def _clear_pending_organization_name(self) -> None:
+        if hasattr(self, self._pending_organization_name_attr):
+            delattr(self, self._pending_organization_name_attr)
+
 class SearchForm(forms.Form):
     query = forms.CharField(
         required=False,
@@ -11,7 +47,7 @@ class SearchForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Search...'})
     )
 
-class CustomUserCreationForm(UserCreationForm):
+class CustomUserCreationForm(_OrganizationProfileFormMixin, UserCreationForm):
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(
@@ -56,25 +92,11 @@ class CustomUserCreationForm(UserCreationForm):
         if commit:
             user.save()
             self.save_m2m()
-            OrganizationProfile.objects.update_or_create(
-                user=user,
-                defaults={"organization_name": organization_name or None},
-            )
+            self._update_organization_profile(organization_name)
+            self._clear_pending_organization_name()
         else:
-            # Store the organization name so it can be accessed after saving the instance.
-            self._pending_organization_name = organization_name
+            self._store_pending_profile_update(organization_name)
         return user
-
-    def save_m2m(self):
-        super().save_m2m()
-        # Ensure that the organization profile is saved if save() was called with commit=False.
-        if hasattr(self, "_pending_organization_name") and self.instance.pk:
-            organization_name = self._pending_organization_name.strip()
-            OrganizationProfile.objects.update_or_create(
-                user=self.instance,
-                defaults={"organization_name": organization_name or None},
-            )
-            del self._pending_organization_name
 
 class SampleGroupForm(forms.ModelForm):
     """ModelForm that assigns ``created_by`` using the authenticated user."""
@@ -112,7 +134,7 @@ class ImportDataForm(forms.Form):
         help_text='Upload a VCF file.'
     )
 
-class EditProfileForm(UserChangeForm):
+class EditProfileForm(_OrganizationProfileFormMixin, UserChangeForm):
     password = None  # Exclude password field
     organization_name = forms.CharField(
         required=False,
@@ -146,24 +168,11 @@ class EditProfileForm(UserChangeForm):
         if commit:
             user.save()
             self.save_m2m()
-            if self.instance.pk:
-                OrganizationProfile.objects.update_or_create(
-                    user=self.instance,
-                    defaults={"organization_name": organization_name or None},
-                )
+            self._update_organization_profile(organization_name)
+            self._clear_pending_organization_name()
         else:
-            self._pending_organization_name = organization_name
+            self._store_pending_profile_update(organization_name)
         return user
-
-    def save_m2m(self):
-        super().save_m2m()
-        if hasattr(self, "_pending_organization_name") and self.instance.pk:
-            organization_name = self._pending_organization_name.strip()
-            OrganizationProfile.objects.update_or_create(
-                user=self.instance,
-                defaults={"organization_name": organization_name or None},
-            )
-            del self._pending_organization_name
 
 class DeleteAccountForm(forms.Form):
     confirm = forms.BooleanField(

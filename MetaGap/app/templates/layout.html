@@ -1,36 +1,12 @@
-<!-- app/templates/layout.html -->
 {% extends 'base.html' %}
 
-{% block header %}
-        {{ block.super }}
-{% endblock %}
-
-{% block body %}
-<!-- Breadcrumbs -->
 {% block breadcrumbs %}
 <nav aria-label="breadcrumb">
-        <ol class="breadcrumb m-3">
-                <li class="breadcrumb-item">
-                        <a href="{% url 'home' %}">Home</a>
-                </li>
-                {% block breadcrumb_items %}
-                <!-- Additional breadcrumb items can be added here -->
-                {% endblock %}
-        </ol>
+  <ol class="breadcrumb m-3">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+    {% block breadcrumb_items %}{% endblock %}
+  </ol>
 </nav>
 {% endblock %}
 
-<!-- Main Content -->
-<main role="main" class="container my-4 main-content">
-        {% block content %}
-        <!-- Page-specific content will be injected here -->
-        {% endblock %}
-</main>
-
-<!-- Footer -->
-<footer class="bg-light text-center text-lg-start">
-        <div class="text-center p-3">
-                © {% now "Y" %} MetaGaP
-        </div>
-</footer>
-{% endblock %}
+{% block content %}{% endblock %}

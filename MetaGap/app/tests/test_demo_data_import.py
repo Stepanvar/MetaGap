@@ -30,7 +30,10 @@ class DemoDataImportTests(TestCase):
 
         microbiome_group = SampleGroup.objects.get(name="Microbiome Case Study")
         self.assertEqual(microbiome_group.reference_genome_build.build_name, "T2T-CHM13")
-        self.assertEqual(microbiome_group.allele_frequency.variant_id, "bft_v1")
+        self.assertEqual(
+            microbiome_group.allele_frequencies.get().variant_id,
+            "bft_v1",
+        )
         self.assertEqual(microbiome_group.bioinfo_alignment.software, "Bowtie2")
 
     def test_variant_metadata_round_trip(self):

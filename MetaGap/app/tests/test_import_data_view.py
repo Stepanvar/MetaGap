@@ -21,6 +21,12 @@ class ImportDataViewIntegrationTests(TestCase):
 1\t1234\trsTest\tA\tT\t99\tPASS\tAF=0.5;CLNSIG=Pathogenic\tGT:GQ\t0/1:99
 """
 
+    VCF_WITH_METADATA = """##fileformat=VCFv4.2
+##SAMPLE=<ID=GroupB,Description=Detailed group,Source_Lab=MetaLab,Contact_Email=lab@example.com,Total_Samples=5,Inclusion=Adults,Exclusion=Under18,Reference_Genome_Build_Build_Name=GRCh38,Reference_Genome_Build_Build_Version=v1,Reference_Genome_Build_Additional_Info={\"notes\":\"GRCh\"},Genome_Complexity_Size=3.2Gb,Genome_Complexity_Ploidy=Diploid,Genome_Complexity_GC_Content=41%,Sample_Origin_Tissue=Blood,Sample_Origin_Collection_Method=Venipuncture,Sample_Origin_Storage_Conditions=-80C,Material_Type_Material_Type=DNA,Material_Type_Integrity_Number=9.5,Input_Quality_A260_A280=1.8,Input_Quality_A260_A230=2.1,Input_Quality_DNA_Concentration=15.2,Input_Quality_Additional_Metrics={\"rna_integrity\":7.4},Input_Quality_Metric_RNA_Integrity=7.4,Platform_Independent_Q30=92.5,Bioinfo_Alignment_Software=BWA,Bioinfo_Alignment_Params=-M,Bioinfo_Variant_Calling_Tool=GATK,Bioinfo_Variant_Calling_Version=4.2,Bioinfo_PostProc_Normalization=Global>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t5678\trsMeta\tC\tG\t88\tPASS\tAF=0.25\tGT:GQ\t0/1:80
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -64,6 +70,89 @@ class ImportDataViewIntegrationTests(TestCase):
             alleles,
         )
         self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+
+    def test_import_populates_related_metadata(self) -> None:
+        """Detailed metadata is persisted into structured sample group relations."""
+
+        self.client.login(username="vcf_user", password="import-pass")
+
+        upload = SimpleUploadedFile(
+            "metadata.vcf",
+            self.VCF_WITH_METADATA.encode("utf-8"),
+            content_type="text/vcf",
+        )
+
+        response = self.client.post(reverse("import_data"), {"data_file": upload})
+        self.assertRedirects(response, reverse("profile"))
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build",
+            "genome_complexity",
+            "sample_origin",
+            "material_type",
+            "platform_independent",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+            "bioinfo_post_proc",
+            "input_quality",
+        ).get(name="GroupB")
+
+        self.assertEqual(sample_group.comments, "Detailed group")
+        self.assertEqual(sample_group.source_lab, "MetaLab")
+        self.assertEqual(sample_group.contact_email, "lab@example.com")
+        self.assertEqual(sample_group.total_samples, 5)
+        self.assertEqual(sample_group.inclusion_criteria, "Adults")
+        self.assertEqual(sample_group.exclusion_criteria, "Under18")
+        self.assertIsNotNone(sample_group.reference_genome_build)
+        self.assertEqual(sample_group.reference_genome_build.build_name, "GRCh38")
+        self.assertEqual(sample_group.reference_genome_build.build_version, "v1")
+        self.assertEqual(
+            sample_group.reference_genome_build.additional_info,
+            {"notes": "GRCh"},
+        )
+
+        self.assertIsNotNone(sample_group.genome_complexity)
+        self.assertEqual(sample_group.genome_complexity.size, "3.2Gb")
+        self.assertEqual(sample_group.genome_complexity.ploidy, "Diploid")
+        self.assertEqual(sample_group.genome_complexity.gc_content, "41%")
+
+        self.assertIsNotNone(sample_group.sample_origin)
+        self.assertEqual(sample_group.sample_origin.tissue, "Blood")
+        self.assertEqual(
+            sample_group.sample_origin.collection_method,
+            "Venipuncture",
+        )
+        self.assertEqual(
+            sample_group.sample_origin.storage_conditions,
+            "-80C",
+        )
+
+        self.assertIsNotNone(sample_group.material_type)
+        self.assertEqual(sample_group.material_type.material_type, "DNA")
+        self.assertEqual(sample_group.material_type.integrity_number, "9.5")
+
+        self.assertIsNotNone(sample_group.platform_independent)
+        self.assertEqual(sample_group.platform_independent.q30, "92.5")
+
+        self.assertIsNotNone(sample_group.bioinfo_alignment)
+        self.assertEqual(sample_group.bioinfo_alignment.software, "BWA")
+        self.assertEqual(sample_group.bioinfo_alignment.params, "-M")
+
+        self.assertIsNotNone(sample_group.bioinfo_variant_calling)
+        self.assertEqual(sample_group.bioinfo_variant_calling.tool, "GATK")
+        self.assertEqual(sample_group.bioinfo_variant_calling.version, "4.2")
+
+        self.assertIsNotNone(sample_group.bioinfo_post_proc)
+        self.assertEqual(sample_group.bioinfo_post_proc.normalization, "Global")
+
+        self.assertIsNotNone(sample_group.input_quality)
+        self.assertAlmostEqual(sample_group.input_quality.a260_a280, 1.8)
+        self.assertAlmostEqual(sample_group.input_quality.a260_a230, 2.1)
+        self.assertAlmostEqual(sample_group.input_quality.dna_concentration, 15.2)
+        self.assertEqual(
+            sample_group.input_quality.additional_metrics,
+            {"rna_integrity": 7.4, "metric_rna_integrity": 7.4},
+        )
 
     @mock.patch("app.views.pysam.VariantFile", side_effect=OSError("boom"))
     def test_import_falls_back_to_text_parser(self, mocked_variant_file: mock.Mock) -> None:

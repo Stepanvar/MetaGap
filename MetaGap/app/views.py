@@ -445,7 +445,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "run_specific_calibration": ["calibration"],
         },
         "bioinfo_alignment": {
-            "software": ["aligner", "software"],
+            "tool": ["aligner", "software", "tool"],
             "params": ["parameters", "params"],
             "ref_genome_version": ["reference_version"],
             "recalibration_settings": ["recalibration", "recal_settings"],
@@ -474,7 +474,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "pacbio_seq": "instrument",
         "iontorrent_seq": "instrument",
         "platform_independent": "instrument",
-        "bioinfo_alignment": "software",
+        "bioinfo_alignment": "tool",
         "bioinfo_variant_calling": "tool",
         "bioinfo_post_proc": "normalization",
     }

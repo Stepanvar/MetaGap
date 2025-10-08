@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -133,6 +134,36 @@ class ImportDataViewTests(TestCase):
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")
 
         self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+
+
+class DeleteAccountViewTests(TestCase):
+    """Exercise the account deletion endpoint."""
+
+    def test_confirmed_post_deletes_user_and_logs_out(self) -> None:
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="delete_me",
+            password="secure-pass",
+            email="deleteme@example.com",
+        )
+
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("delete_account"),
+            {"confirm": True},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("home"))
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        messages = list(get_messages(response.wsgi_request))
+        self.assertIn(
+            "Your account has been deleted.",
+            [message.message for message in messages],
+        )
 
 
 class SampleGroupUpdateViewTests(TestCase):

@@ -1,5 +1,26 @@
 from django.contrib import admin
-from .models import OrganizationProfile, ReferenceGenomeBuild, GenomeComplexity, SampleOrigin, MaterialType, LibraryConstruction, SequencingInstrument, IlluminaSeq, OntSeq, PacBioSeq, IonTorrentSeq, PlatformIndependent, BioinfoAlignment, BioinfoVariantCalling, BioinfoPostProc, SampleGroup, AlleleFrequency, Info, Format
+
+from .models import (
+    AlleleFrequency,
+    BioinfoAlignment,
+    BioinfoPostProc,
+    BioinfoVariantCalling,
+    Format,
+    GenomeComplexity,
+    IlluminaSeq,
+    Info,
+    InputQuality,
+    IonTorrentSeq,
+    LibraryConstruction,
+    MaterialType,
+    OntSeq,
+    OrganizationProfile,
+    PacBioSeq,
+    PlatformIndependent,
+    ReferenceGenomeBuild,
+    SampleGroup,
+    SampleOrigin,
+)
 
 admin.site.register(OrganizationProfile)
 admin.site.register(ReferenceGenomeBuild)
@@ -15,6 +36,7 @@ admin.site.register(PlatformIndependent)
 admin.site.register(BioinfoAlignment)
 admin.site.register(BioinfoVariantCalling)
 admin.site.register(BioinfoPostProc)
+admin.site.register(InputQuality)
 admin.site.register(SampleGroup)
 admin.site.register(AlleleFrequency)
 admin.site.register(Info)

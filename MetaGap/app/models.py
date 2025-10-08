@@ -1,5 +1,7 @@
 # app/models.py
 
+from typing import Any, Dict
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
@@ -230,27 +232,26 @@ class Info(models.Model):
 
 
 class Format(models.Model):
-    """Representation of FORMAT fields in a VCF file."""
+    """Serialized representation of FORMAT fields in a VCF file."""
 
-    ad = models.CharField(max_length=50, blank=True, null=True)
-    adf = models.CharField(max_length=50, blank=True, null=True)
-    adr = models.CharField(max_length=50, blank=True, null=True)
-    dp = models.CharField(max_length=50, blank=True, null=True)
-    ec = models.CharField(max_length=50, blank=True, null=True)
-    ft = models.CharField(max_length=50, blank=True, null=True)
-    gl = models.CharField(max_length=50, blank=True, null=True)
-    gp = models.CharField(max_length=50, blank=True, null=True)
-    gq = models.CharField(max_length=50, blank=True, null=True)
-    gt = models.CharField(max_length=50, blank=True, null=True)
-    hq = models.CharField(max_length=50, blank=True, null=True)
-    mq = models.CharField(max_length=50, blank=True, null=True)
-    pl = models.CharField(max_length=50, blank=True, null=True)
-    pq = models.CharField(max_length=50, blank=True, null=True)
-    ps = models.CharField(max_length=50, blank=True, null=True)
-    additional = models.JSONField(blank=True, null=True)
+    genotype = models.CharField(max_length=50, blank=True, null=True)
+    payload = models.JSONField(blank=True, null=True)
 
     def __str__(self) -> str:
         return f"Format for {self.pk}"
+
+    @property
+    def fields(self) -> Dict[str, Any]:
+        """Return structured FORMAT key/value pairs if available."""
+        payload: Dict[str, Any] = self.payload or {}
+        return payload.get("fields") or {}
+
+    @property
+    def additional(self) -> Dict[str, Any]:
+        """Return unmapped FORMAT key/value pairs."""
+
+        payload = self.payload or {}
+        return payload.get("additional") or {}
 
 
 class SampleGroup(models.Model):

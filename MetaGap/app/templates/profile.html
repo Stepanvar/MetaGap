@@ -22,10 +22,15 @@
         {% if sample_groups %}
         <ul class="list-group mb-4">
                 {% for group in sample_groups %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>{{ group.name }}</span>
-                        <a class="btn btn-sm btn-outline-primary"
-                           href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <a class="link-primary text-decoration-none"
+                           href="{% url 'sample_group_detail' group.pk %}">{{ group.name }}</a>
+                        <div class="btn-group btn-group-sm" role="group">
+                                <a class="btn btn-outline-secondary"
+                                   href="{% url 'sample_group_detail' group.pk %}">View</a>
+                                <a class="btn btn-outline-primary"
+                                   href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                        </div>
                 </li>
                 {% endfor %}
         </ul>

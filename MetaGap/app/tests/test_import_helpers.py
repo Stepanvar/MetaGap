@@ -5,7 +5,7 @@ import tempfile
 
 from django.test import RequestFactory, TestCase
 
-from app.models import Format, Info
+from app.models import Format, GenomeComplexity, Info
 from app.views import ImportDataView
 
 
@@ -80,3 +80,35 @@ class ImportHelpersTests(TestCase):
         self.assertIn("flagwithoutvalue", metadata)
         self.assertNotIn("malformedentry", metadata)
         self.assertNotIn("shouldnotappear", metadata.values())
+
+    def test_extract_section_data_supports_hyphenated_keys(self):
+        """Hyphenated section prefixes map fields and feed remaining into additional."""
+
+        raw_key = "Genome_Complexity-GC_Content"
+        metadata = {
+            raw_key.lower(): "41%",
+            "genome_complexity-extra_metric": "observed",
+            "unrelated": "ignore",
+        }
+
+        section_data, consumed, additional = self.view._extract_section_data(
+            metadata, "genome_complexity", GenomeComplexity
+        )
+
+        self.assertEqual(section_data["gc_content"], "41%")
+        self.assertIn(raw_key.lower(), consumed)
+        self.assertNotIn("genome_complexity-extra_metric", consumed)
+        self.assertEqual(additional, {"extra_metric": "observed"})
+
+    def test_extract_section_data_falls_back_to_section_value(self):
+        """Section-level metadata populates the configured primary field when needed."""
+
+        metadata = {"genome_complexity": "3.1Gb", "other": "value"}
+
+        section_data, consumed, additional = self.view._extract_section_data(
+            metadata, "genome_complexity", GenomeComplexity
+        )
+
+        self.assertEqual(section_data["size"], "3.1Gb")
+        self.assertIn("genome_complexity", consumed)
+        self.assertIsNone(additional)

@@ -17,7 +17,14 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from django.utils.text import slugify
-from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
+from django.views.generic import (
+    CreateView,
+    DetailView,
+    FormView,
+    ListView,
+    TemplateView,
+    UpdateView,
+)
 from django_filters.views import FilterView
 from django_tables2 import RequestConfig
 from django_tables2.views import SingleTableMixin
@@ -387,6 +394,59 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
                 }
             ],
         )
+        return context
+
+
+class SampleGroupDetailView(LoginRequiredMixin, DetailView):
+    """Display an individual sample group's metadata and variant catalogue."""
+
+    model = SampleGroup
+    template_name = "sample_group_detail.html"
+    context_object_name = "sample_group"
+
+    def get_queryset(self):
+        """Limit access to groups owned by the requesting organisation."""
+
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+        if organization_profile is None:
+            return SampleGroup.objects.none()
+
+        return (
+            SampleGroup.objects.filter(created_by=organization_profile)
+            .select_related(
+                "created_by",
+                "created_by__user",
+                "reference_genome_build",
+                "genome_complexity",
+                "sample_origin",
+                "material_type",
+                "library_construction",
+                "illumina_seq",
+                "ont_seq",
+                "pacbio_seq",
+                "iontorrent_seq",
+                "platform_independent",
+                "bioinfo_alignment",
+                "bioinfo_variant_calling",
+                "bioinfo_post_proc",
+                "input_quality",
+            )
+            .prefetch_related(
+                "allele_frequencies",
+                "allele_frequencies__info",
+                "allele_frequencies__format",
+            )
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        table_class = create_dynamic_table(
+            AlleleFrequency, table_name="AlleleFrequencyTable", include_related=True
+        )
+        allele_qs = self.object.allele_frequencies.all()
+        table = table_class(allele_qs)
+        RequestConfig(self.request, paginate={"per_page": 25}).configure(table)
+        context["allele_frequency_table"] = table
         return context
 
 
@@ -828,7 +888,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
         prefixes: list[str] = []
         for variant in section_variants:
-            for suffix in ("_", "."):
+            for suffix in ("_", ".", "-"):
                 candidate_prefix = f"{variant}{suffix}"
                 if candidate_prefix not in prefixes:
                     prefixes.append(candidate_prefix)
@@ -879,7 +939,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         consumed: Iterable[str],
     ) -> Optional[Dict[str, Any]]:
         consumed_set = set(consumed)
-        prefixes = (f"{section}_", f"{section}.")
+        prefixes = (f"{section}_", f"{section}.", f"{section}-")
         additional: Dict[str, Any] = {}
 
         for key, value in metadata.items():

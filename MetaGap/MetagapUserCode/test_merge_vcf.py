@@ -728,10 +728,35 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             handle_critical_error(f"Missing required meta-information: ##{meta} in {merged_vcf} header.")
 
 
-    defined_info_ids = {
-        line.id
-        for line in header.lines
-        if isinstance(line, vcfpy.header.InfoHeaderLine)
+    defined_info_ids = OrderedDict()
+    info_ids_iterable = []
+    if hasattr(header, "info_ids"):
+        candidate = header.info_ids
+        if callable(candidate):
+            try:
+                info_ids_iterable = list(candidate())
+            except Exception:
+                info_ids_iterable = []
+        else:
+            info_ids_iterable = list(candidate)
+
+    for info_id in info_ids_iterable:
+        try:
+            info_def = header.get_info_field_info(info_id)
+        except Exception:
+            info_def = None
+        if isinstance(info_def, vcfpy.header.InfoHeaderLine):
+            defined_info_ids[info_id] = info_def
+
+    if not defined_info_ids:
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.InfoHeaderLine):
+                defined_info_ids[line.id] = line
+
+    required_info_ids = {
+        info_id
+        for info_id, info_def in defined_info_ids.items()
+        if _info_field_requires_value(getattr(info_def, "number", None))
     }
     required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
 
@@ -742,19 +767,14 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             record_label = f"{getattr(record, 'CHROM', '?')}:{getattr(record, 'POS', '?')}"
 
             if info_map is None:
-                logger.warning(
-                    "Record %s in %s is missing INFO data.",
-                    record_label,
-                    merged_vcf,
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
                 )
                 continue
 
             if not isinstance(info_map, dict):
-                logger.warning(
-                    "Record %s in %s has an unexpected INFO type: %s.",
-                    record_label,
-                    merged_vcf,
-                    type(info_map).__name__,
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}. Continuing without INFO validation for this record."
                 )
                 continue
 
@@ -771,20 +791,14 @@ def validate_merged_vcf(merged_vcf, verbose=False):
 
             missing_keys = sorted(required_info_ids.difference(record_info_keys))
             if missing_keys:
-                logger.warning(
-                    "Record %s in %s is missing required INFO fields: %s.",
-                    record_label,
-                    merged_vcf,
-                    ", ".join(missing_keys),
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
                 )
 
             null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
             if null_keys:
-                logger.warning(
-                    "Record %s in %s has INFO fields with null values: %s.",
-                    record_label,
-                    merged_vcf,
-                    ", ".join(sorted(null_keys)),
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
                 )
 
     except SystemExit:

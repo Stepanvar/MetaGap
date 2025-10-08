@@ -448,7 +448,108 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
         allele_qs = self.object.allele_frequencies.all()
         table = table_class(allele_qs)
         RequestConfig(self.request, paginate={"per_page": 25}).configure(table)
+        sample_group = self.object
+
+        def build_section(title: str, items: Iterable[Tuple[str, Any, Optional[str]]]):
+            section: Dict[str, Any] = {"title": title, "items": []}
+            for key, value, item_type in items:
+                label = key
+                value_key = slugify(key).replace("-", "_")
+                section[value_key] = value
+                item_context = {"label": label, "value": value}
+                if item_type:
+                    item_context["type"] = item_type
+                section["items"].append(item_context)
+            return section
+
+        metadata_sections = [
+            build_section(
+                "Summary",
+                [
+                    ("Name", sample_group.name, None),
+                    ("DOI", sample_group.doi, None),
+                    ("Source lab", sample_group.source_lab, None),
+                    ("Total samples", sample_group.total_samples, None),
+                    ("Contact email", sample_group.contact_email, "email"),
+                    ("Contact phone", sample_group.contact_phone, None),
+                    (
+                        "Created by",
+                        getattr(sample_group.created_by, "organization_name", None)
+                        or sample_group.created_by,
+                        None,
+                    ),
+                ],
+            ),
+            build_section(
+                "Criteria",
+                [
+                    ("Inclusion", sample_group.inclusion_criteria, None),
+                    ("Exclusion", sample_group.exclusion_criteria, None),
+                    ("Comments", sample_group.comments, None),
+                ],
+            ),
+            build_section(
+                "Sample & Material",
+                [
+                    (
+                        "Reference genome build",
+                        getattr(
+                            sample_group.reference_genome_build,
+                            "build_name",
+                            sample_group.reference_genome_build,
+                        ),
+                        None,
+                    ),
+                    (
+                        "Genome complexity",
+                        getattr(
+                            sample_group.genome_complexity,
+                            "size",
+                            sample_group.genome_complexity,
+                        ),
+                        None,
+                    ),
+                    ("Sample origin", sample_group.sample_origin, None),
+                    ("Material type", sample_group.material_type, None),
+                    ("Library construction", sample_group.library_construction, None),
+                ],
+            ),
+            build_section(
+                "Sequencing & Bioinformatics",
+                [
+                    ("Illumina", sample_group.illumina_seq, None),
+                    ("Oxford Nanopore", sample_group.ont_seq, None),
+                    ("PacBio", sample_group.pacbio_seq, None),
+                    ("Ion Torrent", sample_group.iontorrent_seq, None),
+                    ("Platform-independent", sample_group.platform_independent, None),
+                    ("Alignment", sample_group.bioinfo_alignment, None),
+                    ("Variant calling", sample_group.bioinfo_variant_calling, None),
+                    ("Post-processing", sample_group.bioinfo_post_proc, None),
+                ],
+            ),
+            build_section(
+                "Input Quality",
+                [
+                    ("A260/A280", getattr(sample_group.input_quality, "a260_a280", None), None),
+                    ("A260/A230", getattr(sample_group.input_quality, "a260_a230", None), None),
+                    (
+                        "DNA concentration",
+                        getattr(sample_group.input_quality, "dna_concentration", None),
+                        None,
+                    ),
+                    (
+                        "RNA concentration",
+                        getattr(sample_group.input_quality, "rna_concentration", None),
+                        None,
+                    ),
+                    ("Notes", getattr(sample_group.input_quality, "notes", None), None),
+                ],
+            ),
+        ]
+
+        context["metadata_sections"] = metadata_sections
         context["allele_frequency_table"] = table
+        context["variant_table"] = table
         return context
 
 

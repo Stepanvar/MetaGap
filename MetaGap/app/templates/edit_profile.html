@@ -7,6 +7,8 @@
 {% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Edit Profile</h2>
-{% include 'form_template.html' with form=form submit_button_label="Save Changes" %}
+<div class="container mt-5">
+        <h2>Edit Profile</h2>
+        {% include 'partials/form.html' with form=form submit_button_label="Save Changes" extra_actions=form_extra_actions|default:'' %}
+</div>
 {% endblock %}

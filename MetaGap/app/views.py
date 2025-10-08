@@ -238,6 +238,20 @@ class DeleteAccountView(LoginRequiredMixin, FormView):
         messages.success(self.request, "Your account has been deleted.")
         return super().form_valid(form)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault(
+            "form_extra_actions",
+            [
+                {
+                    "url": reverse_lazy("profile"),
+                    "class": "btn btn-secondary",
+                    "label": "Cancel",
+                }
+            ],
+        )
+        return context
+
 class UserRegistrationView(CreateView):
     form_class = CustomUserCreationForm
     template_name = "signup.html"
@@ -276,6 +290,20 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, "Sample group metadata updated successfully.")
         return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault(
+            "form_extra_actions",
+            [
+                {
+                    "url": reverse_lazy("profile"),
+                    "class": "btn btn-outline-secondary",
+                    "label": "Cancel",
+                }
+            ],
+        )
+        return context
 
 
 class ImportDataView(LoginRequiredMixin, FormView):

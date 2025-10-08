@@ -5,6 +5,68 @@ from django.contrib.auth.models import User
 from .models import OrganizationProfile, SampleGroup
 
 
+class BootstrapFormMixin:
+    """Apply Bootstrap-friendly defaults to Django form widgets."""
+
+    bootstrap_input_class = "form-control"
+    bootstrap_select_class = "form-select"
+    bootstrap_check_class = "form-check-input"
+    bootstrap_file_class = "form-control"
+
+    text_input_widgets = (
+        forms.TextInput,
+        forms.EmailInput,
+        forms.NumberInput,
+        forms.URLInput,
+        forms.PasswordInput,
+        forms.Textarea,
+        forms.DateInput,
+        forms.DateTimeInput,
+        forms.TimeInput,
+    )
+    select_widgets = (forms.Select, forms.SelectMultiple)
+    checkbox_widgets = (forms.CheckboxInput, forms.CheckboxSelectMultiple)
+    file_widgets = (forms.FileInput, forms.ClearableFileInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._apply_bootstrap_metadata()
+
+    def _apply_bootstrap_metadata(self) -> None:
+        for name, field in self.fields.items():
+            widget = field.widget
+            if isinstance(widget, self.checkbox_widgets):
+                default_class = self.bootstrap_check_class
+            elif isinstance(widget, self.select_widgets):
+                default_class = self.bootstrap_select_class
+            elif isinstance(widget, self.file_widgets):
+                default_class = self.bootstrap_file_class
+            elif isinstance(widget, self.text_input_widgets) or getattr(widget, "input_type", None):
+                default_class = self.bootstrap_input_class
+            else:
+                default_class = self.bootstrap_input_class
+
+            existing_classes = widget.attrs.get("class", "")
+            widget.attrs["class"] = self._merge_css_classes(existing_classes, default_class)
+            widget.attrs.setdefault("data-field-name", name)
+            widget.attrs.setdefault("data-label", field.label or "")
+            widget.attrs.setdefault("data-required", "true" if field.required else "false")
+            widget.attrs.setdefault("data_widget_class_name", widget.__class__.__name__)
+            widget.attrs.setdefault(
+                "data_widget_input_type",
+                getattr(widget, "input_type", "") or "",
+            )
+            if field.help_text:
+                widget.attrs.setdefault("data-help-text", str(field.help_text))
+
+    @staticmethod
+    def _merge_css_classes(existing: str, new_class: str) -> str:
+        classes = [cls for cls in existing.split() if cls]
+        if new_class and new_class not in classes:
+            classes.append(new_class)
+        return " ".join(classes)
+
+
 class _OrganizationProfileFormMixin:
     """Shared helpers for deferring :class:`OrganizationProfile` updates."""
 
@@ -40,14 +102,14 @@ class _OrganizationProfileFormMixin:
         if hasattr(self, self._pending_organization_name_attr):
             delattr(self, self._pending_organization_name_attr)
 
-class SearchForm(forms.Form):
+class SearchForm(BootstrapFormMixin, forms.Form):
     query = forms.CharField(
         required=False,
         label='',
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Search...'})
     )
 
-class CustomUserCreationForm(_OrganizationProfileFormMixin, UserCreationForm):
+class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCreationForm):
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(
@@ -98,27 +160,12 @@ class CustomUserCreationForm(_OrganizationProfileFormMixin, UserCreationForm):
             self._store_pending_profile_update(organization_name)
         return user
 
-class SampleGroupForm(forms.ModelForm):
+class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
     """ModelForm that assigns ``created_by`` using the authenticated user."""
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
-        text_like_widgets = (
-            forms.TextInput,
-            forms.EmailInput,
-            forms.NumberInput,
-            forms.URLInput,
-            forms.PasswordInput,
-            forms.Textarea,
-        )
-        select_widgets = (forms.Select, forms.SelectMultiple)
-        for field in self.fields.values():
-            widget = field.widget
-            if isinstance(widget, text_like_widgets):
-                widget.attrs.setdefault("class", "form-control")
-            elif isinstance(widget, select_widgets):
-                widget.attrs.setdefault("class", "form-select")
 
     class Meta:
         model = SampleGroup
@@ -148,14 +195,14 @@ class SampleGroupForm(forms.ModelForm):
 
         return sample_group
 
-class ImportDataForm(forms.Form):
+class ImportDataForm(BootstrapFormMixin, forms.Form):
     data_file = forms.FileField(
         required=True,
         widget=forms.ClearableFileInput(attrs={'class': 'form-control'}),
         help_text='Upload a VCF file.'
     )
 
-class EditProfileForm(_OrganizationProfileFormMixin, UserChangeForm):
+class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserChangeForm):
     password = None  # Exclude password field
     organization_name = forms.CharField(
         required=False,
@@ -195,7 +242,7 @@ class EditProfileForm(_OrganizationProfileFormMixin, UserChangeForm):
             self._store_pending_profile_update(organization_name)
         return user
 
-class DeleteAccountForm(forms.Form):
+class DeleteAccountForm(BootstrapFormMixin, forms.Form):
     confirm = forms.BooleanField(
         required=True,
         label="I confirm that I want to delete my account.",

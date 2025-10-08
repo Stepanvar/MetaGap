@@ -356,6 +356,50 @@ class SampleGroup(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    def delete(self, using: Any | None = None, keep_parents: bool = False) -> None:
+        """Delete the sample group along with unshared related metadata."""
+
+        related_field_names = [
+            "reference_genome_build",
+            "genome_complexity",
+            "sample_origin",
+            "material_type",
+            "library_construction",
+            "illumina_seq",
+            "ont_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
+            "platform_independent",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+            "bioinfo_post_proc",
+            "input_quality",
+        ]
+
+        related_instances: list[models.Model] = []
+        for field_name in related_field_names:
+            instance = getattr(self, field_name, None)
+            if instance is None:
+                continue
+
+            field = self._meta.get_field(field_name)
+            if isinstance(field, models.OneToOneField):
+                related_instances.append(instance)
+                continue
+
+            shared = (
+                SampleGroup.objects.filter(**{field_name: instance})
+                .exclude(pk=self.pk)
+                .exists()
+            )
+            if not shared:
+                related_instances.append(instance)
+
+        super().delete(using=using, keep_parents=keep_parents)
+
+        for instance in related_instances:
+            instance.delete()
+
 
 class AlleleFrequency(models.Model):
     """Allele frequency data along with variant information."""

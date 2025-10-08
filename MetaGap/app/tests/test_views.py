@@ -799,3 +799,121 @@ class SampleGroupUpdateViewTests(TestCase):
         response = self.client.get(reverse("sample_group_edit", args=[other_group.pk]))
 
         self.assertEqual(response.status_code, 404)
+
+
+class SampleGroupDeleteViewTests(TestCase):
+    """Ensure the imported sample groups can be safely removed."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="deleter",
+            email="deleter@example.com",
+            password="pass12345",
+        )
+        self.other_user = User.objects.create_user(
+            username="outsider",
+            email="outsider@example.com",
+            password="pass12345",
+        )
+
+        self.input_quality = InputQuality.objects.create(a260_a280=1.9)
+        self.reference = ReferenceGenomeBuild.objects.create(
+            build_name="GRCh38",
+            build_version="v2",
+        )
+        self.sample_group = SampleGroup.objects.create(
+            name="Deletable Group",
+            created_by=self.user.organization_profile,
+            contact_email="delete@example.com",
+            input_quality=self.input_quality,
+            reference_genome_build=self.reference,
+        )
+
+    def delete_url(self) -> str:
+        return reverse("sample_group_delete", args=[self.sample_group.pk])
+
+    def test_login_required(self) -> None:
+        response = self.client.get(self.delete_url())
+        login_url = reverse("login")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(f"{login_url}?next="))
+
+    def test_owner_sees_confirmation(self) -> None:
+        self.client.force_login(self.user)
+        response = self.client.get(self.delete_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Delete Sample Group")
+        self.assertContains(response, self.sample_group.name)
+
+    def test_owner_can_delete_sample_group(self) -> None:
+        self.client.force_login(self.user)
+        response = self.client.post(self.delete_url(), follow=True)
+        self.assertRedirects(response, reverse("profile"))
+        self.assertFalse(SampleGroup.objects.filter(pk=self.sample_group.pk).exists())
+        self.assertFalse(
+            ReferenceGenomeBuild.objects.filter(pk=self.reference.pk).exists()
+        )
+        self.assertFalse(
+            InputQuality.objects.filter(pk=self.input_quality.pk).exists()
+        )
+
+    def test_non_owner_cannot_delete_sample_group(self) -> None:
+        self.client.force_login(self.other_user)
+        response = self.client.post(self.delete_url())
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(SampleGroup.objects.filter(pk=self.sample_group.pk).exists())
+
+    def test_shared_metadata_is_preserved(self) -> None:
+        shared_reference = ReferenceGenomeBuild.objects.create(
+            build_name="SharedRef",
+            build_version="v1",
+        )
+        sibling = SampleGroup.objects.create(
+            name="Sibling Group",
+            created_by=self.user.organization_profile,
+            reference_genome_build=shared_reference,
+        )
+        self.sample_group.reference_genome_build = shared_reference
+        self.sample_group.save(update_fields=["reference_genome_build"])
+
+        self.client.force_login(self.user)
+        response = self.client.post(self.delete_url())
+        self.assertRedirects(response, reverse("profile"))
+
+        sibling.refresh_from_db()
+        self.assertTrue(
+            ReferenceGenomeBuild.objects.filter(pk=shared_reference.pk).exists()
+        )
+
+
+class ImportDataPageTests(TestCase):
+    """Verify the import page lists previously uploaded sample groups."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="importviewer",
+            email="importviewer@example.com",
+            password="pass12345",
+        )
+        self.sample_group = SampleGroup.objects.create(
+            name="Listed Group",
+            created_by=self.user.organization_profile,
+        )
+
+    def test_import_page_displays_existing_groups(self) -> None:
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("import_data"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.sample_group.name)
+        self.assertContains(
+            response,
+            reverse("sample_group_detail", args=[self.sample_group.pk]),
+        )
+        self.assertContains(
+            response,
+            reverse("sample_group_delete", args=[self.sample_group.pk]),
+        )

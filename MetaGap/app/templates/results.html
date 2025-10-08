@@ -3,10 +3,66 @@
 
 {% block title %}Search Results - MetaGaP{% endblock %}
 
-{% block extra_head %}
-{{ block.super }}
-<link rel="stylesheet" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.min.css">
+{% block datatable_head %}
+    {{ block.super }}
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.min.css">
 {% endblock %}
+
+{% block datatable_scripts %}
+    {{ block.super }}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
+    <script>
+    (function () {
+        function initialiseDataTable() {
+            if (!window.jQuery || !$.fn || !$.fn.DataTable) {
+                return;
+            }
+
+            var $resultsTable = $('.table-responsive table');
+            if ($resultsTable.length === 0 || $resultsTable.hasClass('dataTable')) {
+                return;
+            }
+
+            $resultsTable.DataTable({
+                initComplete: function () {
+                    this.api().columns().every(function () {
+                        var column = this;
+                        var header = $(column.header());
+                        var headerText = header.text().trim();
+                        header.empty();
+
+                        var wrapper = $('<div class="datatable-header-filter"></div>');
+                        var label = $('<div class="datatable-header-label fw-semibold small"></div>').text(headerText);
+                        var select = $('<select class="form-select form-select-sm datatable-header-select"><option value="">All</option></select>')
+                            .on('change', function () {
+                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
+                                column.search(val ? '^' + val + '$' : '', true, false).draw();
+                            });
+                        wrapper.append(label);
+                        wrapper.append(select);
+                        header.append(wrapper);
+                        // Populate the dropdown with unique values from the column
+                        column.data().unique().sort().each(function (d) {
+                            select.append('<option value="' + d + '">' + d + '</option>');
+                        });
+                    });
+                }
+            });
+        }
+
+        if (document.readyState !== 'loading') {
+            initialiseDataTable();
+        } else {
+            document.addEventListener('DOMContentLoaded', initialiseDataTable);
+        }
+    })();
+    </script>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Search Results</h2>
 
 {% block breadcrumbs %}
 {% include 'partials/breadcrumbs.html' with breadcrumb_title='Search Results' %}
@@ -21,43 +77,14 @@
         <div class="col-auto">
                 <button type="submit" class="btn btn-primary">Search</button>
         </div>
-</form>
-{% if request.GET.query %}
-<p class="text-muted">Showing results for "{{ request.GET.query }}"</p>
-{% endif %}
-{% render_table table %}
-{% endblock %}
+    </form>
 
-{% block extra_scripts %}
-{{ block.super }}
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
-<script>
-$(document).ready(function() {
-    $('table').DataTable({
-        initComplete: function () {
-            this.api().columns().every(function () {
-                var column = this;
-                var header = $(column.header());
-                var headerText = header.text().trim();
-                header.empty();
+    {% if request.GET.query %}
+        <p class="text-muted">Showing results for "{{ request.GET.query }}"</p>
+    {% endif %}
 
-                var wrapper = $('<div class="datatable-header-filter"></div>');
-                var label = $('<div class="datatable-header-label fw-semibold small"></div>').text(headerText);
-                var select = $('<select class="form-select form-select-sm datatable-header-select"><option value="">All</option></select>')
-                    .on('change', function () {
-                        var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                        column.search(val ? '^' + val + '$' : '', true, false).draw();
-                    });
-                wrapper.append(label);
-                wrapper.append(select);
-                header.append(wrapper);
-                column.data().unique().sort().each(function (d) {
-                    select.append('<option value="' + d + '">' + d + '</option>');
-                });
-            });
-        }
-    });
-});
-</script>
+    <div class="table-responsive">
+        {% render_table table %}
+    </div>
+</div>
 {% endblock %}

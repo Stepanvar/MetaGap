@@ -142,6 +142,7 @@ class IonTorrentSeq(SequencingInstrument):
 class PlatformIndependent(models.Model):
     """Platform-independent sequencing details."""
 
+    instrument = models.CharField(max_length=100, blank=True, null=True)
     pooling = models.CharField(max_length=100, blank=True, null=True)
     sequencing_kit = models.CharField(max_length=100, blank=True, null=True)
     base_calling_alg = models.CharField(max_length=100, blank=True, null=True)
@@ -156,13 +157,15 @@ class PlatformIndependent(models.Model):
 class BioinfoAlignment(models.Model):
     """Bioinformatics alignment settings."""
 
+    tool = models.CharField(max_length=100, blank=True, null=True)
     software = models.CharField(max_length=100, blank=True, null=True)
     params = models.CharField(max_length=255, blank=True, null=True)
     ref_genome_version = models.CharField(max_length=100, blank=True, null=True)
     recalibration_settings = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Software: {self.software}, Ref Genome Version: {self.ref_genome_version}"
+        label = self.tool or self.software or "Unknown"
+        return f"Tool: {label}, Ref Genome Version: {self.ref_genome_version}"
 
 
 class BioinfoVariantCalling(models.Model):

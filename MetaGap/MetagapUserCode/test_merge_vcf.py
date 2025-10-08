@@ -289,6 +289,14 @@ def apply_metadata_to_header(
     return header
 
 
+def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
+    """Compatibility shim to preserve CLI workflow expectations."""
+
+    log_message(
+        f"No additional metadata updates required for merged VCF: {merged_vcf}", verbose
+    )
+
+
 def normalize_vcf_version(version_value):
     """Extract the numeric portion of the VCF version if present."""
     if not version_value:
@@ -436,7 +444,7 @@ def _extract_header_definitions(header, key):
 def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_gvcf=False):
     valid_vcfs = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
-    reference_samples = None
+    reference_samples = []
     reference_contigs = None
     reference_info_defs = None
     reference_format_defs = None
@@ -476,17 +484,30 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
                 current_info_defs = _extract_header_definitions(header, "INFO")
                 current_format_defs = _extract_header_definitions(header, "FORMAT")
 
-                if reference_samples is None:
-                    reference_samples = current_samples
+                if not reference_samples:
+                    reference_samples = list(current_samples)
                     reference_contigs = current_contigs
                     reference_info_defs = current_info_defs
                     reference_format_defs = current_format_defs
                 else:
-                    if current_samples != reference_samples:
-                        handle_critical_error(
-                            "Sample names differ between VCF shards. MetaGap assumes vertical "
-                            "concatenation of shards, so headers and sample ordering must match. "
-                            f"Expected samples: {reference_samples}; found in {file_path}: {current_samples}."
+                    new_samples = [
+                        sample for sample in current_samples if sample not in reference_samples
+                    ]
+                    if new_samples:
+                        reference_samples.extend(new_samples)
+                        handle_non_critical_error(
+                            "Sample columns differ between VCF shards. The merged VCF will "
+                            "include the union of all sample names. Newly observed samples "
+                            f"{new_samples} were appended to the merged header."
+                        )
+
+                    missing_samples = [
+                        sample for sample in reference_samples if sample not in current_samples
+                    ]
+                    if missing_samples:
+                        handle_non_critical_error(
+                            f"File {file_path} is missing sample columns {missing_samples}. "
+                            "These entries will be filled with missing ('.') values during merge."
                         )
                     if current_contigs != reference_contigs:
                         handle_critical_error(
@@ -578,10 +599,10 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
     if not valid_vcfs:
         handle_critical_error("No valid VCF files remain after validation. Aborting.")
     log_message("Validation completed. Valid VCF files: " + ", ".join(valid_vcfs), verbose)
-    return valid_vcfs
+    return valid_vcfs, reference_samples
 
 
-def union_headers(valid_files):
+def union_headers(valid_files, sample_order=None):
     """Return a merged header with combined metadata from *valid_files*."""
 
     combined_header = None
@@ -589,7 +610,7 @@ def union_headers(valid_files):
     format_ids = set()
     filter_ids = set()
     contig_ids = set()
-    sample_order = []
+    computed_sample_order = []
     merged_sample_metadata = None
 
     for file_path in valid_files:
@@ -616,15 +637,15 @@ def union_headers(valid_files):
                             merged_sample_metadata = OrderedDict(mapping)
 
                 if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
-                    sample_order = list(combined_header.samples.names)
+                    computed_sample_order = list(combined_header.samples.names)
                 else:
-                    sample_order = []
+                    computed_sample_order = []
                 continue
 
             if hasattr(header, "samples") and hasattr(header.samples, "names"):
                 for sample_name in header.samples.names:
-                    if sample_name not in sample_order:
-                        sample_order.append(sample_name)
+                    if sample_name not in computed_sample_order:
+                        computed_sample_order.append(sample_name)
 
             for line in header.lines:
                 if isinstance(line, vcfpy.header.InfoHeaderLine):
@@ -668,8 +689,9 @@ def union_headers(valid_files):
     if combined_header is None:
         handle_critical_error("Unable to construct a merged VCF header.")
 
-    if sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
-        combined_header.samples.names = sample_order
+    target_sample_order = sample_order if sample_order is not None else computed_sample_order
+    if target_sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+        combined_header.samples.names = list(target_sample_order)
 
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)
@@ -683,12 +705,115 @@ def union_headers(valid_files):
     return combined_header
 
 
-def merge_vcfs(valid_files, output_dir, verbose=False):
+def _create_missing_call_factory(format_keys, header):
+    if not format_keys:
+        return lambda: {}
+
+    template = {}
+    for key in format_keys:
+        if key == "GT":
+            template[key] = "./."
+            continue
+
+        field_info = None
+        try:
+            field_info = header.get_format_field_info(key)
+        except Exception:
+            field_info = None
+
+        number = getattr(field_info, "number", None)
+        if isinstance(number, str):
+            stripped = number.strip()
+            if not stripped:
+                number = None
+            elif stripped in {".", "A", "G", "R"}:
+                template[key] = []
+                continue
+            else:
+                try:
+                    number = int(stripped)
+                except ValueError:
+                    number = None
+
+        if isinstance(number, int):
+            if number <= 1:
+                default_value = None
+            else:
+                default_value = [None] * number
+        elif number in {".", "A", "G", "R"}:
+            default_value = []
+        else:
+            default_value = None
+
+        template.setdefault(key, default_value)
+
+    def factory():
+        data = {}
+        for fmt_key, default in template.items():
+            if isinstance(default, list):
+                data[fmt_key] = [None] * len(default)
+            else:
+                data[fmt_key] = default
+        return data
+
+    return factory
+
+
+def _pad_record_samples(record, header, sample_order):
+    if not sample_order or not hasattr(record, "call_for_sample"):
+        return
+
+    format_keys = list(record.FORMAT or [])
+    factory = _create_missing_call_factory(format_keys, header)
+    updated_calls = []
+    for name in sample_order:
+        call = record.call_for_sample.get(name)
+        if call is None:
+            call = vcfpy.Call(name, factory())
+        else:
+            defaults = factory()
+            for key in format_keys:
+                if key not in call.data:
+                    call.data[key] = defaults[key]
+                    continue
+
+                default_value = defaults[key]
+                current_value = call.data[key]
+                if isinstance(default_value, list) and not isinstance(current_value, list):
+                    if current_value is None:
+                        call.data[key] = default_value
+                    elif isinstance(current_value, tuple):
+                        call.data[key] = list(current_value)
+                    else:
+                        call.data[key] = [current_value]
+
+            if "GT" in defaults:
+                genotype_value = call.data.get("GT")
+                if genotype_value in {None, "", "."}:
+                    call.data["GT"] = defaults["GT"]
+        updated_calls.append(call)
+    record.update_calls(updated_calls)
+
+
+def merge_vcfs(
+    valid_files,
+    output_dir,
+    verbose=False,
+    sample_order=None,
+    sample_header_line=None,
+    simple_header_lines=None,
+):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     log_message("Merging VCF files...", verbose)
     try:
-        header = union_headers(valid_files)
+        header = union_headers(valid_files, sample_order=sample_order)
+        header = apply_metadata_to_header(
+            header,
+            sample_header_line=sample_header_line,
+            simple_header_lines=simple_header_lines,
+            verbose=verbose,
+        )
     except SystemExit:
         raise
     except Exception as exc:
@@ -701,6 +826,7 @@ def merge_vcfs(valid_files, output_dir, verbose=False):
         try:
             reader = vcfpy.Reader.from_path(preprocessed_file)
             for record in reader:
+                _pad_record_samples(record, header, sample_order)
                 writer.write_record(record)
         except Exception as e:
             handle_non_critical_error(f"Error processing {file_path}: {str(e)}. Skipping remaining records.")
@@ -960,11 +1086,12 @@ def main():
 
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 
-    valid_files = validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose)
+    valid_files, sample_order = validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose)
     merged_vcf = merge_vcfs(
         valid_files,
         output_dir,
         verbose,
+        sample_order=sample_order,
         sample_header_line=sample_header_line,
         simple_header_lines=simple_header_lines,
     )

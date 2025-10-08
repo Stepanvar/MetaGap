@@ -30,6 +30,8 @@
                                    href="{% url 'sample_group_detail' group.pk %}">View</a>
                                 <a class="btn btn-outline-primary"
                                    href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                                <a class="btn btn-outline-danger"
+                                   href="{% url 'sample_group_delete' group.pk %}">Delete</a>
                         </div>
                 </li>
                 {% endfor %}

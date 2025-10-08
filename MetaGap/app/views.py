@@ -338,6 +338,7 @@ class DeleteAccountView(LoginRequiredMixin, FormView):
                     "url": reverse_lazy("profile"),
                     "class": "btn btn-secondary",
                     "label": "Cancel",
+                    "text": "Cancel",
                 }
             ],
         )
@@ -391,6 +392,7 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
                     "url": reverse_lazy("profile"),
                     "class": "btn btn-outline-secondary",
                     "label": "Cancel",
+                    "text": "Cancel",
                 }
             ],
         )

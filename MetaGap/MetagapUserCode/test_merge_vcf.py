@@ -88,10 +88,30 @@ def parse_arguments():
         required=False,
         help="Optional CSV list of key=value pairs describing SAMPLE metadata.",
     )
+    parser.add_argument(
+        "--meta",
+        metavar="KEY=VALUE",
+        action="append",
+        default=[],
+        help=(
+            "Provide sample metadata that should be embedded into the merged VCF header. "
+            "Repeat --meta for each entry, e.g. --meta ID=Study1 --meta Description=Test cohort."
+        ),
+    )
 
     args = parser.parse_args()
-    if args.output_dir is None:
-        args.output_dir = args.input_dir
+
+    metadata = {}
+    for raw_entry in args.meta:
+        if "=" not in raw_entry:
+            parser.error(f"Invalid metadata entry '{raw_entry}'. Expected KEY=VALUE format.")
+        key, value = raw_entry.split("=", 1)
+        key = key.strip()
+        if not key:
+            parser.error("Metadata keys cannot be empty.")
+        metadata[key] = value.strip()
+
+    args.meta = metadata
     return args
 
 def _format_sample_metadata_value(value: str) -> str:
@@ -398,104 +418,40 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False):
     return valid_vcfs
 
 
-def union_headers(valid_files):
-    """Return a unified header containing all INFO/FORMAT/FILTER/contig lines."""
-
-    if not valid_files:
-        handle_critical_error("No valid VCF files remain to merge. Aborting.")
-
-    temporary_paths = []
-
-    def _cleanup_temp_paths():
-        for temp_path in temporary_paths:
-            try:
-                if temp_path and os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except OSError:
-                pass
-
-    def _get_index_mapping(header_obj, key):
-        indices = getattr(header_obj, "_indices", {})
-        mapping = indices.get(key, {})
-        if isinstance(mapping, dict):
-            return mapping
-        return {}
-
-    first_path = preprocess_vcf(valid_files[0])
-    if first_path != valid_files[0]:
-        temporary_paths.append(first_path)
-
-    try:
-        reader = vcfpy.Reader.from_path(first_path)
-    except Exception as exc:
-        _cleanup_temp_paths()
-        handle_critical_error(f"Failed to open the first valid VCF for header union: {exc}")
-
-    try:
-        unified_header = reader.header.copy()
-    finally:
-        reader.close()
-
-    contig_mapping = _get_index_mapping(unified_header, "contig")
-    unified_header.contigs = dict(contig_mapping)
-
-    existing_info_ids = set(unified_header.info_ids())
-    existing_format_ids = set(unified_header.format_ids())
-    existing_filter_ids = set(unified_header.filter_ids())
-    existing_contig_ids = set(contig_mapping.keys())
-
-    try:
-        for file_path in valid_files[1:]:
-            preprocessed_path = preprocess_vcf(file_path)
-            if preprocessed_path != file_path:
-                temporary_paths.append(preprocessed_path)
-            try:
-                reader = vcfpy.Reader.from_path(preprocessed_path)
-            except Exception as exc:
-                _cleanup_temp_paths()
-                handle_critical_error(
-                    f"Failed to open {file_path} while unifying headers: {exc}"
-                )
-
-            try:
-                header = reader.header
-                info_lines = _get_index_mapping(header, "INFO")
-                for info_id, info_line in info_lines.items():
-                    if info_id not in existing_info_ids:
-                        unified_header.add_line(info_line.copy())
-                        existing_info_ids.add(info_id)
-
-                format_lines = _get_index_mapping(header, "FORMAT")
-                for format_id, format_line in format_lines.items():
-                    if format_id not in existing_format_ids:
-                        unified_header.add_line(format_line.copy())
-                        existing_format_ids.add(format_id)
-
-                filter_lines = _get_index_mapping(header, "FILTER")
-                for filter_id, filter_line in filter_lines.items():
-                    if filter_id not in existing_filter_ids:
-                        unified_header.add_line(filter_line.copy())
-                        existing_filter_ids.add(filter_id)
-
-                contig_lines = _get_index_mapping(header, "contig")
-                for contig_id, contig_line in contig_lines.items():
-                    if contig_id not in existing_contig_ids:
-                        unified_header.add_line(contig_line.copy())
-                        existing_contig_ids.add(contig_id)
-            finally:
-                reader.close()
-
-        unified_header.contigs = _get_index_mapping(unified_header, "contig")
-        return unified_header
-    finally:
-        _cleanup_temp_paths()
-
-
-def merge_vcfs(valid_files, output_dir, verbose=False):
+def merge_vcfs(valid_files, output_dir, verbose=False, cli_metadata=None):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     log_message("Merging VCF files...", verbose)
     header = union_headers(valid_files)
+
+    metadata_entries = OrderedDict()
+    provided_metadata = cli_metadata or {}
+    id_value = str(provided_metadata.get("ID", "")).strip()
+    if not id_value:
+        id_value = "SampleGroup"
+    metadata_entries["ID"] = id_value
+    for key, value in provided_metadata.items():
+        if key == "ID":
+            continue
+        metadata_entries[key] = value
+
+    sample_line_text = build_sample_metadata_line(metadata_entries)
+    sample_mapping = _parse_sample_metadata_line(sample_line_text)
+    formatted_mapping = OrderedDict()
+    for key, raw_value in sample_mapping.items():
+        if key == "ID":
+            formatted_mapping[key] = raw_value
+        else:
+            formatted_mapping[key] = _format_sample_metadata_value(raw_value)
+
+    header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
+    header.add_line(
+        vcfpy.SimpleHeaderLine(
+            "SAMPLE",
+            sample_line_text[len("##SAMPLE=") :],
+            formatted_mapping,
+        )
+    )
 
     writer = vcfpy.Writer.from_path(merged_filename, header)
     for file_path in valid_files:
@@ -513,18 +469,6 @@ def merge_vcfs(valid_files, output_dir, verbose=False):
     writer.close()
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
-
-def _parse_simple_metadata_line(line):
-    stripped = line.strip()
-    if not stripped.startswith("##") or "=" not in stripped:
-        return None
-    key, value = stripped[2:].split("=", 1)
-    key = key.strip()
-    value = value.strip()
-    if not key:
-        return None
-    return key, value
-
 
 def _parse_sample_metadata_line(line):
     stripped = line.strip()
@@ -585,48 +529,6 @@ def _parse_sample_metadata_line(line):
         raise ValueError("Sample metadata must include an ID entry.")
 
     return mapping
-
-
-def append_metadata_to_merged_vcf(merged_vcf, metadata, verbose=False):
-    if not metadata:
-        log_message("No metadata provided. Skipping metadata append step.", verbose)
-        return
-
-    log_message("Appending metadata to merged VCF header.", verbose)
-
-    try:
-        reader = vcfpy.Reader.from_path(merged_vcf)
-    except Exception as exc:
-        handle_non_critical_error(f"Could not open {merged_vcf}: {exc}. Skipping metadata append.")
-        return
-
-    header = reader.header
-
-    try:
-        metadata_line = build_sample_metadata_line(metadata)
-        metadata_mapping = _parse_sample_metadata_line(metadata_line)
-    except ValueError as exc:
-        reader.close()
-        handle_non_critical_error(str(exc))
-        return
-
-    header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
-
-    sample_line = vcfpy.SampleHeaderLine.from_mapping(metadata_mapping)
-    header.add_line(sample_line)
-
-    temp_path = merged_vcf + ".tmp"
-    writer = vcfpy.Writer.from_path(temp_path, header)
-
-    for record in reader:
-        writer.write_record(record)
-
-    writer.close()
-    reader.close()
-
-    os.replace(temp_path, merged_vcf)
-
-    log_message("Metadata appended successfully.", verbose)
 
 def preprocess_vcf(file_path):
     """
@@ -814,7 +716,8 @@ def validate_merged_vcf(merged_vcf, verbose=False):
 
 def main():
     args = parse_arguments()
-    verbose = False
+    verbose = args.verbose
+    cli_metadata = args.meta
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -834,14 +737,33 @@ def main():
     vcf_version = normalize_vcf_version(args.vcf_version)
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 
-    try:
-        metadata_entries = parse_metadata_string(args.meta)
-    except ValueError as exc:
-        handle_critical_error(str(exc))
+    if cli_metadata:
+        log_message("Using metadata supplied via --meta arguments.", verbose)
+    else:
+        choice = input("Do you want to (I)nput metadata interactively, (T)emplate file, or (S)kip metadata? [I/T/S]: ").strip().upper()
+        if choice == "I":
+            prompt_metadata_interactive()
+        elif choice == "T":
+            if os.path.exists("final_metadata.txt"):
+                print("Found final_metadata.txt. Using existing metadata file.")
+            elif os.path.exists("final_metadata_template.txt"):
+                use_template = input("final_metadata_template.txt exists. Do you want to use it as final_metadata.txt? (Y/N): ").strip().upper()
+                if use_template == "Y":
+                    import shutil  # Ensure shutil is imported at the top
+                    shutil.copy("final_metadata_template.txt", "final_metadata.txt")
+                    print("Using final_metadata_template.txt as final_metadata.txt.")
+                else:
+                    print("Please fill final_metadata_template.txt and rerun the script.")
+                    sys.exit(0)
+            else:
+                generate_template()
+        elif choice == "S":
+            print("Skipping metadata integration.")
+        else:
+            print("Invalid choice. No metadata will be integrated.")
 
     valid_files = validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose)
-    merged_vcf = merge_vcfs(valid_files, output_dir, verbose)
-    append_metadata_to_merged_vcf(merged_vcf, metadata_entries, verbose)
+    merged_vcf = merge_vcfs(valid_files, output_dir, verbose, cli_metadata)
     validate_merged_vcf(merged_vcf, verbose)
 
     print("----------------------------------------")

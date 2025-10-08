@@ -97,7 +97,13 @@ class SampleGroupForm(forms.ModelForm):
         if sample_group.created_by_id is None:
             if self.user is None:
                 raise ValueError("SampleGroupForm.save() requires a user when creating a sample group.")
-            sample_group.created_by = self.user
+            try:
+                organization_profile = self.user.organization_profile
+            except OrganizationProfile.DoesNotExist as exc:
+                raise ValueError(
+                    "SampleGroupForm.save() requires the user to have an organization profile."
+                ) from exc
+            sample_group.created_by = organization_profile
 
         if commit:
             sample_group.save()

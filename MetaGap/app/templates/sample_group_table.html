@@ -7,7 +7,9 @@
 <div class="container mt-4">
   <h1 class="mb-3">Sample Groups</h1>
   {% if table %}
-    {% render_table table %}
+    <div class="table-responsive">
+      {% render_table table %}
+    </div>
   {% else %}
     <p>No sample groups are available.</p>
   {% endif %}

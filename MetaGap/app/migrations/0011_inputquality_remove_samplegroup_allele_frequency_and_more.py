@@ -47,8 +47,6 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-<<<<<<< HEAD
-=======
             model_name="bioinfoalignment",
             name="tool",
             field=models.CharField(blank=True, max_length=100, null=True),
@@ -59,7 +57,6 @@ class Migration(migrations.Migration):
             field=models.CharField(blank=True, max_length=100, null=True),
         ),
         migrations.AddField(
->>>>>>> 830180c (WIP: local changes before pull)
             model_name="samplegroup",
             name="contact_email",
             field=models.EmailField(blank=True, max_length=254, null=True),

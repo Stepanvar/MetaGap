@@ -34,7 +34,7 @@ class DemoDataImportTests(TestCase):
             microbiome_group.allele_frequencies.get().variant_id,
             "bft_v1",
         )
-        self.assertEqual(microbiome_group.bioinfo_alignment.software, "Bowtie2")
+        self.assertEqual(microbiome_group.bioinfo_alignment.tool, "Bowtie2")
 
     def test_variant_metadata_round_trip(self):
         AlleleFrequency = apps.get_model("app", "AlleleFrequency")

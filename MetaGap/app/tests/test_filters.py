@@ -69,7 +69,7 @@ class SampleGroupFilterTests(TestCase):
         self.other_origin = SampleOrigin.objects.create(
             tissue="Blood",
             collection_method="Draw",
-            storage_conditions="Chilled",
+            storage_conditions="Refrigerated",
         )
         self.group = SampleGroup.objects.create(
             name="Kidney Cohort",

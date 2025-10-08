@@ -177,13 +177,11 @@ class SearchResultsViewTests(TestCase):
 
         self.kidney_group = SampleGroup.objects.create(
             name="Kidney Cohort",
-            tissue="Kidney",
             sample_origin=self.kidney_origin,
             created_by=self.user.organization_profile,
         )
         self.liver_group = SampleGroup.objects.create(
             name="Liver Cohort",
-            tissue="Liver",
             sample_origin=self.liver_origin,
             created_by=self.user.organization_profile,
         )

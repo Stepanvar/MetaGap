@@ -158,13 +158,12 @@ class BioinfoAlignment(models.Model):
     """Bioinformatics alignment settings."""
 
     tool = models.CharField(max_length=100, blank=True, null=True)
-    software = models.CharField(max_length=100, blank=True, null=True)
     params = models.CharField(max_length=255, blank=True, null=True)
     ref_genome_version = models.CharField(max_length=100, blank=True, null=True)
     recalibration_settings = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self) -> str:
-        label = self.tool or self.software or "Unknown"
+        label = self.tool or "Unknown"
         return f"Tool: {label}, Ref Genome Version: {self.ref_genome_version}"
 
 
@@ -272,9 +271,6 @@ class SampleGroup(models.Model):
         null=True,
         related_name="sample_group",
     )
-    tissue = models.CharField(max_length=100, blank=True, null=True)
-    collection_method = models.CharField(max_length=100, blank=True, null=True)
-    storage_conditions = models.CharField(max_length=100, blank=True, null=True)
     comments = models.TextField(blank=True, null=True)
 
     reference_genome_build = models.ForeignKey(

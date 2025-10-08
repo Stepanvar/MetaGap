@@ -2,12 +2,10 @@
 """
 This script consolidates multiple VCF files into one merged VCF file.
 It replicates the bash script functionality:
-  - Parses command-line options (verbose mode, output directory)
-  - Prompts the user for the input VCF directory, reference genome build, and expected VCF version.
-  - Offers metadata input (interactive mode or template generation) or skipping metadata.
+  - Parses command-line options for the input directory, output directory, reference genome, VCF version, and optional metadata.
   - Validates individual VCF files for header fileformat and reference genome.
   - Merges valid VCFs using vcfpy.
-  - Appends metadata (if provided) to the merged VCF header.
+  - Appends metadata (if provided via CLI) to the merged VCF header.
   - Performs a final validation of the merged VCF.
   - Logs execution details to a log file.
 
@@ -19,9 +17,9 @@ import os
 import sys
 import glob
 import argparse
+import csv
 import logging
 import datetime
-import shutil
 import re
 import copy
 from collections import OrderedDict
@@ -66,15 +64,35 @@ def parse_arguments():
         description="Consolidate multiple VCF files into a single merged VCF file."
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose mode for detailed output."
+        "--input-dir",
+        required=True,
+        help="Directory containing the VCF files to merge.",
     )
     parser.add_argument(
-        "-o",
-        "--output",
-        type=str,
-        help="Specify the output directory for the merged VCF file (defaults to the input directory if not provided).",
+        "--output-dir",
+        required=False,
+        help="Directory to write the merged VCF file (defaults to the input directory).",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--ref",
+        required=True,
+        help="Reference genome build expected in the VCF headers.",
+    )
+    parser.add_argument(
+        "--vcf-version",
+        required=True,
+        help="VCF version expected in the input files.",
+    )
+    parser.add_argument(
+        "--meta",
+        required=False,
+        help="Optional CSV list of key=value pairs describing SAMPLE metadata.",
+    )
+
+    args = parser.parse_args()
+    if args.output_dir is None:
+        args.output_dir = args.input_dir
+    return args
 
 def _format_sample_metadata_value(value: str) -> str:
     """Return a VCF-safe representation of the provided metadata value."""
@@ -108,274 +126,37 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
-def prompt_input(prompt_message, validation_regex=None, error_message="Invalid input."):
-    while True:
-        value = input(prompt_message + ": ").strip()
-        if not value:
-            print("Input cannot be empty. Please try again.")
+def parse_metadata_string(raw_metadata):
+    """Parse a comma-separated list of key=value pairs into an ordered mapping."""
+
+    if not raw_metadata:
+        return None
+
+    try:
+        entries = next(csv.reader([raw_metadata]))
+    except StopIteration:
+        return None
+
+    mapping = OrderedDict()
+    for entry in entries:
+        if not entry:
             continue
-        if validation_regex and not re.match(validation_regex, value):
-            print(error_message)
-            continue
-        return value
+        if "=" not in entry:
+            raise ValueError(f"Metadata entry '{entry}' is missing an '=' separator.")
+        key, value = entry.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            raise ValueError("Metadata keys cannot be empty.")
+        mapping[key] = value
 
+    if not mapping:
+        return None
 
-def prompt_optional_input(prompt_message):
-    return input(prompt_message + " (optional): ").strip()
+    if "ID" not in mapping or not mapping["ID"].strip():
+        raise ValueError("Metadata must include a non-empty ID entry.")
 
-
-def prompt_metadata_interactive():
-    """
-    Prompts the user to enter all metadata fields interactively.
-    The metadata is written to final_metadata.txt as a single ##SAMPLE line.
-    """
-    print("Entering interactive metadata input mode...\n")
-    
-    sample_group_id = prompt_input(
-        "Enter Sample Group Name/ID (used as the SampleGroup identifier)"
-    )
-    sample_description = prompt_optional_input("Enter Sample Group Description")
-
-    # 1. REFERENCE_GENOME_BUILD
-    ref_build = prompt_input("Enter Reference Genome Build (e.g., GRCh38)")
-    
-    # 2. GENOME_COMPLEXITY (Size, Ploidy, GC)
-    genome_size = prompt_input("Enter Genome Size (e.g., 3.2Gb)", r"^[0-9]+(\.[0-9]+)?[Gg][Bb]$", "Genome Size must be in format like 3.2Gb")
-    ploidy = prompt_input("Enter Genome Ploidy (e.g., 2)", r"^[1-9][0-9]*$", "Ploidy must be a positive integer")
-    gc_content = prompt_input("Enter GC Content (e.g., 40%)", r"^[0-9]{1,3}%$", "GC Content must be a percentage (e.g., 40%)")
-    
-    # 3. SAMPLE_ORIGIN (Tissue, CollectionMethod, StorageConditions, TimeStored)
-    tissue = prompt_input("Enter Tissue Type")
-    collection_method = prompt_input("Enter Sample Collection Method (e.g., EDTA, RNAlater)")
-    storage_cond = prompt_input("Enter Storage Conditions (e.g., -80C)")
-    time_stored = prompt_input("Enter Time Stored (Days)", r"^[0-9]+$", "Time Stored must be a positive integer representing days")
-    
-    # 4. MATERIAL_TYPE (Type and IntegrityNumber)
-    material_type = prompt_input("Enter Material Type (DNA, RNA, cDNA)")
-    integrity_number = prompt_input("Enter Integrity Number (DIN/RIN)", r"^[0-9]+(\.[0-9]+)?$", "Integrity Number must be a numerical value")
-    
-    # 5. LIBRARY_CONSTRUCTION (Kit, Fragmentation, AdapterLigationEfficiency, PCRCycles)
-    lib_kit = prompt_input("Enter Library Construction Kit")
-    fragmentation = prompt_input("Enter Fragmentation Method (Mechanical, Enzymatic)")
-    adapter_efficiency = prompt_input("Enter Adapter Ligation Efficiency (High, Medium, Low)")
-    pcr_cycles = prompt_input("Enter PCR Cycles", r"^[0-9]+$", "PCR Cycles must be a positive integer")
-    
-    # 6. INPUT_QUALITY (A260_A280, A260_A230, DNAConcentration)
-    a260_a280 = prompt_input("Enter Purity Ratio A260/A280", r"^[0-9]+(\.[0-9]+)?$", "Value must be numerical")
-    a260_a230 = prompt_input("Enter Purity Ratio A260/A230", r"^[0-9]+(\.[0-9]+)?$", "Value must be numerical")
-    dna_concentration = prompt_input("Enter DNA Concentration (e.g., ng/µL)", r"^[0-9]+(\.[0-9]+)?$", "Value must be numerical")
-    
-    # 7. ILLUMINA_SEQ (Instrument, FlowCell, ChannelMethod, ClusterDensity, QCSoftware)
-    illumina_instrument = prompt_input("Enter Illumina Instrument")
-    illumina_flowcell = prompt_input("Enter Illumina FlowCell")
-    illumina_channel = prompt_input("Enter Illumina Channel Method")
-    illumina_cluster = prompt_input("Enter Illumina Cluster Density")
-    illumina_qc = prompt_input("Enter Illumina QC Software")
-    
-    # 8. ONT_SEQ (Instrument, FlowCellVersion, PoreType, BiasVoltage)
-    ont_instrument = prompt_input("Enter ONT Instrument")
-    ont_flowcell_version = prompt_input("Enter ONT FlowCell Version")
-    ont_pore = prompt_input("Enter ONT Pore Type")
-    ont_bias = prompt_input("Enter ONT Bias Voltage")
-    
-    # 9. PACBIO_SEQ (Instrument, SMRTCellType, ZMWDensity)
-    pacbio_instrument = prompt_input("Enter PacBio Instrument")
-    pacbio_smrtcell = prompt_input("Enter PacBio SMRT Cell Type")
-    pacbio_zmwdensity = prompt_input("Enter PacBio ZMW Density")
-    
-    # 10. IONTORRENT_SEQ (Instrument, ChipType, pHCalibration, FlowOrder, IonSphereMetrics)
-    iontorrent_instrument = prompt_input("Enter Ion Torrent Instrument")
-    iontorrent_chip = prompt_input("Enter Ion Torrent Chip Type")
-    iontorrent_ph = prompt_input("Enter Ion Torrent pH Calibration")
-    iontorrent_floworder = prompt_input("Enter Ion Torrent Flow Order")
-    iontorrent_ionsphere = prompt_input("Enter Ion Torrent IonSphere Metrics")
-    
-    # 11. PLATFORM_INDEPENDENT (Instrument, Pooling, SequencingKit, BaseCallingAlg, Q30, NormalizedCoverage, RunSpecificCalibration)
-    platform_independent_instrument = prompt_input("Enter Platform-Independent Instrument")
-    pooling = prompt_input("Enter Pooling Strategy")
-    sequencing_kit = prompt_input("Enter Sequencing Kit")
-    base_calling = prompt_input("Enter Base Calling Algorithm")
-    q30 = prompt_input("Enter Q30")
-    normalized_cov = prompt_input("Enter Normalized Coverage")
-    run_calibration = prompt_input("Enter Run Specific Calibration")
-
-    # 12. BIOINFO_ALIGNMENT (Tool, Software, Params, RefGenomeVers, RecalibrationSettings)
-    align_tool = prompt_input("Enter Alignment Tool")
-    align_software = prompt_input("Enter Alignment Software")
-    align_params = prompt_input("Enter Alignment Parameters")
-    align_refvers = prompt_input("Enter Reference Genome Version for Alignment")
-    recalibration = prompt_input("Enter Recalibration Settings")
-
-    # 13. BIOINFO_VARIANT_CALLING (Tool, Version, FilteringThresholds, DuplicateHandling, MQ)
-    variant_tool = prompt_input("Enter Variant Calling Tool")
-    variant_version = prompt_input("Enter Variant Calling Tool Version")
-    filtering_thresholds = prompt_input("Enter Variant Filtering Thresholds")
-    duplicate_handling = prompt_input("Enter Duplicate Handling Strategy")
-    mq = prompt_input("Enter Mapping Quality (MQ)", r"^[0-9]+$", "Mapping Quality must be a positive integer")
-    
-    # 14. BIOINFO_POSTPROC (Normalization, Harmonization)
-    normalization = prompt_input("Enter Post-Processing Normalization")
-    harmonization = prompt_input("Enter Post-Processing Harmonization")
-    
-    # 15. SAMPLE_GROUP (LabName, LabMail, LabPhone, SampleCount, InclusionCriteria, ExclusionCriteria)
-    lab_name = prompt_input("Enter Lab Name")
-    lab_mail = prompt_input("Enter Lab Email")
-    lab_phone = prompt_input("Enter Lab Phone")
-    sample_count = prompt_input("Enter Sample Count", r"^[1-9][0-9]*$", "Sample Count must be a positive integer")
-    inclusion = prompt_input("Enter Inclusion Criteria")
-    exclusion = prompt_input("Enter Exclusion Criteria")
-    
-    # The key names follow the section_field convention expected by
-    # MetaGap's parse_vcf_file importer so metadata values map onto the
-    # appropriate SampleGroup-related models.
-    metadata_entries = OrderedDict(
-        [
-            ("ID", sample_group_id),
-            ("Description", sample_description),
-            ("Reference_Genome_Build", ref_build),
-            ("Reference_Genome_Build_Build_Name", ref_build),
-            ("Genome_Complexity_Size", genome_size),
-            ("Genome_Complexity_Ploidy", ploidy),
-            ("Genome_Complexity_GC_Content", gc_content),
-            ("Sample_Origin_Tissue", tissue),
-            ("Sample_Origin_Collection_Method", collection_method),
-            ("Sample_Origin_Storage_Conditions", storage_cond),
-            ("Sample_Origin_Time_Stored", time_stored),
-            ("Material_Type_Material_Type", material_type),
-            ("Material_Type_Integrity_Number", integrity_number),
-            ("Library_Construction_Kit", lib_kit),
-            ("Library_Construction_Fragmentation", fragmentation),
-            ("Library_Construction_Adapter_Ligation_Efficiency", adapter_efficiency),
-            ("Library_Construction_PCR_Cycles", pcr_cycles),
-            ("Input_Quality_A260_A280", a260_a280),
-            ("Input_Quality_A260_A230", a260_a230),
-            ("Input_Quality_DNA_Concentration", dna_concentration),
-            ("Illumina_Seq_Instrument", illumina_instrument),
-            ("Illumina_Seq_Flow_Cell", illumina_flowcell),
-            ("Illumina_Seq_Channel_Method", illumina_channel),
-            ("Illumina_Seq_Cluster_Density", illumina_cluster),
-            ("Illumina_Seq_QC_Software", illumina_qc),
-            ("ONT_Seq_Instrument", ont_instrument),
-            ("ONT_Seq_Flow_Cell_Version", ont_flowcell_version),
-            ("ONT_Seq_Pore_Type", ont_pore),
-            ("ONT_Seq_Bias_Voltage", ont_bias),
-            ("PacBio_Seq_Instrument", pacbio_instrument),
-            ("PacBio_Seq_SMRT_Cell_Type", pacbio_smrtcell),
-            ("PacBio_Seq_ZMW_Density", pacbio_zmwdensity),
-            ("IonTorrent_Seq_Instrument", iontorrent_instrument),
-            ("IonTorrent_Seq_Chip_Type", iontorrent_chip),
-            ("IonTorrent_Seq_pH_Calibration", iontorrent_ph),
-            ("IonTorrent_Seq_Flow_Order", iontorrent_floworder),
-            ("IonTorrent_Seq_Ion_Sphere_Metrics", iontorrent_ionsphere),
-            ("Platform_Independent", platform_independent_instrument),
-            ("Platform_Independent_Pooling", pooling),
-            ("Platform_Independent_Sequencing_Kit", sequencing_kit),
-            ("Platform_Independent_Base_Calling_Alg", base_calling),
-            ("Platform_Independent_Q30", q30),
-            ("Platform_Independent_Normalized_Coverage", normalized_cov),
-            ("Platform_Independent_Run_Specific_Calibration", run_calibration),
-            ("Bioinfo_Alignment_Software", align_software),
-            ("Bioinfo_Alignment_Params", align_params),
-            ("Bioinfo_Alignment_Ref_Genome_Version", align_refvers),
-            ("Bioinfo_Alignment_Recalibration_Settings", recalibration),
-            ("Bioinfo_Variant_Calling_Tool", variant_tool),
-            ("Bioinfo_Variant_Calling_Version", variant_version),
-            ("Bioinfo_Variant_Calling_Filtering_Thresholds", filtering_thresholds),
-            ("Bioinfo_Variant_Calling_Duplicate_Handling", duplicate_handling),
-            ("Bioinfo_Variant_Calling_MQ", mq),
-            ("Bioinfo_Post_Proc_Normalization", normalization),
-            ("Bioinfo_Post_Proc_Harmonization", harmonization),
-            ("Sample_Group_Lab_Name", lab_name),
-            ("Sample_Group_Contact_Email", lab_mail),
-            ("Sample_Group_Contact_Phone", lab_phone),
-            ("Sample_Group_Total_Samples", sample_count),
-            ("Sample_Group_Inclusion_Criteria", inclusion),
-            ("Sample_Group_Exclusion_Criteria", exclusion),
-        ]
-    )
-    metadata_line = build_sample_metadata_line(metadata_entries)
-
-    with open("final_metadata.txt", "w") as mf:
-        mf.write(metadata_line + "\n")
-
-    print("Metadata has been successfully saved to final_metadata.txt")
-    sys.exit(0)
-
-
-def generate_template():
-    # Template uses the same naming convention to remain import-compatible.
-    template_entries = OrderedDict(
-        [
-            ("ID", "SampleGroupName"),
-            ("Description", "Brief description of the cohort"),
-            ("Reference_Genome_Build", "GRCh38"),
-            ("Reference_Genome_Build_Build_Name", "GRCh38"),
-            ("Genome_Complexity_Size", "3.2Gb"),
-            ("Genome_Complexity_Ploidy", "2"),
-            ("Genome_Complexity_GC_Content", "40%"),
-            ("Sample_Origin_Tissue", "Blood"),
-            ("Sample_Origin_Collection_Method", "EDTA"),
-            ("Sample_Origin_Storage_Conditions", "-80C"),
-            ("Sample_Origin_Time_Stored", "30"),
-            ("Material_Type_Material_Type", "DNA"),
-            ("Material_Type_Integrity_Number", "9.5"),
-            ("Library_Construction_Kit", "Illumina TruSeq"),
-            ("Library_Construction_Fragmentation", "Mechanical"),
-            ("Library_Construction_Adapter_Ligation_Efficiency", "High"),
-            ("Library_Construction_PCR_Cycles", "12"),
-            ("Input_Quality_A260_A280", "1.8"),
-            ("Input_Quality_A260_A230", "2.0"),
-            ("Input_Quality_DNA_Concentration", "50"),
-            ("Illumina_Seq_Instrument", "NovaSeq 6000"),
-            ("Illumina_Seq_Flow_Cell", "S4"),
-            ("Illumina_Seq_Channel_Method", "Dual"),
-            ("Illumina_Seq_Cluster_Density", "250K/mm2"),
-            ("Illumina_Seq_QC_Software", "BaseSpace"),
-            ("ONT_Seq_Instrument", "MinION"),
-            ("ONT_Seq_Flow_Cell_Version", "R9.4"),
-            ("ONT_Seq_Pore_Type", "R9"),
-            ("ONT_Seq_Bias_Voltage", "180mV"),
-            ("PacBio_Seq_Instrument", "Sequel II"),
-            ("PacBio_Seq_SMRT_Cell_Type", "8M"),
-            ("PacBio_Seq_ZMW_Density", "50%"),
-            ("IonTorrent_Seq_Instrument", "S5"),
-            ("IonTorrent_Seq_Chip_Type", "530"),
-            ("IonTorrent_Seq_pH_Calibration", "Standard"),
-            ("IonTorrent_Seq_Flow_Order", "TACG"),
-            ("IonTorrent_Seq_Ion_Sphere_Metrics", "Pass"),
-            ("Platform_Independent", "NovaSeq 6000"),
-            ("Platform_Independent_Pooling", "Multiplex"),
-            ("Platform_Independent_Sequencing_Kit", "Universal"),
-            ("Platform_Independent_Base_Calling_Alg", "Guppy"),
-            ("Platform_Independent_Q30", "85%"),
-            ("Platform_Independent_Normalized_Coverage", "30X"),
-            ("Platform_Independent_Run_Specific_Calibration", "Complete"),
-            ("Bioinfo_Alignment_Software", "BWA"),
-            ("Bioinfo_Alignment_Params", "-t 8"),
-            ("Bioinfo_Alignment_Ref_Genome_Version", "GRCh38"),
-            ("Bioinfo_Alignment_Recalibration_Settings", "Default"),
-            ("Bioinfo_Variant_Calling_Tool", "GATK"),
-            ("Bioinfo_Variant_Calling_Version", "4.2"),
-            ("Bioinfo_Variant_Calling_Filtering_Thresholds", "QD<2.0"),
-            ("Bioinfo_Variant_Calling_Duplicate_Handling", "MarkDuplicates"),
-            ("Bioinfo_Variant_Calling_MQ", "60"),
-            ("Bioinfo_Post_Proc_Normalization", "LeftAlign"),
-            ("Bioinfo_Post_Proc_Harmonization", "VEP"),
-            ("Sample_Group_Lab_Name", "Genomics Lab"),
-            ("Sample_Group_Contact_Email", "contact@genomicslab.org"),
-            ("Sample_Group_Contact_Phone", "+1234567890"),
-            ("Sample_Group_Total_Samples", "100"),
-            ("Sample_Group_Inclusion_Criteria", "Age>18"),
-            ("Sample_Group_Exclusion_Criteria", "None"),
-        ]
-    )
-
-    template_line = build_sample_metadata_line(template_entries)
-
-    with open("final_metadata_template.txt", "w") as tf:
-        tf.write(template_line + "\n")
-    print("Template final_metadata_template.txt created. Please fill it and rerun the script.")
-    sys.exit(0)
+    return mapping
 
 
 def normalize_vcf_version(version_value):
@@ -717,13 +498,12 @@ def _parse_sample_metadata_line(line):
     return mapping
 
 
-def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
-    metadata_file = "final_metadata.txt"
-    if not os.path.exists(metadata_file):
-        log_message("No final_metadata.txt found. Skipping metadata append step.", verbose)
+def append_metadata_to_merged_vcf(merged_vcf, metadata, verbose=False):
+    if not metadata:
+        log_message("No metadata provided. Skipping metadata append step.", verbose)
         return
 
-    log_message("Appending final metadata to merged VCF header.", verbose)
+    log_message("Appending metadata to merged VCF header.", verbose)
 
     try:
         reader = vcfpy.Reader.from_path(merged_vcf)
@@ -733,52 +513,18 @@ def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
 
     header = reader.header
 
-    simple_lines = []
-    sample_mappings = []
-
     try:
-        with open(metadata_file, "r") as mf:
-            for line in mf:
-                stripped = line.strip()
-                if not stripped or not stripped.startswith("##"):
-                    continue
-
-                if stripped.startswith("##SAMPLE="):
-                    mapping = _parse_sample_metadata_line(stripped)
-                    if mapping:
-                        sample_mappings.append(mapping)
-                else:
-                    parsed = _parse_simple_metadata_line(stripped)
-                    if parsed:
-                        simple_lines.append(parsed)
+        metadata_line = build_sample_metadata_line(metadata)
+        metadata_mapping = _parse_sample_metadata_line(metadata_line)
     except ValueError as exc:
         reader.close()
         handle_non_critical_error(str(exc))
         return
 
-    if not simple_lines and not sample_mappings:
-        reader.close()
-        log_message("No metadata lines parsed from final_metadata.txt. Skipping metadata append.", verbose)
-        return
-
     header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
 
-    existing_simple = {
-        (line.key, getattr(line, "value", None))
-        for line in header.lines
-        if isinstance(line, vcfpy.SimpleHeaderLine)
-    }
-
-    for key, value in simple_lines:
-        simple_line = vcfpy.SimpleHeaderLine(key, value)
-        identifier = (simple_line.key, simple_line.value)
-        if identifier not in existing_simple:
-            header.add_line(simple_line)
-            existing_simple.add(identifier)
-
-    for mapping in sample_mappings:
-        sample_line = vcfpy.SampleHeaderLine.from_mapping(mapping)
-        header.add_line(sample_line)
+    sample_line = vcfpy.SampleHeaderLine.from_mapping(metadata_mapping)
+    header.add_line(sample_line)
 
     temp_path = merged_vcf + ".tmp"
     writer = vcfpy.Writer.from_path(temp_path, header)
@@ -944,89 +690,34 @@ def validate_merged_vcf(merged_vcf, verbose=False):
 
 def main():
     args = parse_arguments()
-    verbose = args.verbose
+    verbose = False
 
-    log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), verbose)
+    log_message(
+        "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        verbose,
+    )
 
-    input_dir = input("Enter the directory path containing VCF files: ").strip()
-    while not os.path.isdir(input_dir):
-        input_dir = input("Invalid directory. Please enter a valid directory path: ").strip()
+    input_dir = args.input_dir
+    if not os.path.isdir(input_dir):
+        handle_critical_error(f"Input directory {input_dir} does not exist or is not a directory.")
     log_message("Input directory: " + input_dir, verbose)
 
-    if args.output:
-        output_dir = args.output
-    else:
-        temp_output_dir = input("Enter the output directory for the merged VCF file (Press Enter to use same as input directory): ").strip()
-        output_dir = temp_output_dir if temp_output_dir else input_dir
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
     log_message("Output directory: " + output_dir, verbose)
 
-    ref_genome = ""
-    vcf_version = ""
-
-    auto_choice = input(
-        "Would you like to auto-detect the reference genome and VCF version from the first VCF header? (Y/N): "
-    ).strip().upper()
-
-    if auto_choice == "Y":
-        detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(input_dir, verbose)
-        if detected_file and detected_fileformat and detected_reference:
-            detected_version = normalize_vcf_version(detected_fileformat)
-            print("Auto-detected values:")
-            print(f"  Source file: {detected_file}")
-            print(f"  Reference genome: {detected_reference}")
-            print(f"  VCF fileformat: {detected_fileformat} (version {detected_version})")
-            confirm = input("Use these detected values? (Y/N): ").strip().upper()
-            if confirm == "Y":
-                ref_genome = detected_reference
-                vcf_version = detected_version
-            else:
-                print("Proceeding with manual entry.")
-        else:
-            print("Auto-detection was unable to determine both reference and fileformat. Proceeding with manual entry.")
-
-    while not ref_genome:
-        user_input = input("Enter the reference genome build (e.g., GRCh38): ").strip()
-        if user_input:
-            ref_genome = user_input
-        else:
-            print("Reference genome build cannot be empty.")
-
-    while not vcf_version:
-        user_input = input("Enter the expected VCF version (e.g., 4.2): ").strip()
-        if user_input:
-            vcf_version = normalize_vcf_version(user_input)
-        else:
-            print("VCF version cannot be empty.")
-
+    ref_genome = args.ref
+    vcf_version = normalize_vcf_version(args.vcf_version)
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 
-    choice = input("Do you want to (I)nput metadata interactively, (T)emplate file, or (S)kip metadata? [I/T/S]: ").strip().upper()
-    if choice == "I":
-        prompt_metadata_interactive()
-    elif choice == "T":
-        if os.path.exists("final_metadata.txt"):
-            print("Found final_metadata.txt. Using existing metadata file.")
-        elif os.path.exists("final_metadata_template.txt"):
-            use_template = input("final_metadata_template.txt exists. Do you want to use it as final_metadata.txt? (Y/N): ").strip().upper()
-            if use_template == "Y":
-                import shutil  # Ensure shutil is imported at the top
-                shutil.copy("final_metadata_template.txt", "final_metadata.txt")
-                print("Using final_metadata_template.txt as final_metadata.txt.")
-            else:
-                print("Please fill final_metadata_template.txt and rerun the script.")
-                sys.exit(0)
-        else:
-            generate_template()
-    elif choice == "S":
-        print("Skipping metadata integration.")
-    else:
-        print("Invalid choice. No metadata will be integrated.")
+    try:
+        metadata_entries = parse_metadata_string(args.meta)
+    except ValueError as exc:
+        handle_critical_error(str(exc))
 
     valid_files = validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose)
     merged_vcf = merge_vcfs(valid_files, output_dir, verbose)
-    append_metadata_to_merged_vcf(merged_vcf, verbose)
+    append_metadata_to_merged_vcf(merged_vcf, metadata_entries, verbose)
     validate_merged_vcf(merged_vcf, verbose)
 
     print("----------------------------------------")

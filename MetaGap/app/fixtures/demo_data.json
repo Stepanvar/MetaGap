@@ -1,0 +1,751 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+      "password": "pbkdf2_sha256$870000$rTYGmSQfpDf0dizgqjOEFR$3Qrhv6ecXkTJMWFhoX6WEoLkkMx2/5sQzF+5pMT24is=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "demo_org",
+      "first_name": "Dana",
+      "last_name": "Sequencer",
+      "email": "demo_org@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2024-01-15T10:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 2,
+    "fields": {
+      "password": "pbkdf2_sha256$870000$rTYGmSQfpDf0dizgqjOEFR$3Qrhv6ecXkTJMWFhoX6WEoLkkMx2/5sQzF+5pMT24is=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "demo_lab",
+      "first_name": "Ravi",
+      "last_name": "Analyst",
+      "email": "demo_lab@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2024-02-20T09:30:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 3,
+    "fields": {
+      "password": "pbkdf2_sha256$870000$rTYGmSQfpDf0dizgqjOEFR$3Qrhv6ecXkTJMWFhoX6WEoLkkMx2/5sQzF+5pMT24is=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "demo_partner",
+      "first_name": "Amelia",
+      "last_name": "Collaborator",
+      "email": "demo_partner@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2024-03-12T12:15:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "app.allelefrequency",
+    "pk": 1,
+    "fields": {
+      "chrom": "7",
+      "pos": 140453136,
+      "variant_id": "rs121913529",
+      "ref": "C",
+      "alt": "T",
+      "qual": 520.5,
+      "filter": "PASS",
+      "info": 1,
+      "format": 1,
+      "comments": "EGFR L858R hotspot variant"
+    }
+  },
+  {
+    "model": "app.allelefrequency",
+    "pk": 2,
+    "fields": {
+      "chrom": "1",
+      "pos": 11796321,
+      "variant_id": "rs267606723",
+      "ref": "G",
+      "alt": "A",
+      "qual": 340.2,
+      "filter": "PASS",
+      "info": 2,
+      "format": 2,
+      "comments": "PTCH1 splice-site candidate"
+    }
+  },
+  {
+    "model": "app.allelefrequency",
+    "pk": 3,
+    "fields": {
+      "chrom": "chrBFT",
+      "pos": 45210,
+      "variant_id": "bft_v1",
+      "ref": "A",
+      "alt": "G",
+      "qual": 185.4,
+      "filter": "PASS",
+      "info": 3,
+      "format": 3,
+      "comments": "B. fragilis toxin locus variant"
+    }
+  },
+  {
+    "model": "app.bioinfoalignment",
+    "pk": 1,
+    "fields": {
+      "software": "BWA-MEM",
+      "params": "-M",
+      "ref_genome_version": "GRCh38",
+      "recalibration_settings": "BQSR default"
+    }
+  },
+  {
+    "model": "app.bioinfoalignment",
+    "pk": 2,
+    "fields": {
+      "software": "Minimap2",
+      "params": "-ax map-ont",
+      "ref_genome_version": "GRCh37",
+      "recalibration_settings": "Nanopolish"
+    }
+  },
+  {
+    "model": "app.bioinfoalignment",
+    "pk": 3,
+    "fields": {
+      "software": "Bowtie2",
+      "params": "--very-sensitive",
+      "ref_genome_version": "T2T-CHM13",
+      "recalibration_settings": "Metagenomic host removal"
+    }
+  },
+  {
+    "model": "app.bioinfopostproc",
+    "pk": 1,
+    "fields": {
+      "normalization": "Left align",
+      "harmonization": "ClinVar matching"
+    }
+  },
+  {
+    "model": "app.bioinfopostproc",
+    "pk": 2,
+    "fields": {
+      "normalization": "SV refinement",
+      "harmonization": "HPO tagging"
+    }
+  },
+  {
+    "model": "app.bioinfopostproc",
+    "pk": 3,
+    "fields": {
+      "normalization": "Microbiome clustering",
+      "harmonization": "QIIME taxonomy mapping"
+    }
+  },
+  {
+    "model": "app.bioinfovariantcalling",
+    "pk": 1,
+    "fields": {
+      "tool": "GATK HaplotypeCaller",
+      "version": "4.4",
+      "filtering_thresholds": "QD < 2.0",
+      "duplicate_handling": "MarkDuplicates",
+      "mq": "60"
+    }
+  },
+  {
+    "model": "app.bioinfovariantcalling",
+    "pk": 2,
+    "fields": {
+      "tool": "DeepVariant",
+      "version": "1.6",
+      "filtering_thresholds": "Qual >= 30",
+      "duplicate_handling": "None",
+      "mq": "55"
+    }
+  },
+  {
+    "model": "app.bioinfovariantcalling",
+    "pk": 3,
+    "fields": {
+      "tool": "FreeBayes",
+      "version": "1.3",
+      "filtering_thresholds": "Qual >= 20",
+      "duplicate_handling": "Picard",
+      "mq": "50"
+    }
+  },
+  {
+    "model": "app.format",
+    "pk": 1,
+    "fields": {
+      "ad": "30,10",
+      "adf": "18,6",
+      "adr": "12,4",
+      "dp": "140",
+      "ec": null,
+      "ft": "PASS",
+      "gl": null,
+      "gp": null,
+      "gq": "99",
+      "gt": "0/1",
+      "hq": null,
+      "mq": "60",
+      "pl": "0,120,360",
+      "pq": null,
+      "ps": null,
+      "additional": {
+        "sample_id": "LungTumor_01"
+      }
+    }
+  },
+  {
+    "model": "app.format",
+    "pk": 2,
+    "fields": {
+      "ad": "20,5",
+      "adf": "11,3",
+      "adr": "9,2",
+      "dp": "95",
+      "ec": null,
+      "ft": "PASS",
+      "gl": null,
+      "gp": null,
+      "gq": "87",
+      "gt": "0/1",
+      "hq": null,
+      "mq": "55",
+      "pl": "0,150,420",
+      "pq": null,
+      "ps": null,
+      "additional": {
+        "sample_id": "RareTrio_Proband"
+      }
+    }
+  },
+  {
+    "model": "app.format",
+    "pk": 3,
+    "fields": {
+      "ad": "45,15",
+      "adf": "26,8",
+      "adr": "19,7",
+      "dp": "225",
+      "ec": null,
+      "ft": "PASS",
+      "gl": null,
+      "gp": null,
+      "gq": "78",
+      "gt": "0/1",
+      "hq": null,
+      "mq": "48",
+      "pl": "0,90,280",
+      "pq": null,
+      "ps": null,
+      "additional": {
+        "sample_id": "Microbiome_Case01"
+      }
+    }
+  },
+  {
+    "model": "app.genomecomplexity",
+    "pk": 1,
+    "fields": {
+      "size": "3.2 Gb",
+      "ploidy": "Diploid",
+      "gc_content": "41%"
+    }
+  },
+  {
+    "model": "app.genomecomplexity",
+    "pk": 2,
+    "fields": {
+      "size": "3.1 Gb",
+      "ploidy": "Diploid",
+      "gc_content": "40%"
+    }
+  },
+  {
+    "model": "app.genomecomplexity",
+    "pk": 3,
+    "fields": {
+      "size": "4.6 Mb",
+      "ploidy": "Haploid",
+      "gc_content": "51%"
+    }
+  },
+  {
+    "model": "app.illuminaseq",
+    "pk": 1,
+    "fields": {
+      "instrument": "NovaSeq 6000",
+      "flow_cell": "S4",
+      "additional_info": {
+        "read_length": "2x150 bp",
+        "run_id": "NS12345"
+      },
+      "channel_method": "SBS",
+      "cluster_density": "1200 K/mm2",
+      "qc_software": "Illumina SAV 2.5"
+    }
+  },
+  {
+    "model": "app.illuminaseq",
+    "pk": 2,
+    "fields": {
+      "instrument": "NextSeq 2000",
+      "flow_cell": "P3",
+      "additional_info": {
+        "read_length": "2x100 bp",
+        "run_id": "NS2K-2041"
+      },
+      "channel_method": "SBS",
+      "cluster_density": "1100 K/mm2",
+      "qc_software": "Illumina SAV 2.9"
+    }
+  },
+  {
+    "model": "app.info",
+    "pk": 1,
+    "fields": {
+      "aa": "K",
+      "ac": "12",
+      "af": "0.24",
+      "an": "50",
+      "bq": "35",
+      "cigar": null,
+      "db": "dbSNP",
+      "dp": "120",
+      "end": null,
+      "h2": null,
+      "h3": null,
+      "mq": "60",
+      "mq0": "0",
+      "ns": "25",
+      "sb": "0.02",
+      "additional": {
+        "clinvar_significance": "Pathogenic"
+      }
+    }
+  },
+  {
+    "model": "app.info",
+    "pk": 2,
+    "fields": {
+      "aa": "R",
+      "ac": "4",
+      "af": "0.08",
+      "an": "48",
+      "bq": "32",
+      "cigar": null,
+      "db": "gnomAD",
+      "dp": "85",
+      "end": null,
+      "h2": null,
+      "h3": null,
+      "mq": "58",
+      "mq0": "1",
+      "ns": "20",
+      "sb": "0.10",
+      "additional": {
+        "clinvar_significance": "VUS"
+      }
+    }
+  },
+  {
+    "model": "app.info",
+    "pk": 3,
+    "fields": {
+      "aa": "L",
+      "ac": "8",
+      "af": "0.16",
+      "an": "50",
+      "bq": "30",
+      "cigar": null,
+      "db": "ENA",
+      "dp": "210",
+      "end": null,
+      "h2": null,
+      "h3": null,
+      "mq": "48",
+      "mq0": "3",
+      "ns": "40",
+      "sb": "0.12",
+      "additional": {
+        "microbiome_relevance": "Bacteroides fragilis toxin variant"
+      }
+    }
+  },
+  {
+    "model": "app.iontorrentseq",
+    "pk": 1,
+    "fields": {
+      "instrument": "Ion S5",
+      "flow_cell": "Ion 540",
+      "additional_info": {
+        "run_id": "IT540-001"
+      },
+      "chip_type": "540",
+      "ph_calibration": "Auto",
+      "flow_order": "TACG",
+      "ion_sphere_metrics": "95% enrichment"
+    }
+  },
+  {
+    "model": "app.iontorrentseq",
+    "pk": 2,
+    "fields": {
+      "instrument": "Genexus",
+      "flow_cell": "Genexus IC",
+      "additional_info": {
+        "run_id": "GX-0456"
+      },
+      "chip_type": "Genexus IC",
+      "ph_calibration": "Auto",
+      "flow_order": "TACG",
+      "ion_sphere_metrics": "93% enrichment"
+    }
+  },
+  {
+    "model": "app.libraryconstruction",
+    "pk": 1,
+    "fields": {
+      "kit": "TruSeq DNA PCR-Free",
+      "fragmentation": "Mechanical shearing",
+      "adapter_ligation_efficiency": "92%",
+      "pcr_cycles": 8
+    }
+  },
+  {
+    "model": "app.libraryconstruction",
+    "pk": 2,
+    "fields": {
+      "kit": "NEBNext Ultra II",
+      "fragmentation": "Enzymatic",
+      "adapter_ligation_efficiency": "88%",
+      "pcr_cycles": 10
+    }
+  },
+  {
+    "model": "app.libraryconstruction",
+    "pk": 3,
+    "fields": {
+      "kit": "Swift 16S Amplicon",
+      "fragmentation": "Targeted amplification",
+      "adapter_ligation_efficiency": "90%",
+      "pcr_cycles": 18
+    }
+  },
+  {
+    "model": "app.materialtype",
+    "pk": 1,
+    "fields": {
+      "material_type": "DNA",
+      "integrity_number": "RIN 9.2"
+    }
+  },
+  {
+    "model": "app.materialtype",
+    "pk": 2,
+    "fields": {
+      "material_type": "RNA",
+      "integrity_number": "RIN 8.5"
+    }
+  },
+  {
+    "model": "app.materialtype",
+    "pk": 3,
+    "fields": {
+      "material_type": "cDNA",
+      "integrity_number": "DV200 78%"
+    }
+  },
+  {
+    "model": "app.ontseq",
+    "pk": 1,
+    "fields": {
+      "instrument": "PromethION",
+      "flow_cell": "FLO-PRO002",
+      "additional_info": {
+        "run_time_hours": 48,
+        "chemistry": "R10.4"
+      },
+      "flow_cell_version": "R10.4",
+      "pore_type": "R10",
+      "bias_voltage": "180 mV"
+    }
+  },
+  {
+    "model": "app.ontseq",
+    "pk": 2,
+    "fields": {
+      "instrument": "GridION",
+      "flow_cell": "FLO-MIN112",
+      "additional_info": {
+        "run_time_hours": 36,
+        "chemistry": "R10.3"
+      },
+      "flow_cell_version": "R10.3",
+      "pore_type": "R10",
+      "bias_voltage": "200 mV"
+    }
+  },
+  {
+    "model": "app.ontseq",
+    "pk": 3,
+    "fields": {
+      "instrument": "MinION Mk1C",
+      "flow_cell": "FLO-MIN114",
+      "additional_info": {
+        "run_time_hours": 24,
+        "chemistry": "R10.4.1"
+      },
+      "flow_cell_version": "R10.4.1",
+      "pore_type": "R10",
+      "bias_voltage": "180 mV"
+    }
+  },
+  {
+    "model": "app.organizationprofile",
+    "pk": 1,
+    "fields": {
+      "user": 1,
+      "organization_name": "Genome Insight Consortium"
+    }
+  },
+  {
+    "model": "app.organizationprofile",
+    "pk": 2,
+    "fields": {
+      "user": 2,
+      "organization_name": "Rare Disease Initiative"
+    }
+  },
+  {
+    "model": "app.organizationprofile",
+    "pk": 3,
+    "fields": {
+      "user": 3,
+      "organization_name": "Microbiome Discovery Lab"
+    }
+  },
+  {
+    "model": "app.pacbioseq",
+    "pk": 1,
+    "fields": {
+      "instrument": "Sequel IIe",
+      "flow_cell": "8M",
+      "additional_info": {
+        "movie_time": "30 h"
+      },
+      "smrt_cell_type": "8M",
+      "zmw_density": "85%"
+    }
+  },
+  {
+    "model": "app.pacbioseq",
+    "pk": 2,
+    "fields": {
+      "instrument": "Revio",
+      "flow_cell": "25M",
+      "additional_info": {
+        "movie_time": "25 h"
+      },
+      "smrt_cell_type": "25M",
+      "zmw_density": "92%"
+    }
+  },
+  {
+    "model": "app.platformindependent",
+    "pk": 1,
+    "fields": {
+      "pooling": "8 samples per lane",
+      "sequencing_kit": "Illumina SP kit",
+      "base_calling_alg": "Dragen 4.3",
+      "q30": "93%",
+      "normalized_coverage": "45x",
+      "run_specific_calibration": "Standard"
+    }
+  },
+  {
+    "model": "app.platformindependent",
+    "pk": 2,
+    "fields": {
+      "pooling": "3 libraries",
+      "sequencing_kit": "ONT Ligation kit",
+      "base_calling_alg": "Guppy 6.5",
+      "q30": "85%",
+      "normalized_coverage": "35x",
+      "run_specific_calibration": "Adaptive sampling"
+    }
+  },
+  {
+    "model": "app.platformindependent",
+    "pk": 3,
+    "fields": {
+      "pooling": "24 amplicons",
+      "sequencing_kit": "Swift 16S Kit",
+      "base_calling_alg": "Qiime2 DADA2",
+      "q30": "88%",
+      "normalized_coverage": "20k reads/sample",
+      "run_specific_calibration": "Microbiome controls"
+    }
+  },
+  {
+    "model": "app.referencegenomebuild",
+    "pk": 1,
+    "fields": {
+      "build_name": "GRCh38",
+      "build_version": "p14",
+      "additional_info": {
+        "release_date": "2024-03-01",
+        "notes": "Primary human reference genome"
+      }
+    }
+  },
+  {
+    "model": "app.referencegenomebuild",
+    "pk": 2,
+    "fields": {
+      "build_name": "GRCh37",
+      "build_version": "p13",
+      "additional_info": {
+        "release_date": "2013-06-01",
+        "notes": "Legacy human reference build"
+      }
+    }
+  },
+  {
+    "model": "app.referencegenomebuild",
+    "pk": 3,
+    "fields": {
+      "build_name": "T2T-CHM13",
+      "build_version": "v2.0",
+      "additional_info": {
+        "release_date": "2022-02-28",
+        "notes": "Telomere-to-telomere assembly"
+      }
+    }
+  },
+  {
+    "model": "app.samplegroup",
+    "pk": 1,
+    "fields": {
+      "name": "Lung Tumor Cohort",
+      "created_by": 1,
+      "tissue": "Non-small cell lung carcinoma",
+      "collection_method": "FFPE extraction",
+      "storage_conditions": "-80\u00b0C",
+      "comments": "Clinical trial enrollment arm A",
+      "allele_frequency": 1,
+      "reference_genome_build": 1,
+      "genome_complexity": 1,
+      "sample_origin": 1,
+      "material_type": 1,
+      "library_construction": 1,
+      "illumina_seq": 1,
+      "ont_seq": null,
+      "pacbio_seq": 1,
+      "iontorrent_seq": 1,
+      "platform_independent": 1,
+      "bioinfo_alignment": 1,
+      "bioinfo_variant_calling": 1,
+      "bioinfo_post_proc": 1
+    }
+  },
+  {
+    "model": "app.samplegroup",
+    "pk": 2,
+    "fields": {
+      "name": "Rare Disease Trio",
+      "created_by": 2,
+      "tissue": "Peripheral blood mononuclear cells",
+      "collection_method": "Fresh isolation",
+      "storage_conditions": "-196\u00b0C",
+      "comments": "Linked to family RD-204",
+      "allele_frequency": 2,
+      "reference_genome_build": 2,
+      "genome_complexity": 2,
+      "sample_origin": 2,
+      "material_type": 2,
+      "library_construction": 2,
+      "illumina_seq": null,
+      "ont_seq": 2,
+      "pacbio_seq": null,
+      "iontorrent_seq": null,
+      "platform_independent": 2,
+      "bioinfo_alignment": 2,
+      "bioinfo_variant_calling": 2,
+      "bioinfo_post_proc": 2
+    }
+  },
+  {
+    "model": "app.samplegroup",
+    "pk": 3,
+    "fields": {
+      "name": "Microbiome Case Study",
+      "created_by": 3,
+      "tissue": "Gut microbiome",
+      "collection_method": "Stool swab",
+      "storage_conditions": "Liquid nitrogen",
+      "comments": "Metagenomic profiling for inflammatory markers",
+      "allele_frequency": 3,
+      "reference_genome_build": 3,
+      "genome_complexity": 3,
+      "sample_origin": 3,
+      "material_type": 3,
+      "library_construction": 3,
+      "illumina_seq": 2,
+      "ont_seq": 3,
+      "pacbio_seq": 2,
+      "iontorrent_seq": 2,
+      "platform_independent": 3,
+      "bioinfo_alignment": 3,
+      "bioinfo_variant_calling": 3,
+      "bioinfo_post_proc": 3
+    }
+  },
+  {
+    "model": "app.sampleorigin",
+    "pk": 1,
+    "fields": {
+      "tissue": "Lung tissue",
+      "collection_method": "Surgical biopsy",
+      "storage_conditions": "-80\u00b0C",
+      "time_stored": "4 months"
+    }
+  },
+  {
+    "model": "app.sampleorigin",
+    "pk": 2,
+    "fields": {
+      "tissue": "Whole blood",
+      "collection_method": "EDTA tube",
+      "storage_conditions": "-20\u00b0C",
+      "time_stored": "6 weeks"
+    }
+  },
+  {
+    "model": "app.sampleorigin",
+    "pk": 3,
+    "fields": {
+      "tissue": "Gut microbiome",
+      "collection_method": "Swab collection",
+      "storage_conditions": "Liquid nitrogen",
+      "time_stored": "2 weeks"
+    }
+  }
+]

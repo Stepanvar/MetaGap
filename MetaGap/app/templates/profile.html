@@ -11,12 +11,49 @@
 	{% with form_title="Import Data" %}
 	{% include 'form_template.html' with form=import_form %}
 	{% endwith %}
-	<hr>
-	<h3>Export Data</h3>
-	<a href="{% url 'home' %}" class="btn btn-success">Export Data</a>
-	<hr>
-	<h3>Account Settings</h3>
-	<a href="{% url 'home' %}" class="btn btn-primary">Edit Profile</a>
-	<a href="{% url 'home' %}" class="btn btn-danger">Delete Account</a>
+        <hr>
+        <h3>Export Data</h3>
+        <a href="{% url 'home' %}" class="btn btn-success">Export Data</a>
+        <hr>
+        <h3>Account Settings</h3>
+        <a href="{% url 'home' %}" class="btn btn-primary">Edit Profile</a>
+        <a href="{% url 'home' %}" class="btn btn-danger">Delete Account</a>
+        <hr>
+        <h3>Your Sample Groups</h3>
+        {% if sample_groups %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Tissue</th>
+                        <th scope="col">Reference Build</th>
+                        <th scope="col">Key Variant</th>
+                        <th scope="col">Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in sample_groups %}
+                    <tr>
+                        <td>{{ group.name }}</td>
+                        <td>{{ group.tissue|default:"—" }}</td>
+                        <td>{{ group.reference_genome_build.build_name|default:"—" }}</td>
+                        <td>
+                            {% if group.allele_frequency %}
+                                {{ group.allele_frequency.chrom }}:{{ group.allele_frequency.pos }}
+                                {{ group.allele_frequency.ref }}→{{ group.allele_frequency.alt }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>{{ group.comments|default:"" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">You have not added any sample groups yet.</p>
+        {% endif %}
 </div>
 {% endblock %}

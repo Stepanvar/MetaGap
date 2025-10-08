@@ -80,16 +80,6 @@ class HomePageView(TemplateView):
         form = SearchForm()
         return self.render_to_response({'form': form})
 
-class ProfileView(LoginRequiredMixin, TemplateView):
-    template_name = "profile.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # Assuming that users can have associated SampleGroups
-        sample_groups = SampleGroup.objects.filter(created_by=self.request.user)
-        context["sample_groups"] = sample_groups
-        return context
-
 class UserRegistrationView(CreateView):
     form_class = CustomUserCreationForm
     template_name = "signup.html"
@@ -103,12 +93,15 @@ class ContactView(TemplateView):
 class AboutView(TemplateView):
     template_name = "about.html"
 
-class ProfileView(TemplateView):
+class ProfileView(LoginRequiredMixin, TemplateView):
     template_name = "profile.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["import_form"] = ImportDataForm()
+        context["sample_groups"] = SampleGroup.objects.select_related(
+            "created_by", "reference_genome_build", "allele_frequency"
+        ).filter(created_by__user=self.request.user)
         return context
 
 

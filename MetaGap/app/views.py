@@ -154,12 +154,12 @@ class ProfileView(LoginRequiredMixin, TemplateView):
         user = self.request.user
         organization_profile = getattr(user, "organization_profile", None)
 
-        if organization_profile is not None:
+        if organization_profile is None:
+            sample_groups = SampleGroup.objects.none()
+        else:
             sample_groups = SampleGroup.objects.filter(
                 created_by=organization_profile
             ).order_by("name")
-        else:
-            sample_groups = SampleGroup.objects.none()
 
         context.update(
             {
@@ -438,6 +438,23 @@ class ImportDataView(LoginRequiredMixin, FormView):
             )
             metadata = self._extract_metadata_text_fallback(file_path)
 
+            created_alleles = []
+            for record in vcf_in.fetch():
+                info_instance = self._create_info_instance(record.info)
+                format_instance, format_sample = self._create_format_instance(record.samples)
+
+                allele = AlleleFrequency.objects.create(
+                    sample_group=sample_group,
+                    chrom=record.chrom,
+                    pos=record.pos,
+                    variant_id=record.id,
+                    ref=record.ref,
+                    alt=self._serialize_alt(record.alts),
+                    qual=record.qual,
+                    filter=self._serialize_filter(record.filter),
+                    info=info_instance,
+                    format=format_instance,
+                )
         sample_group = SampleGroup.objects.create(
             name=metadata.get("name")
             or os.path.splitext(os.path.basename(file_path))[0],
@@ -592,6 +609,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
         for key, value in info_dict.items():
             normalized = key.lower()
+            mapped_field = self.INFO_FIELD_MAP.get(normalized)
+            if mapped_field:
+                structured[mapped_field] = self._stringify(value)
+            else:
+                additional[normalized] = self._stringify(value)
             target = (
                 structured if normalized in self.INFO_FIELD_MAP else additional
             )
@@ -618,6 +640,10 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 serialized = self._serialize_genotype(sample_data, key)
             else:
                 serialized = self._stringify(sample_data[key])
+
+            mapped_field = self.FORMAT_FIELD_MAP.get(normalized)
+            if mapped_field:
+                structured[mapped_field] = serialized
             if normalized in self.FORMAT_FIELD_MAP:
                 structured[normalized] = serialized
             else:

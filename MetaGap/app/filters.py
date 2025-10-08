@@ -3,6 +3,7 @@ import django_filters
 from django.db.models import Q
 from .models import AlleleFrequency, SampleGroup
 
+
 class AlleleFrequencyFilter(django_filters.FilterSet):
     query = django_filters.CharFilter(method='universal_search', label='Search')
 
@@ -12,12 +13,13 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
 
     def universal_search(self, queryset, name, value):
         if value:
-            return queryset.filter(
-                Q(chromosome__icontains=value) |
-                Q(position__icontains=value) |
-                Q(allele_id__icontains=value)
-            )
+            value = value.strip()
+            filters_q = Q(chrom__icontains=value) | Q(variant_id__icontains=value)
+            if value.isdigit():
+                filters_q |= Q(pos=int(value))
+            return queryset.filter(filters_q)
         return queryset
+
 
 class SampleGroupFilter(django_filters.FilterSet):
     query = django_filters.CharFilter(method='universal_search', label='Search')

@@ -1,7 +1,9 @@
-# views.py
+"""Application views."""
 
 import os
+from typing import Any, Dict, Iterable, Optional, Tuple
 
+import pysam
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
@@ -9,8 +11,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView
-from django_tables2 import RequestConfig
 from django_filters.views import FilterView
+from django_tables2 import RequestConfig
 from django_tables2.views import SingleTableMixin
 
 from .forms import (
@@ -20,26 +22,26 @@ from .forms import (
     ImportDataForm,
     SearchForm,
 )
-from .models import AlleleFrequency, SampleGroup
+from .models import AlleleFrequency, Format, Info, SampleGroup
 from .tables import create_dynamic_table
 
 class SampleGroupTableView(ListView):
+    """Display a django-tables2 listing of sample groups."""
+
     model = SampleGroup
     template_name = "sample_group_table.html"
     context_object_name = "sample_groups"
     paginate_by = 10
 
     def get_queryset(self):
-        # Optimize query by selecting related AlleleFrequency objects
         return super().get_queryset().select_related("allele_frequency")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Get the dynamically created table class
-        SampleGroupTable = create_dynamic_table(
+        table_class = create_dynamic_table(
             SampleGroup, table_name="SampleGroupTable", include_related=True
         )
-        table = SampleGroupTable(self.get_queryset())
+        table = table_class(self.get_queryset())
         RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(table)
         context["table"] = table
         return context
@@ -59,29 +61,29 @@ class SearchResultsView(SingleTableMixin, FilterView):
 
 
 class HomePageView(TemplateView):
+    """Landing page that exposes the primary search form."""
+
     template_name = "index.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["form"] = SearchForm()
         return context
-    def get(self, request, *args, **kwargs):
-        form = SearchForm()
-        return self.render_to_response({'form': form})
+
 
 class ProfileView(LoginRequiredMixin, TemplateView):
+    """Display the user's organisation profile and related import tools."""
+
     template_name = "profile.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile:
-            sample_groups = SampleGroup.objects.filter(
-                created_by=organization_profile
-            ).order_by("name")
-        else:
-            sample_groups = SampleGroup.objects.none()
-
+        sample_groups = (
+            SampleGroup.objects.filter(created_by=organization_profile).order_by("name")
+            if organization_profile
+            else SampleGroup.objects.none()
+        )
         context.update(
             {
                 "organization_profile": organization_profile,
@@ -136,89 +138,163 @@ class AboutView(TemplateView):
     template_name = "about.html"
 
 class ImportDataView(LoginRequiredMixin, FormView):
+    """Handle ingestion of VCF uploads into the relational schema."""
+
     template_name = "import_data.html"
     form_class = ImportDataForm
     success_url = reverse_lazy("profile")
 
+    INFO_FIELDS = {
+        field.name for field in Info._meta.fields if field.name not in {"id", "additional"}
+    }
+    FORMAT_FIELDS = {
+        field.name for field in Format._meta.fields if field.name not in {"id", "additional"}
+    }
+
     def form_valid(self, form):
         data_file = form.cleaned_data["data_file"]
-        # Save the uploaded file temporarily
-        file_path = default_storage.save("tmp/" + data_file.name, data_file)
-        full_path = os.path.join(settings.MEDIA_ROOT, file_path)
+        temp_path = default_storage.save(f"tmp/{data_file.name}", data_file)
+        full_path = os.path.join(settings.MEDIA_ROOT, temp_path)
+
         try:
-            self.parse_vcf_file(full_path, self.request.user)
-            messages.success(self.request, "Data imported successfully.")
-        except Exception as e:
-            messages.error(self.request, f"An error occurred: {e}")
+            created_group = self.parse_vcf_file(full_path)
+            messages.success(
+                self.request,
+                f"Imported {created_group.name} successfully.",
+            )
+        except Exception as exc:  # pragma: no cover - defensive feedback channel
+            messages.error(self.request, f"An error occurred: {exc}")
         finally:
-            # Delete the temporary file
-            default_storage.delete(file_path)
+            default_storage.delete(temp_path)
+
         return super().form_valid(form)
 
+    def parse_vcf_file(self, file_path: str) -> SampleGroup:
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+        if organization_profile is None:
+            raise ValueError("The current user does not have an organisation profile.")
 
-def parse_vcf_file(self, file_path, user):
-    """
-    Parses the VCF file at file_path and saves data to the database.
+        with pysam.VariantFile(file_path) as vcf_in:
+            metadata = self.extract_sample_group_metadata(vcf_in)
+            sample_group = SampleGroup.objects.create(
+                name=metadata.get("name")
+                or os.path.splitext(os.path.basename(file_path))[0],
+                created_by=organization_profile,
+                comments=metadata.get("description"),
+            )
 
-    Args:
-        file_path (str): The path to the VCF file.
-        user (User): The user who uploaded the file.
+            created_alleles = []
+            for record in vcf_in.fetch():
+                info_instance = self._create_info_instance(record.info)
+                format_instance, format_sample = self._create_format_instance(record.samples)
 
-    Raises:
-        Exception: Any exception during parsing or saving data.
-    """
-    # Open the VCF file using pysam
-    vcf_in = pysam.VariantFile(file_path)  # auto-detect input format (VCF or BCF)
+                allele = AlleleFrequency.objects.create(
+                    chrom=record.chrom,
+                    pos=record.pos,
+                    variant_id=record.id,
+                    ref=record.ref,
+                    alt=self._serialize_alt(record.alts),
+                    qual=record.qual,
+                    filter=self._serialize_filter(record.filter),
+                    info=info_instance,
+                    format=format_instance,
+                )
 
-    # Extract sample group metadata from VCF header
-    sample_group_metadata = self.extract_sample_group_metadata(vcf_in)
-    # Create a SampleGroup object
-    sample_group = SampleGroup.objects.create(
-        name=sample_group_metadata.get("name", "Sample Group"),
-        created_by=user.organization_profile,
-        doi=sample_group_metadata.get("doi"),
-        source_lab=sample_group_metadata.get("source_lab"),
-        contact_email=sample_group_metadata.get("contact_email"),
-        # Include other metadata fields as needed
-    )
+                if format_instance and format_sample:
+                    format_instance.additional = {
+                        **(format_instance.additional or {}),
+                        "sample_id": format_sample,
+                    }
+                    format_instance.save(update_fields=["additional"])
 
-    # Iterate over records and save AlleleFrequency objects
-    allele_frequency_objects = []
-    for record in vcf_in.fetch():
-        info_dict = dict(record.info)
-        allele_frequency = AlleleFrequency(
-            sample_group=sample_group,
-            chrom=record.chrom,
-            pos=record.pos,
-            variant_id=record.id,
-            ref=record.ref,
-            alt=",".join(record.alts),
-            qual=record.qual,
-            filter=",".join(record.filter.keys()) if record.filter.keys() else None,
-            info=info_dict,
-        )
-        allele_frequency_objects.append(allele_frequency)
+                created_alleles.append(allele)
 
-    # Bulk create allele frequencies for efficiency
-    AlleleFrequency.objects.bulk_create(allele_frequency_objects)
+        if created_alleles and sample_group.allele_frequency is None:
+            sample_group.allele_frequency = created_alleles[0]
+            sample_group.save(update_fields=["allele_frequency"])
 
+        return sample_group
 
-def extract_sample_group_metadata(self, vcf_in):
-    """
-    Extracts sample group metadata from the VCF header.
+    def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = {}
+        for record in vcf_in.header.records:
+            if record.key == "SAMPLE":
+                metadata.setdefault("name", record.get("ID"))
+                for key, value in record.items():
+                    if key == "ID":
+                        continue
+                    metadata[key.lower()] = value
+        return metadata
 
-    Args:
-        vcf_in (pysam.VariantFile): The opened VCF file.
+    def _create_info_instance(self, info: Any) -> Optional[Info]:
+        info_dict = dict(info)
+        structured: Dict[str, Any] = {}
+        additional: Dict[str, Any] = {}
 
-    Returns:
-        dict: A dictionary containing metadata.
-    """
-    metadata = {}
-    header = vcf_in.header
-    # Custom metadata is often stored in the header lines starting with '##'
-    # For example: ##SAMPLE=<ID=Sample1,Description="Sample description">
-    for record in header.records:
-        if record.key == "META":  # Replace 'META' with your actual metadata key
-            for key, value in record.items():
-                metadata[key.lower()] = value
-    return metadata
+        for key, value in info_dict.items():
+            normalized = key.lower()
+            target = structured if normalized in self.INFO_FIELDS else additional
+            target[normalized] = self._stringify(value)
+
+        if not structured and not additional:
+            return None
+
+        return Info.objects.create(**structured, additional=additional or None)
+
+    def _create_format_instance(
+        self, samples: Any
+    ) -> Tuple[Optional[Format], Optional[str]]:
+        if not samples:
+            return None, None
+
+        sample_name, sample_data = next(iter(samples.items()))
+        structured: Dict[str, Any] = {}
+        additional: Dict[str, Any] = {}
+
+        for key in sample_data.keys():
+            normalized = key.lower()
+            if normalized == "gt":
+                serialized = self._serialize_genotype(sample_data, key)
+            else:
+                serialized = self._stringify(sample_data[key])
+            if normalized in self.FORMAT_FIELDS:
+                structured[normalized] = serialized
+            else:
+                additional[normalized] = serialized
+
+        payload = additional or None
+        if not structured and payload is None:
+            return None, sample_name
+
+        format_instance = Format.objects.create(**structured, additional=payload)
+        return format_instance, sample_name
+
+    @staticmethod
+    def _serialize_alt(alts: Optional[Iterable[str]]) -> str:
+        return ",".join(alts or [])
+
+    @staticmethod
+    def _serialize_filter(filter_field: Any) -> Optional[str]:
+        if not filter_field:
+            return None
+        values = filter_field.keys() if hasattr(filter_field, "keys") else filter_field
+        serialized = [str(value) for value in values]
+        return ",".join(serialized) if serialized else None
+
+    @staticmethod
+    def _serialize_genotype(sample_data: Any, key: str) -> Optional[str]:
+        value = sample_data[key]
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            separator = "|" if getattr(sample_data, "phased", False) else "/"
+            return separator.join(str(item) for item in value)
+        return str(value)
+
+    @staticmethod
+    def _stringify(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            return ",".join(str(item) for item in value)
+        return str(value)

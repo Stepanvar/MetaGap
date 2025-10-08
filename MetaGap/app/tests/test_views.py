@@ -27,13 +27,13 @@ class ProfileViewTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        user_model = get_user_model()
-        self.user = user_model.objects.create_user(
+        User = get_user_model()
+        self.user = User.objects.create_user(
             username="profile_user",
             password="password123",
             email="user@example.com",
         )
-        self.other_user = user_model.objects.create_user(
+        self.other_user = User.objects.create_user(
             username="other_user",
             password="password123",
             email="other@example.com",
@@ -54,7 +54,7 @@ class ProfileViewTests(TestCase):
         self.assertEqual(response.context["import_form_action"], reverse("import_data"))
         self.assertEqual(response.context["import_form_enctype"], "multipart/form-data")
 
-    def test_profile_context_includes_owned_sample_groups(self) -> None:
+    def test_profile_context_includes_only_owned_sample_groups(self) -> None:
         SampleGroup.objects.create(
             name="Alpha",
             created_by=self.user.organization_profile,
@@ -78,12 +78,16 @@ class ProfileViewTests(TestCase):
         ).order_by("name")
         self.assertQuerySetEqual(
             response.context["sample_groups"],
-            expected_queryset,
+            SampleGroup.objects.filter(
+                created_by=self.user.organization_profile
+            ).order_by("name"),
             transform=lambda group: group,
         )
+        self.assertIsInstance(response.context["import_form"], ImportDataForm)
+        self.assertEqual(response.context["import_form_action"], reverse("import_data"))
         self.assertEqual(
-            [group.name for group in response.context["sample_groups"]],
-            ["Alpha", "Beta"],
+            response.context["import_form_enctype"],
+            "multipart/form-data",
         )
 
 

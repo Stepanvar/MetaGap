@@ -1,5 +1,8 @@
 """Unit tests for the ImportDataView helper methods."""
 
+import os
+import tempfile
+
 from django.test import RequestFactory, TestCase
 
 from app.models import Format, Info
@@ -49,3 +52,31 @@ class ImportHelpersTests(TestCase):
         self.assertEqual(format_instance.genotype, "0/1")
         self.assertEqual(format_instance.payload["fields"], {"gt": "0/1", "gq": "99"})
         self.assertEqual(format_instance.payload["additional"], {"extra": "foo,bar"})
+
+    def test_extract_metadata_text_fallback_reads_sample_header(self):
+        """Metadata extraction lowers keys, derives name, and stops at #CHROM."""
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".vcf", encoding="utf-8"
+        ) as handle:
+            handle.write("##fileformat=VCFv4.3\n")
+            handle.write(
+                "##SAMPLE=<ID=Sample01,Description=First sample,Project=Test,"
+                "FlagWithoutValue=,MalformedEntry>\n"
+            )
+            handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+            handle.write("1\t1000\t.\tA\tT\t.\tPASS\t.\n")
+            handle.write("##SAMPLE=<ID=Ignored,Name=ShouldNotAppear>\n")
+
+        try:
+            metadata = self.view._extract_metadata_text_fallback(handle.name)
+        finally:
+            os.remove(handle.name)
+
+        self.assertEqual(metadata.get("id"), "Sample01")
+        self.assertEqual(metadata.get("name"), "Sample01")
+        self.assertEqual(metadata.get("description"), "First sample")
+        self.assertEqual(metadata.get("project"), "Test")
+        self.assertIn("flagwithoutvalue", metadata)
+        self.assertNotIn("malformedentry", metadata)
+        self.assertNotIn("shouldnotappear", metadata.values())

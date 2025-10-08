@@ -49,6 +49,10 @@ class ProfileViewTests(TestCase):
         response = self.client.get(reverse("profile"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["organization_profile"], self.user.organization_profile)
+        self.assertIsInstance(response.context["import_form"], ImportDataForm)
+        self.assertEqual(response.context["import_form_action"], reverse("import_data"))
+        self.assertEqual(response.context["import_form_enctype"], "multipart/form-data")
 
     def test_profile_context_includes_only_owned_sample_groups(self) -> None:
         SampleGroup.objects.create(
@@ -69,13 +73,9 @@ class ProfileViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        sample_groups = list(response.context["sample_groups"])
-        self.assertEqual([group.name for group in sample_groups], ["Alpha", "Beta"])
-
-        self.assertEqual(
-            response.context["organization_profile"],
-            self.user.organization_profile,
-        )
+        expected_queryset = SampleGroup.objects.filter(
+            created_by=self.user.organization_profile
+        ).order_by("name")
         self.assertQuerySetEqual(
             response.context["sample_groups"],
             SampleGroup.objects.filter(
@@ -121,9 +121,8 @@ class ImportDataViewTests(TestCase):
 
         self.assertRedirects(response, reverse("profile"))
         sample_group = SampleGroup.objects.get(name="GroupA")
-        allele = sample_group.allele_frequency
-
-        self.assertIsNotNone(allele)
+        self.assertEqual(sample_group.allele_frequencies.count(), 1)
+        allele = sample_group.allele_frequencies.get()
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")

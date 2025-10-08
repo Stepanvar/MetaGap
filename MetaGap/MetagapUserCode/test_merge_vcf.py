@@ -617,15 +617,104 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False):
     return valid_vcfs
 
 
+def union_headers(valid_files):
+    """Return a unified header containing all INFO/FORMAT/FILTER/contig lines."""
+
+    if not valid_files:
+        handle_critical_error("No valid VCF files remain to merge. Aborting.")
+
+    temporary_paths = []
+
+    def _cleanup_temp_paths():
+        for temp_path in temporary_paths:
+            try:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
+
+    def _get_index_mapping(header_obj, key):
+        indices = getattr(header_obj, "_indices", {})
+        mapping = indices.get(key, {})
+        if isinstance(mapping, dict):
+            return mapping
+        return {}
+
+    first_path = preprocess_vcf(valid_files[0])
+    if first_path != valid_files[0]:
+        temporary_paths.append(first_path)
+
+    try:
+        reader = vcfpy.Reader.from_path(first_path)
+    except Exception as exc:
+        _cleanup_temp_paths()
+        handle_critical_error(f"Failed to open the first valid VCF for header union: {exc}")
+
+    try:
+        unified_header = reader.header.copy()
+    finally:
+        reader.close()
+
+    contig_mapping = _get_index_mapping(unified_header, "contig")
+    unified_header.contigs = dict(contig_mapping)
+
+    existing_info_ids = set(unified_header.info_ids())
+    existing_format_ids = set(unified_header.format_ids())
+    existing_filter_ids = set(unified_header.filter_ids())
+    existing_contig_ids = set(contig_mapping.keys())
+
+    try:
+        for file_path in valid_files[1:]:
+            preprocessed_path = preprocess_vcf(file_path)
+            if preprocessed_path != file_path:
+                temporary_paths.append(preprocessed_path)
+            try:
+                reader = vcfpy.Reader.from_path(preprocessed_path)
+            except Exception as exc:
+                _cleanup_temp_paths()
+                handle_critical_error(
+                    f"Failed to open {file_path} while unifying headers: {exc}"
+                )
+
+            try:
+                header = reader.header
+                info_lines = _get_index_mapping(header, "INFO")
+                for info_id, info_line in info_lines.items():
+                    if info_id not in existing_info_ids:
+                        unified_header.add_line(info_line.copy())
+                        existing_info_ids.add(info_id)
+
+                format_lines = _get_index_mapping(header, "FORMAT")
+                for format_id, format_line in format_lines.items():
+                    if format_id not in existing_format_ids:
+                        unified_header.add_line(format_line.copy())
+                        existing_format_ids.add(format_id)
+
+                filter_lines = _get_index_mapping(header, "FILTER")
+                for filter_id, filter_line in filter_lines.items():
+                    if filter_id not in existing_filter_ids:
+                        unified_header.add_line(filter_line.copy())
+                        existing_filter_ids.add(filter_id)
+
+                contig_lines = _get_index_mapping(header, "contig")
+                for contig_id, contig_line in contig_lines.items():
+                    if contig_id not in existing_contig_ids:
+                        unified_header.add_line(contig_line.copy())
+                        existing_contig_ids.add(contig_id)
+            finally:
+                reader.close()
+
+        unified_header.contigs = _get_index_mapping(unified_header, "contig")
+        return unified_header
+    finally:
+        _cleanup_temp_paths()
+
+
 def merge_vcfs(valid_files, output_dir, verbose=False):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     log_message("Merging VCF files...", verbose)
-    try:
-        reader0 = vcfpy.Reader.from_path(valid_files[0])
-    except Exception as e:
-        handle_critical_error("Failed to open the first valid VCF: " + str(e))
-    header = reader0.header.copy()
+    header = union_headers(valid_files)
 
     writer = vcfpy.Writer.from_path(merged_filename, header)
     for file_path in valid_files:

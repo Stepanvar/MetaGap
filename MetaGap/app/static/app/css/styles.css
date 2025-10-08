@@ -1,8 +1,19 @@
 /* app/static/app/css/styles.css */
 
+/* Layout spacing helpers */
+:root {
+        --header-height: 4.5rem;
+        --header-margin-offset: 1rem;
+}
+
 /* Add top padding to account for fixed navbar */
 body {
-	padding-top: 70px; /* Adjust the value based on navbar height */
+        padding-top: var(--header-height);
+}
+
+main.container.my-4.main-content {
+        margin-top: calc(var(--header-height) + var(--header-margin-offset)) !important;
+        margin-bottom: 1.5rem !important; /* Preserve Bootstrap's default my-4 bottom spacing */
 }
 
 /* Other custom styles */
@@ -21,4 +32,12 @@ body {
 
 .datatable-header-select {
         width: 100%;
+}
+header .navbar {
+        min-height: var(--header-height);
+}
+
+/* Ensure navbar toggler icon is visible when using Bootstrap/MDB markup */
+.navbar-light .navbar-toggler-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(0, 0, 0, 0.5)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }

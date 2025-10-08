@@ -34,7 +34,25 @@
         {% endif %}
         <hr>
         <h3>Export Data</h3>
-        <a href="{% url 'home' %}" class="btn btn-success">Export Data</a>
+        {% if sample_groups %}
+        <div class="list-group mb-4">
+                {% for group in sample_groups %}
+                <div class="list-group-item">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                                <div>
+                                        <strong>{{ group.name }}</strong>
+                                </div>
+                                <div class="btn-group" role="group" aria-label="Export options for {{ group.name }}">
+                                        <a class="btn btn-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=csv">Download CSV</a>
+                                        <a class="btn btn-outline-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=tsv">Download TSV</a>
+                                </div>
+                        </div>
+                </div>
+                {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">Export options will appear once you add sample groups.</p>
+        {% endif %}
         <hr>
         <h3>Account Settings</h3>
         <a href="{% url 'edit_profile' %}" class="btn btn-primary me-2">Edit Profile</a>

@@ -519,6 +519,79 @@ def merge_vcfs(valid_files, output_dir, verbose=False):
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
 
+def _parse_simple_metadata_line(line):
+    stripped = line.strip()
+    if not stripped.startswith("##") or "=" not in stripped:
+        return None
+    key, value = stripped[2:].split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        return None
+    return key, value
+
+
+def _parse_sample_metadata_line(line):
+    stripped = line.strip()
+    if not stripped.startswith("##SAMPLE="):
+        return None
+
+    payload = stripped[len("##SAMPLE=") :].strip()
+    if not payload.startswith("<") or not payload.endswith(">"):
+        raise ValueError("Malformed ##SAMPLE metadata detected; expected angle bracket encapsulation.")
+
+    inner = payload[1:-1]
+    entries = []
+    current = []
+    in_quotes = False
+    escape = False
+
+    for char in inner:
+        if escape:
+            current.append(char)
+            escape = False
+            continue
+
+        if char == "\\":
+            if in_quotes:
+                escape = True
+                continue
+            current.append(char)
+            continue
+
+        if char == '"':
+            in_quotes = not in_quotes
+            continue
+
+        if char == "," and not in_quotes:
+            entry = "".join(current).strip()
+            if entry:
+                entries.append(entry)
+            current = []
+            continue
+
+        current.append(char)
+
+    if current:
+        entry = "".join(current).strip()
+        if entry:
+            entries.append(entry)
+
+    mapping = OrderedDict()
+    for entry in entries:
+        if "=" not in entry:
+            continue
+        key, raw_value = entry.split("=", 1)
+        key = key.strip()
+        value = raw_value.strip()
+        mapping[key] = value
+
+    if "ID" not in mapping or not mapping["ID"]:
+        raise ValueError("Sample metadata must include an ID entry.")
+
+    return mapping
+
+
 def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
     metadata_file = "final_metadata.txt"
     if not os.path.exists(metadata_file):
@@ -526,46 +599,72 @@ def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
         return
 
     log_message("Appending final metadata to merged VCF header.", verbose)
-    metadata_line = None
-    with open(metadata_file, "r") as mf:
-        for line in mf:
-            stripped = line.strip()
-            if stripped.startswith("##SAMPLE="):
-                metadata_line = stripped
-                break
 
-    if metadata_line is None:
-        log_message(
-            "final_metadata.txt does not contain a ##SAMPLE line. Skipping metadata append.",
-            verbose,
-        )
+    try:
+        reader = vcfpy.Reader.from_path(merged_vcf)
+    except Exception as exc:
+        handle_non_critical_error(f"Could not open {merged_vcf}: {exc}. Skipping metadata append.")
         return
 
-    if "<" not in metadata_line or not metadata_line.endswith(">"):
-        log_message(
-            "Malformed ##SAMPLE metadata detected; expected angle bracket encapsulation.",
-            verbose,
-        )
+    header = reader.header
+
+    simple_lines = []
+    sample_mappings = []
+
+    try:
+        with open(metadata_file, "r") as mf:
+            for line in mf:
+                stripped = line.strip()
+                if not stripped or not stripped.startswith("##"):
+                    continue
+
+                if stripped.startswith("##SAMPLE="):
+                    mapping = _parse_sample_metadata_line(stripped)
+                    if mapping:
+                        sample_mappings.append(mapping)
+                else:
+                    parsed = _parse_simple_metadata_line(stripped)
+                    if parsed:
+                        simple_lines.append(parsed)
+    except ValueError as exc:
+        reader.close()
+        handle_non_critical_error(str(exc))
         return
 
-    with open(merged_vcf, "r") as vf:
-        merged_lines = vf.readlines()
+    if not simple_lines and not sample_mappings:
+        reader.close()
+        log_message("No metadata lines parsed from final_metadata.txt. Skipping metadata append.", verbose)
+        return
 
-    filtered_lines = [line for line in merged_lines if not line.startswith("##SAMPLE=")]
+    header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
 
-    insertion_index = next(
-        (idx for idx, line in enumerate(filtered_lines) if line.startswith("#CHROM")),
-        len(filtered_lines),
-    )
+    existing_simple = {
+        (line.key, getattr(line, "value", None))
+        for line in header.lines
+        if isinstance(line, vcfpy.SimpleHeaderLine)
+    }
 
-    formatted_metadata_line = metadata_line
-    if not formatted_metadata_line.endswith("\n"):
-        formatted_metadata_line += "\n"
+    for key, value in simple_lines:
+        simple_line = vcfpy.SimpleHeaderLine(key, value)
+        identifier = (simple_line.key, simple_line.value)
+        if identifier not in existing_simple:
+            header.add_line(simple_line)
+            existing_simple.add(identifier)
 
-    filtered_lines.insert(insertion_index, formatted_metadata_line)
+    for mapping in sample_mappings:
+        sample_line = vcfpy.SampleHeaderLine.from_mapping(mapping)
+        header.add_line(sample_line)
 
-    with open(merged_vcf, "w") as vf:
-        vf.writelines(filtered_lines)
+    temp_path = merged_vcf + ".tmp"
+    writer = vcfpy.Writer.from_path(temp_path, header)
+
+    for record in reader:
+        writer.write_record(record)
+
+    writer.close()
+    reader.close()
+
+    os.replace(temp_path, merged_vcf)
 
     log_message("Metadata appended successfully.", verbose)
 

@@ -13,5 +13,7 @@ urlpatterns = [
     path("login/", auth_views.LoginView.as_view(template_name="login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(next_page="/"), name="logout"),
     path("profile/", views.ProfileView.as_view(), name="profile"),
+    path("profile/edit/", views.EditProfileView.as_view(), name="edit_profile"),
+    path("profile/delete/", views.DeleteAccountView.as_view(), name="delete_account"),
     path("import/", views.ImportDataView.as_view(), name="import_data"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

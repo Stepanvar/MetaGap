@@ -9,8 +9,8 @@
 			<a class="navbar-brand" href="{% url 'home' %}">MetaGaP</a>
                         <button class="navbar-toggler"
                                 type="button"
-                                data-mdb-toggle="collapse"
-                                data-mdb-target="#navbarNav"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#navbarNav"
                                 aria-controls="navbarNav"
                                 aria-expanded="false"
                                 aria-label="Toggle navigation">
@@ -46,7 +46,7 @@
 {% endblock %}
 
 <!-- Main Content -->
-<main role="main" class="container my-4 main-content">
+<main id="main-content" role="main" class="container my-4 main-content">
 	{% block content %}
 	<!-- Page-specific content will be injected here -->
 	{% endblock %}

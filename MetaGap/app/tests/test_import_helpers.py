@@ -5,7 +5,7 @@ import tempfile
 
 from django.test import RequestFactory, TestCase
 
-from app.models import Format, Info
+from app.models import Format, GenomeComplexity, Info
 from app.views import ImportDataView
 
 
@@ -80,3 +80,24 @@ class ImportHelpersTests(TestCase):
         self.assertIn("flagwithoutvalue", metadata)
         self.assertNotIn("malformedentry", metadata)
         self.assertNotIn("shouldnotappear", metadata.values())
+
+    def test_extract_section_data_handles_hyphenated_keys(self):
+        """Hyphenated section keys map to fields and extras become additional data."""
+
+        hyphen_key = "Genome_Complexity-GC_Content".lower()
+        metadata = {
+            hyphen_key: "45%",
+            "genome_complexity": "3.2 Gbp",
+            "genome_complexity-extra_metric": "value",
+        }
+
+        section_data, consumed, additional = self.view._extract_section_data(
+            metadata, "genome_complexity", GenomeComplexity
+        )
+
+        self.assertEqual(section_data.get("gc_content"), "45%")
+        self.assertEqual(section_data.get("size"), "3.2 Gbp")
+        self.assertIn(hyphen_key, consumed)
+        self.assertIn("genome_complexity", consumed)
+        self.assertNotIn("genome_complexity-extra_metric", consumed)
+        self.assertEqual(additional, {"extra_metric": "value"})

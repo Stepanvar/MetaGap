@@ -16,11 +16,26 @@ main.container.my-4.main-content {
         margin-bottom: 1.5rem !important; /* Preserve Bootstrap's default my-4 bottom spacing */
 }
 
+/* Other custom styles */
+
+.datatable-header-filter {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+        min-width: 6rem;
+}
+
+.datatable-header-label {
+        color: #212529;
+}
+
+.datatable-header-select {
+        width: 100%;
+}
 header .navbar {
         min-height: var(--header-height);
 }
-
-/* Other custom styles */
 
 /* Ensure navbar toggler icon is visible when using Bootstrap/MDB markup */
 .navbar-light .navbar-toggler-icon {

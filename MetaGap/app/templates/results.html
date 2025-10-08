@@ -34,13 +34,20 @@ $(document).ready(function() {
         initComplete: function () {
             this.api().columns().every(function () {
                 var column = this;
-                // Create a select dropdown for each column header
-                var select = $('<select><option value="">All</option></select>')
-                    .appendTo($(column.header()).empty())
+                var header = $(column.header());
+                var headerText = header.text().trim();
+                header.empty();
+
+                var wrapper = $('<div class="datatable-header-filter"></div>');
+                var label = $('<div class="datatable-header-label fw-semibold small"></div>').text(headerText);
+                var select = $('<select class="form-select form-select-sm datatable-header-select"><option value="">All</option></select>')
                     .on('change', function () {
                         var val = $.fn.dataTable.util.escapeRegex($(this).val());
                         column.search(val ? '^' + val + '$' : '', true, false).draw();
                     });
+                wrapper.append(label);
+                wrapper.append(select);
+                header.append(wrapper);
                 // Populate the dropdown with unique values from the column
                 column.data().unique().sort().each(function (d) {
                     select.append('<option value="'+d+'">'+d+'</option>');

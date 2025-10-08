@@ -10,7 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
-import os
+import os, dj_database_url
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,13 +18,16 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "d41fd69e-d104-46c6-82d0-1ee7cf4eb8d3"
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ['194.34.99.42', 'localhost', '127.0.0.1']
+DEBUG = os.getenv("DEBUG","1") == "1"
+SECRET_KEY = os.getenv("SECRET_KEY","dev-secret")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS","localhost,127.0.0.1,*.github.dev").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS","https://*.github.dev").split(",")
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL","sqlite:///db.sqlite3"),
+        conn_max_age=600,
+    )
+}
 
 # Application references
 # https://docs.djangoproject.com/en/2.1/ref/settings/#std:setting-INSTALLED_APPS
@@ -106,7 +109,6 @@ AUTH_PASSWORD_VALIDATORS = [
 		"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
 	},
 ]
-AUTH_USER_MODEL = 'MetaGaP.CustomUser'
 # Internationalization
 # https://docs.djangoproject.com/en/2.1/topics/i18n/
 LANGUAGE_CODE = "en-us"
@@ -123,6 +125,6 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, "app", "static")]
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
+STATIC_ROOT = BASE_DIR / "staticfiles"
 LOGIN_REDIRECT_URL = 'profile'
 LOGOUT_REDIRECT_URL = 'home'

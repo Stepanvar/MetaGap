@@ -4,7 +4,7 @@
 {% block body %}
 <header>
 	<!-- Navigation Bar -->
-	<nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm fixed-top">
 		<div class="container-fluid">
 			<a class="navbar-brand" href="{% url 'home' %}">MetaGaP</a>
                         <button class="navbar-toggler"
@@ -46,7 +46,7 @@
 {% endblock %}
 
 <!-- Main Content -->
-<main role="main" class="container my-4">
+<main role="main" class="container my-4 main-content">
 	{% block content %}
 	<!-- Page-specific content will be injected here -->
 	{% endblock %}
@@ -54,8 +54,8 @@
 
 <!-- Footer -->
 <footer class="bg-light text-center text-lg-start">
-	<div class="text-center p-3">
-		© {% now "Y" %} MetaGaP
-	</div>
+        <div class="text-center p-3">
+                © {% now "Y" %} MetaGaP
+        </div>
 </footer>
 {% endblock %}

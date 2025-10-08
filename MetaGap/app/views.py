@@ -1,36 +1,26 @@
 # views.py
 
-from django.views.generic import FormView, ListView, CreateView, TemplateView
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
-from django.db.models import Q
-from django.urls import reverse_lazy
-from django.shortcuts import render
-from django_tables2 import SingleTableView, RequestConfig
-from .models import AlleleFrequency, SampleGroup
-from .forms import CustomUserCreationForm, SearchForm, ImportDataForm
-from django.contrib.auth.models import User
+import os
+
+from django.conf import settings
 from django.contrib import messages
-from django.views.generic.edit import FormView
+from django.contrib.auth import logout
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
-from django.conf import settings
-import os
+from django.urls import reverse_lazy
+from django.views.generic import CreateView, FormView, ListView, TemplateView
+from django_tables2 import RequestConfig
+from django_filters.views import FilterView
+from django_tables2.views import SingleTableMixin
+
 from .forms import (
     CustomUserCreationForm,
-    SearchForm,
-    ImportDataForm,
-    EditProfileForm,
     DeleteAccountForm,
-    SampleGroupForm
+    EditProfileForm,
+    ImportDataForm,
+    SearchForm,
 )
-# views.py
-from django.shortcuts import render
-from django_tables2 import RequestConfig
 from .models import AlleleFrequency, SampleGroup
-from django.views.generic import ListView
-from django_tables2 import RequestConfig
 from .tables import create_dynamic_table
 
 class SampleGroupTableView(ListView):
@@ -46,14 +36,13 @@ class SampleGroupTableView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Get the dynamically created table class
-        SampleGroupTable = create_combined_table(SampleGroup)
+        SampleGroupTable = create_dynamic_table(
+            SampleGroup, table_name="SampleGroupTable", include_related=True
+        )
         table = SampleGroupTable(self.get_queryset())
         RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(table)
         context["table"] = table
         return context
-
-from django_filters.views import FilterView
-from django_tables2.views import SingleTableMixin
 
 class SearchResultsView(SingleTableMixin, FilterView):
     template_name = 'results.html'
@@ -85,10 +74,53 @@ class ProfileView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Assuming that users can have associated SampleGroups
-        sample_groups = SampleGroup.objects.filter(created_by=self.request.user)
-        context["sample_groups"] = sample_groups
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+        if organization_profile:
+            sample_groups = SampleGroup.objects.filter(
+                created_by=organization_profile
+            ).order_by("name")
+        else:
+            sample_groups = SampleGroup.objects.none()
+
+        context.update(
+            {
+                "organization_profile": organization_profile,
+                "sample_groups": sample_groups,
+                "import_form": ImportDataForm(),
+                "import_form_action": reverse_lazy("import_data"),
+                "import_form_enctype": "multipart/form-data",
+            }
+        )
         return context
+
+
+class EditProfileView(LoginRequiredMixin, FormView):
+    form_class = EditProfileForm
+    template_name = "edit_profile.html"
+    success_url = reverse_lazy("profile")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["instance"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, "Your profile has been updated.")
+        return super().form_valid(form)
+
+
+class DeleteAccountView(LoginRequiredMixin, FormView):
+    form_class = DeleteAccountForm
+    template_name = "confirm_delete.html"
+    success_url = reverse_lazy("home")
+
+    def form_valid(self, form):
+        user = self.request.user
+        logout(self.request)
+        user.delete()
+        messages.success(self.request, "Your account has been deleted.")
+        return super().form_valid(form)
 
 class UserRegistrationView(CreateView):
     form_class = CustomUserCreationForm
@@ -102,15 +134,6 @@ class ContactView(TemplateView):
 
 class AboutView(TemplateView):
     template_name = "about.html"
-
-class ProfileView(TemplateView):
-    template_name = "profile.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["import_form"] = ImportDataForm()
-        return context
-
 
 class ImportDataView(LoginRequiredMixin, FormView):
     template_name = "import_data.html"
@@ -152,7 +175,7 @@ def parse_vcf_file(self, file_path, user):
     # Create a SampleGroup object
     sample_group = SampleGroup.objects.create(
         name=sample_group_metadata.get("name", "Sample Group"),
-        created_by=user,
+        created_by=user.organization_profile,
         doi=sample_group_metadata.get("doi"),
         source_lab=sample_group_metadata.get("source_lab"),
         contact_email=sample_group_metadata.get("contact_email"),

@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from app import forms
-from app.models import OrganizationProfile
+from app.models import OrganizationProfile, SampleGroup, SampleOrigin
 
 
 class ImportDataFormTests(SimpleTestCase):
@@ -129,3 +129,66 @@ class SampleGroupFormTests(TestCase):
             ValueError, "SampleGroupForm.save() requires a user when creating a sample group."
         ):
             form.save()
+
+    def test_sample_origin_fields_create_related_instance(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        form = forms.SampleGroupForm(
+            data={
+                "name": "Origin Group",
+                "sample_origin_tissue": "Brain",
+                "sample_origin_collection_method": "Stereotactic biopsy",
+                "sample_origin_storage_conditions": "-80C",
+                "sample_origin_time_stored": "3 months",
+            },
+            user=user,
+        )
+
+        self.assertTrue(form.is_valid())
+
+        sample_group = form.save()
+
+        self.assertIsNotNone(sample_group.sample_origin)
+        self.assertEqual(sample_group.sample_origin.tissue, "Brain")
+        self.assertEqual(
+            sample_group.sample_origin.collection_method, "Stereotactic biopsy"
+        )
+        self.assertEqual(sample_group.sample_origin.storage_conditions, "-80C")
+        self.assertEqual(sample_group.sample_origin.time_stored, "3 months")
+
+    def test_sample_origin_fields_update_existing_instance(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        origin = SampleOrigin.objects.create(
+            tissue="Kidney",
+            collection_method="Biopsy",
+            storage_conditions="Chilled",
+            time_stored="1 week",
+        )
+        sample_group = SampleGroup.objects.create(
+            name="Kidney Group",
+            created_by=user.organization_profile,
+            sample_origin=origin,
+        )
+
+        form = forms.SampleGroupForm(
+            data={
+                "name": "Kidney Group",
+                "sample_origin_tissue": "Liver",
+                "sample_origin_collection_method": "Surgical",
+                "sample_origin_storage_conditions": "Ambient",
+                "sample_origin_time_stored": "",
+            },
+            instance=sample_group,
+            user=user,
+        )
+
+        self.assertTrue(form.is_valid())
+
+        updated_group = form.save()
+
+        self.assertEqual(updated_group.pk, sample_group.pk)
+        self.assertIsNotNone(updated_group.sample_origin)
+        updated_group.sample_origin.refresh_from_db()
+        self.assertEqual(updated_group.sample_origin.tissue, "Liver")
+        self.assertEqual(updated_group.sample_origin.collection_method, "Surgical")
+        self.assertEqual(updated_group.sample_origin.storage_conditions, "Ambient")
+        self.assertIsNone(updated_group.sample_origin.time_stored)

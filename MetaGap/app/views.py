@@ -876,11 +876,16 @@ class ImportDataView(LoginRequiredMixin, FormView):
         )
 
         if format_instance and format_sample:
-            format_instance.additional = {
-                **(format_instance.additional or {}),
-                "sample_id": format_sample,
-            }
-            format_instance.save(update_fields=["additional"])
+            payload: Dict[str, Any] = dict(format_instance.payload or {})
+            additional = dict(payload.get("additional") or {})
+            if additional.get("sample_id") != format_sample:
+                additional["sample_id"] = format_sample
+                if additional:
+                    payload["additional"] = additional
+                elif "additional" in payload:
+                    payload.pop("additional")
+                format_instance.payload = payload or None
+                format_instance.save(update_fields=["payload"])
 
         return allele
 
@@ -1002,16 +1007,22 @@ class ImportDataView(LoginRequiredMixin, FormView):
             mapped_field = self.FORMAT_FIELD_MAP.get(normalized)
             if mapped_field:
                 structured[mapped_field] = serialized
-            if normalized in self.FORMAT_FIELD_MAP:
-                structured[normalized] = serialized
             else:
                 additional[normalized] = serialized
 
-        payload = additional or None
-        if not structured and payload is None:
+        payload: Dict[str, Any] = {}
+        if structured:
+            payload["fields"] = structured
+        if additional:
+            payload["additional"] = additional
+
+        if not payload:
             return None, sample_name
 
-        format_instance = Format.objects.create(**structured, additional=payload)
+        format_instance = Format.objects.create(
+            genotype=structured.get("gt"),
+            payload=payload,
+        )
         return format_instance, sample_name
 
     @staticmethod

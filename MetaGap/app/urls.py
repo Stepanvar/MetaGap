@@ -27,6 +27,11 @@ urlpatterns = [
         name="sample_group_edit",
     ),
     path(
+        "profile/sample-groups/<int:pk>/delete/",
+        views.SampleGroupDeleteView.as_view(),
+        name="sample_group_delete",
+    ),
+    path(
         "profile/sample-groups/<int:pk>/export/",
         views.export_sample_group_variants,
         name="sample_group_export",

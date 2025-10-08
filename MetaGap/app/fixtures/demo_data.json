@@ -108,7 +108,7 @@
     "model": "app.bioinfoalignment",
     "pk": 1,
     "fields": {
-      "software": "BWA-MEM",
+      "tool": "BWA-MEM",
       "params": "-M",
       "ref_genome_version": "GRCh38",
       "recalibration_settings": "BQSR default"
@@ -118,7 +118,7 @@
     "model": "app.bioinfoalignment",
     "pk": 2,
     "fields": {
-      "software": "Minimap2",
+      "tool": "Minimap2",
       "params": "-ax map-ont",
       "ref_genome_version": "GRCh37",
       "recalibration_settings": "Nanopolish"
@@ -128,7 +128,7 @@
     "model": "app.bioinfoalignment",
     "pk": 3,
     "fields": {
-      "software": "Bowtie2",
+      "tool": "Bowtie2",
       "params": "--very-sensitive",
       "ref_genome_version": "T2T-CHM13",
       "recalibration_settings": "Metagenomic host removal"
@@ -195,23 +195,22 @@
     "model": "app.format",
     "pk": 1,
     "fields": {
-      "ad": "30,10",
-      "adf": "18,6",
-      "adr": "12,4",
-      "dp": "140",
-      "ec": null,
-      "ft": "PASS",
-      "gl": null,
-      "gp": null,
-      "gq": "99",
-      "gt": "0/1",
-      "hq": null,
-      "mq": "60",
-      "pl": "0,120,360",
-      "pq": null,
-      "ps": null,
-      "additional": {
-        "sample_id": "LungTumor_01"
+      "genotype": "0/1",
+      "payload": {
+        "fields": {
+          "ad": "30,10",
+          "adf": "18,6",
+          "adr": "12,4",
+          "dp": "140",
+          "ft": "PASS",
+          "gq": "99",
+          "gt": "0/1",
+          "mq": "60",
+          "pl": "0,120,360"
+        },
+        "additional": {
+          "sample_id": "LungTumor_01"
+        }
       }
     }
   },
@@ -219,23 +218,22 @@
     "model": "app.format",
     "pk": 2,
     "fields": {
-      "ad": "20,5",
-      "adf": "11,3",
-      "adr": "9,2",
-      "dp": "95",
-      "ec": null,
-      "ft": "PASS",
-      "gl": null,
-      "gp": null,
-      "gq": "87",
-      "gt": "0/1",
-      "hq": null,
-      "mq": "55",
-      "pl": "0,150,420",
-      "pq": null,
-      "ps": null,
-      "additional": {
-        "sample_id": "RareTrio_Proband"
+      "genotype": "0/1",
+      "payload": {
+        "fields": {
+          "ad": "20,5",
+          "adf": "11,3",
+          "adr": "9,2",
+          "dp": "95",
+          "ft": "PASS",
+          "gq": "87",
+          "gt": "0/1",
+          "mq": "55",
+          "pl": "0,150,420"
+        },
+        "additional": {
+          "sample_id": "RareTrio_Proband"
+        }
       }
     }
   },
@@ -243,23 +241,22 @@
     "model": "app.format",
     "pk": 3,
     "fields": {
-      "ad": "45,15",
-      "adf": "26,8",
-      "adr": "19,7",
-      "dp": "225",
-      "ec": null,
-      "ft": "PASS",
-      "gl": null,
-      "gp": null,
-      "gq": "78",
-      "gt": "0/1",
-      "hq": null,
-      "mq": "48",
-      "pl": "0,90,280",
-      "pq": null,
-      "ps": null,
-      "additional": {
-        "sample_id": "Microbiome_Case01"
+      "genotype": "0/1",
+      "payload": {
+        "fields": {
+          "ad": "45,15",
+          "adf": "26,8",
+          "adr": "19,7",
+          "dp": "225",
+          "ft": "PASS",
+          "gq": "78",
+          "gt": "0/1",
+          "mq": "48",
+          "pl": "0,90,280"
+        },
+        "additional": {
+          "sample_id": "Microbiome_Case01"
+        }
       }
     }
   },

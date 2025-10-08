@@ -614,6 +614,38 @@ def preprocess_vcf(file_path):
 
 
 
+def _info_field_requires_value(number):
+    """Return True when the INFO definition expects an accompanying value."""
+
+    if number is None:
+        return False
+    if isinstance(number, str):
+        stripped = number.strip()
+        if stripped == "":
+            return False
+        if stripped == "0":
+            return False
+        # symbolic numbers (., A, G, R) all expect a value when present
+        if stripped in {".", "A", "G", "R"}:
+            return True
+        number = stripped
+    try:
+        return int(number) > 0
+    except (TypeError, ValueError):
+        # Unknown token, err on the side of requiring a value
+        return True
+
+
+def _has_null_value(value):
+    """Return True if *value* or any nested value is ``None``."""
+
+    if value is None:
+        return True
+    if isinstance(value, (list, tuple)):
+        return any(_has_null_value(v) for v in value)
+    return False
+
+
 def validate_merged_vcf(merged_vcf, verbose=False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
@@ -638,9 +670,50 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             handle_critical_error(f"Missing required meta-information: ##{meta} in {merged_vcf} header.")
 
 
-    for record in reader:
-        if len(record.INFO) < 0:
-            handle_critical_error(f"Found incomplete records in {merged_vcf}.")
+    info_definitions = {}
+    for line in header.lines:
+        if isinstance(line, vcfpy.header.InfoHeaderLine):
+            info_definitions[line.id] = line
+
+    required_info_ids = {
+        info_id for info_id, info_def in info_definitions.items() if _info_field_requires_value(info_def.number)
+    }
+
+    try:
+        for record in reader:
+            info_map = getattr(record, "INFO", None)
+            record_label = f"{getattr(record, 'CHROM', '?')}:{getattr(record, 'POS', '?')}"
+
+            if info_map is None:
+                handle_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing INFO data."
+                )
+
+            if not isinstance(info_map, dict):
+                handle_critical_error(
+                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}."
+                )
+
+            if not info_map:
+                missing_keys = sorted(required_info_ids)
+            else:
+                missing_keys = sorted(required_info_ids.difference(info_map.keys()))
+
+            if missing_keys:
+                handle_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
+                )
+
+            null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
+            if null_keys:
+                handle_critical_error(
+                    f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
+                )
+
+    except SystemExit:
+        raise
+    except Exception as exc:
+        handle_critical_error(f"Error while parsing records in {merged_vcf}: {exc}")
     log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
     print(f"Validation completed successfully for merged VCF: {merged_vcf}")
 

@@ -38,6 +38,20 @@ admin.site.register(BioinfoVariantCalling)
 admin.site.register(BioinfoPostProc)
 admin.site.register(InputQuality)
 admin.site.register(SampleGroup)
+
+
+@admin.register(Format)
+class FormatAdmin(admin.ModelAdmin):
+    list_display = ("id", "genotype", "sample_identifier")
+    readonly_fields = ("payload",)
+
+    @staticmethod
+    def sample_identifier(obj):
+        return obj.additional.get("sample_id")
+
+
+FormatAdmin.sample_identifier.short_description = "Sample ID"
+
+
 admin.site.register(AlleleFrequency)
 admin.site.register(Info)
-admin.site.register(Format)

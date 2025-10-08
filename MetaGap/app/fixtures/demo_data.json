@@ -108,7 +108,7 @@
     "model": "app.bioinfoalignment",
     "pk": 1,
     "fields": {
-      "software": "BWA-MEM",
+      "tool": "BWA-MEM",
       "params": "-M",
       "ref_genome_version": "GRCh38",
       "recalibration_settings": "BQSR default"
@@ -118,7 +118,7 @@
     "model": "app.bioinfoalignment",
     "pk": 2,
     "fields": {
-      "software": "Minimap2",
+      "tool": "Minimap2",
       "params": "-ax map-ont",
       "ref_genome_version": "GRCh37",
       "recalibration_settings": "Nanopolish"
@@ -128,7 +128,7 @@
     "model": "app.bioinfoalignment",
     "pk": 3,
     "fields": {
-      "software": "Bowtie2",
+      "tool": "Bowtie2",
       "params": "--very-sensitive",
       "ref_genome_version": "T2T-CHM13",
       "recalibration_settings": "Metagenomic host removal"

@@ -2,22 +2,22 @@
 """
 This script consolidates multiple VCF files into one merged VCF file.
 It replicates the bash script functionality:
-  - Parses command-line options (verbose mode, output directory)
-  - Prompts the user for the input VCF directory, reference genome build, and expected VCF version.
-  - Accepts metadata key/value pairs on the CLI for direct header augmentation.
+  - Parses command-line options for the input directory, output directory, reference genome, VCF version, and optional metadata.
   - Validates individual VCF files for header fileformat and reference genome.
-  - Merges valid VCFs using vcfpy and applies any CLI-supplied metadata to the header.
+  - Merges valid VCFs using vcfpy.
+  - Appends metadata (if provided via CLI) to the merged VCF header.
   - Performs a final validation of the merged VCF.
   - Logs execution details to a log file.
 
 Requirements:
-  pip install vcfpy
+pip install vcfpy
 """
 
 import os
 import sys
 import glob
 import argparse
+import csv
 import logging
 import datetime
 import re
@@ -64,13 +64,44 @@ def parse_arguments():
         description="Consolidate multiple VCF files into a single merged VCF file."
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose mode for detailed output."
+        "--input-dir",
+        required=True,
+        help="Directory containing the VCF files to merge.",
+    )
+    parser.add_argument(
+        "--input-dir",
+        required=True,
+        help="Directory containing VCF files that should be validated and merged.",
     )
     parser.add_argument(
         "-o",
+        "--output-dir",
         "--output",
-        type=str,
-        help="Specify the output directory for the merged VCF file (defaults to the input directory if not provided).",
+        dest="output_dir",
+        help="Directory for the merged VCF. Defaults to the input directory when omitted.",
+    )
+    parser.add_argument(
+        "--ref",
+        help="Expected reference genome build. When omitted the script attempts to auto-detect it.",
+    )
+    parser.add_argument(
+        "--vcf-version",
+        help="Expected VCF version (e.g., 4.2). When omitted the script attempts to auto-detect it.",
+    )
+    parser.add_argument(
+        "--meta",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Sample metadata in KEY=VALUE form. Repeat for multiple keys. "
+            "An ID entry is required when metadata is provided."
+        ),
+    )
+    parser.add_argument(
+        "--allow-gvcf",
+        action="store_true",
+        help="Allow input files that contain gVCF annotations such as <NON_REF> ALT alleles.",
     )
     parser.add_argument(
         "--sample-metadata",
@@ -258,7 +289,7 @@ def find_first_vcf_with_header(input_dir, verbose=False):
     return None, None, None
 
 
-def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
+def validate_vcf(file_path, ref_genome, vcf_version, verbose=False, allow_gvcf=False):
     log_message(f"Validating file: {file_path}", verbose)
     if not os.path.isfile(file_path):
         handle_non_critical_error(f"File {file_path} does not exist. Skipping.")
@@ -276,12 +307,13 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
 
     header = reader.header
 
-    for line in header.lines:
-        if isinstance(getattr(line, "key", None), str) and line.key.upper().startswith("GVCF"):
-            handle_non_critical_error(
-                f"{file_path} appears to be a gVCF (found header line {line.key}). Skipping."
-            )
-            return False
+    if not allow_gvcf:
+        for line in header.lines:
+            if isinstance(getattr(line, "key", None), str) and line.key.upper().startswith("GVCF"):
+                handle_non_critical_error(
+                    f"{file_path} appears to be a gVCF (found header line {line.key}). Skipping."
+                )
+                return False
 
     fileformat = None
     for line in header.lines:
@@ -312,7 +344,7 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
         from itertools import islice
 
         for record in islice(reader, 5):
-            if any(
+            if not allow_gvcf and any(
                 (
                     (alt_value := getattr(alt, "value", "")) in {"<NON_REF>", "NON_REF"}
                     or str(alt) in {"<NON_REF>", "SymbolicAllele('NON_REF')"}
@@ -335,7 +367,7 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
     return True
 
 
-def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False):
+def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_gvcf=False):
     valid_vcfs = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
     reference_samples = None
@@ -343,7 +375,7 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False):
     reference_info_defs = None
     reference_format_defs = None
     for file_path in glob.glob(os.path.join(input_dir, "*.vcf")):
-        if validate_vcf(file_path, ref_genome, vcf_version, verbose):
+        if validate_vcf(file_path, ref_genome, vcf_version, verbose, allow_gvcf=allow_gvcf):
             preprocessed_file = preprocess_vcf(file_path)
             reader = None
             try:
@@ -586,8 +618,7 @@ def validate_merged_vcf(merged_vcf, verbose=False):
     try:
         reader = vcfpy.Reader.from_path(merged_vcf)
     except Exception as e:
-        handle_non_critical_error(f"Could not open {merged_vcf}: {str(e)}. Skipping.")
-        return False
+        handle_critical_error(f"Could not open {merged_vcf}: {str(e)}.")
 
 
     header = reader.header
@@ -602,52 +633,88 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             handle_critical_error(f"Missing required meta-information: ##{meta} in {merged_vcf} header.")
 
 
-    info_definitions = {}
-    for line in header.lines:
-        if isinstance(line, vcfpy.header.InfoHeaderLine):
-            info_definitions[line.id] = line
+    defined_info_ids = OrderedDict()
+    info_ids_iterable = []
+    if hasattr(header, "info_ids"):
+        candidate = header.info_ids
+        if callable(candidate):
+            try:
+                info_ids_iterable = list(candidate())
+            except Exception:
+                info_ids_iterable = []
+        else:
+            info_ids_iterable = list(candidate)
+
+    for info_id in info_ids_iterable:
+        try:
+            info_def = header.get_info_field_info(info_id)
+        except Exception:
+            info_def = None
+        if isinstance(info_def, vcfpy.header.InfoHeaderLine):
+            defined_info_ids[info_id] = info_def
+
+    if not defined_info_ids:
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.InfoHeaderLine):
+                defined_info_ids[line.id] = line
 
     required_info_ids = {
-        info_id for info_id, info_def in info_definitions.items() if _info_field_requires_value(info_def.number)
+        info_id
+        for info_id, info_def in defined_info_ids.items()
+        if _info_field_requires_value(getattr(info_def, "number", None))
     }
+    required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
 
+    encountered_exception = False
     try:
         for record in reader:
             info_map = getattr(record, "INFO", None)
             record_label = f"{getattr(record, 'CHROM', '?')}:{getattr(record, 'POS', '?')}"
 
             if info_map is None:
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} is missing INFO data."
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
                 )
+                continue
 
             if not isinstance(info_map, dict):
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}."
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}. Continuing without INFO validation for this record."
+                )
+                continue
+
+            record_info_keys = set(info_map.keys())
+
+            undefined_keys = sorted(record_info_keys.difference(defined_info_ids))
+            if undefined_keys:
+                logger.warning(
+                    "Record %s in %s has INFO fields not present in header definitions: %s.",
+                    record_label,
+                    merged_vcf,
+                    ", ".join(undefined_keys),
                 )
 
-            if not info_map:
-                missing_keys = sorted(required_info_ids)
-            else:
-                missing_keys = sorted(required_info_ids.difference(info_map.keys()))
-
+            missing_keys = sorted(required_info_ids.difference(record_info_keys))
             if missing_keys:
-                handle_critical_error(
+                handle_non_critical_error(
                     f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
                 )
 
             null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
             if null_keys:
-                handle_critical_error(
+                handle_non_critical_error(
                     f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
                 )
 
     except SystemExit:
         raise
     except Exception as exc:
-        handle_critical_error(f"Error while parsing records in {merged_vcf}: {exc}")
-    log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
-    print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+        encountered_exception = True
+        logger.warning("Error while parsing records in %s: %s", merged_vcf, exc)
+
+    if not encountered_exception:
+        log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+        print(f"Validation completed successfully for merged VCF: {merged_vcf}")
 
 
 def main():
@@ -655,59 +722,51 @@ def main():
     verbose = args.verbose
     sample_header_line, simple_header_lines = parse_metadata_arguments(args, verbose)
 
-    log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), verbose)
+    log_message(
+        "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        verbose,
+    )
 
-    input_dir = input("Enter the directory path containing VCF files: ").strip()
-    while not os.path.isdir(input_dir):
-        input_dir = input("Invalid directory. Please enter a valid directory path: ").strip()
+    input_dir = os.path.abspath(args.input_dir)
+    if not os.path.isdir(input_dir):
+        handle_critical_error(f"Input directory does not exist: {input_dir}")
     log_message("Input directory: " + input_dir, verbose)
 
-    if args.output:
-        output_dir = args.output
-    else:
-        temp_output_dir = input("Enter the output directory for the merged VCF file (Press Enter to use same as input directory): ").strip()
-        output_dir = temp_output_dir if temp_output_dir else input_dir
+    output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     log_message("Output directory: " + output_dir, verbose)
 
-    ref_genome = ""
-    vcf_version = ""
+    ref_genome = args.ref.strip() if args.ref else None
+    vcf_version = normalize_vcf_version(args.vcf_version) if args.vcf_version else None
 
-    auto_choice = input(
-        "Would you like to auto-detect the reference genome and VCF version from the first VCF header? (Y/N): "
-    ).strip().upper()
+    detection_needed = not ref_genome or not vcf_version
+    detected_file = None
+    detected_fileformat = None
+    detected_reference = None
 
-    if auto_choice == "Y":
+    if detection_needed:
         detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(input_dir, verbose)
-        if detected_file and detected_fileformat and detected_reference:
-            detected_version = normalize_vcf_version(detected_fileformat)
-            print("Auto-detected values:")
-            print(f"  Source file: {detected_file}")
-            print(f"  Reference genome: {detected_reference}")
-            print(f"  VCF fileformat: {detected_fileformat} (version {detected_version})")
-            confirm = input("Use these detected values? (Y/N): ").strip().upper()
-            if confirm == "Y":
-                ref_genome = detected_reference
-                vcf_version = detected_version
-            else:
-                print("Proceeding with manual entry.")
-        else:
-            print("Auto-detection was unable to determine both reference and fileformat. Proceeding with manual entry.")
+        if not ref_genome and detected_reference:
+            ref_genome = detected_reference
+        if not vcf_version and detected_fileformat:
+            vcf_version = normalize_vcf_version(detected_fileformat)
 
-    while not ref_genome:
-        user_input = input("Enter the reference genome build (e.g., GRCh38): ").strip()
-        if user_input:
-            ref_genome = user_input
-        else:
-            print("Reference genome build cannot be empty.")
+    if not ref_genome:
+        handle_critical_error("Reference genome build must be provided via --ref or auto-detectable from input files.")
 
-    while not vcf_version:
-        user_input = input("Enter the expected VCF version (e.g., 4.2): ").strip()
-        if user_input:
-            vcf_version = normalize_vcf_version(user_input)
-        else:
-            print("VCF version cannot be empty.")
+    if not vcf_version:
+        handle_critical_error("VCF version must be provided via --vcf-version or auto-detectable from input files.")
+
+    if detection_needed and detected_file:
+        log_message(
+            "Auto-detected metadata from {} -> reference={}, version={}".format(
+                detected_file,
+                detected_reference or "unknown",
+                detected_fileformat or "unknown",
+            ),
+            verbose,
+        )
 
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 

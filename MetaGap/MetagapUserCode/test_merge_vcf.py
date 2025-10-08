@@ -59,6 +59,52 @@ def handle_non_critical_error(message):
     print("Warning: " + message)
 
 
+def is_gvcf_header(header_lines):
+    """Return True if the provided header metadata indicates a gVCF file."""
+
+    for raw_line in header_lines:
+        line_text = None
+        if hasattr(raw_line, "to_line"):
+            try:
+                line_text = raw_line.to_line()
+            except Exception:
+                line_text = None
+        if line_text is None and isinstance(raw_line, str):
+            line_text = raw_line
+
+        if line_text:
+            stripped = line_text.strip()
+            if stripped.startswith("##"):
+                normalized = stripped.upper().replace(" ", "")
+                if normalized.startswith("##GVCF"):
+                    return True
+                if normalized.startswith("##ALT=") and (
+                    "ID=<NON_REF>" in normalized or "ID=NON_REF" in normalized
+                ):
+                    return True
+
+        key = getattr(raw_line, "key", None)
+        if isinstance(key, str):
+            upper_key = key.upper()
+            if upper_key == "GVCF":
+                return True
+            if upper_key == "ALT":
+                candidates = [
+                    getattr(raw_line, "id", None),
+                    getattr(raw_line, "value", None),
+                ]
+                mapping = getattr(raw_line, "mapping", None)
+                if isinstance(mapping, dict):
+                    candidates.extend(mapping.values())
+                for candidate in candidates:
+                    if not isinstance(candidate, str):
+                        continue
+                    normalized_candidate = candidate.upper().replace(" ", "")
+                    if "<NON_REF>" in normalized_candidate or normalized_candidate == "NON_REF":
+                        return True
+    return False
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Consolidate multiple VCF files into a single merged VCF file."
@@ -118,6 +164,11 @@ def parse_arguments():
         metavar="LINE",
         default=[],
         help="Add an arbitrary metadata header line (##key=value). The '##' prefix is optional.",
+    )
+    parser.add_argument(
+        "--allow-gvcf",
+        action="store_true",
+        help="Allow processing of gVCF inputs that would otherwise be skipped.",
     )
     return parser.parse_args()
 
@@ -307,13 +358,11 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False, allow_gvcf=F
 
     header = reader.header
 
-    if not allow_gvcf:
-        for line in header.lines:
-            if isinstance(getattr(line, "key", None), str) and line.key.upper().startswith("GVCF"):
-                handle_non_critical_error(
-                    f"{file_path} appears to be a gVCF (found header line {line.key}). Skipping."
-                )
-                return False
+    if is_gvcf_header(header.lines) and not allow_gvcf:
+        handle_non_critical_error(
+            f"{file_path} appears to be a gVCF based on header metadata. Use --allow-gvcf to include gVCFs. Skipping."
+        )
+        return False
 
     fileformat = None
     for line in header.lines:
@@ -343,18 +392,19 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False, allow_gvcf=F
     try:
         from itertools import islice
 
-        for record in islice(reader, 5):
-            if not allow_gvcf and any(
-                (
-                    (alt_value := getattr(alt, "value", "")) in {"<NON_REF>", "NON_REF"}
-                    or str(alt) in {"<NON_REF>", "SymbolicAllele('NON_REF')"}
-                )
-                for alt in getattr(record, "ALT", [])
-            ):
-                handle_non_critical_error(
-                    f"{file_path} appears to be a gVCF (found <NON_REF> ALT allele). Skipping."
-                )
-                return False
+        if not allow_gvcf:
+            for record in islice(reader, 5):
+                if any(
+                    (
+                        (alt_value := getattr(alt, "value", "")) in {"<NON_REF>", "NON_REF"}
+                        or str(alt) in {"<NON_REF>", "SymbolicAllele('NON_REF')"}
+                    )
+                    for alt in getattr(record, "ALT", [])
+                ):
+                    handle_non_critical_error(
+                        f"{file_path} appears to be a gVCF (found <NON_REF> ALT allele). Use --allow-gvcf to include gVCFs. Skipping."
+                    )
+                    return False
 
         _ = next(reader)
     except StopIteration:
@@ -375,7 +425,25 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
     reference_info_defs = None
     reference_format_defs = None
     for file_path in glob.glob(os.path.join(input_dir, "*.vcf")):
-        if validate_vcf(file_path, ref_genome, vcf_version, verbose, allow_gvcf=allow_gvcf):
+        try:
+            with open(file_path, "r", encoding="utf-8") as raw_vcf:
+                header_lines = []
+                for raw_line in raw_vcf:
+                    if not raw_line.startswith("#"):
+                        break
+                    if raw_line.startswith("##"):
+                        header_lines.append(raw_line.rstrip("\n"))
+        except OSError as exc:
+            handle_non_critical_error(f"Could not read header from {file_path}: {exc}. Skipping.")
+            continue
+
+        if is_gvcf_header(header_lines) and not allow_gvcf:
+            handle_non_critical_error(
+                f"{file_path} appears to be a gVCF based on header metadata. Use --allow-gvcf to include gVCFs. Skipping."
+            )
+            continue
+
+        if validate_vcf(file_path, ref_genome, vcf_version, verbose=verbose, allow_gvcf=allow_gvcf):
             preprocessed_file = preprocess_vcf(file_path)
             reader = None
             try:
@@ -869,6 +937,7 @@ def main():
         sample_header_line=sample_header_line,
         simple_header_lines=simple_header_lines,
     )
+    append_metadata_to_merged_vcf(merged_vcf, verbose)
     validate_merged_vcf(merged_vcf, verbose)
 
     print("----------------------------------------")

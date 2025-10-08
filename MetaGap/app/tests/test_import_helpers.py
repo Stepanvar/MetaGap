@@ -81,23 +81,34 @@ class ImportHelpersTests(TestCase):
         self.assertNotIn("malformedentry", metadata)
         self.assertNotIn("shouldnotappear", metadata.values())
 
-    def test_extract_section_data_handles_hyphenated_keys(self):
-        """Hyphenated section keys map to fields and extras become additional data."""
+    def test_extract_section_data_supports_hyphenated_keys(self):
+        """Hyphenated section prefixes map fields and feed remaining into additional."""
 
-        hyphen_key = "Genome_Complexity-GC_Content".lower()
+        raw_key = "Genome_Complexity-GC_Content"
         metadata = {
-            hyphen_key: "45%",
-            "genome_complexity": "3.2 Gbp",
-            "genome_complexity-extra_metric": "value",
+            raw_key.lower(): "41%",
+            "genome_complexity-extra_metric": "observed",
+            "unrelated": "ignore",
         }
 
         section_data, consumed, additional = self.view._extract_section_data(
             metadata, "genome_complexity", GenomeComplexity
         )
 
-        self.assertEqual(section_data.get("gc_content"), "45%")
-        self.assertEqual(section_data.get("size"), "3.2 Gbp")
-        self.assertIn(hyphen_key, consumed)
-        self.assertIn("genome_complexity", consumed)
+        self.assertEqual(section_data["gc_content"], "41%")
+        self.assertIn(raw_key.lower(), consumed)
         self.assertNotIn("genome_complexity-extra_metric", consumed)
-        self.assertEqual(additional, {"extra_metric": "value"})
+        self.assertEqual(additional, {"extra_metric": "observed"})
+
+    def test_extract_section_data_falls_back_to_section_value(self):
+        """Section-level metadata populates the configured primary field when needed."""
+
+        metadata = {"genome_complexity": "3.1Gb", "other": "value"}
+
+        section_data, consumed, additional = self.view._extract_section_data(
+            metadata, "genome_complexity", GenomeComplexity
+        )
+
+        self.assertEqual(section_data["size"], "3.1Gb")
+        self.assertIn("genome_complexity", consumed)
+        self.assertIsNone(additional)

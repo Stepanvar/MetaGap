@@ -6,9 +6,32 @@
         --header-margin-offset: 1rem;
 }
 
+:root[data-bs-theme='light'] {
+        --app-body-bg: #f8f9fa;
+        --app-body-color: #212529;
+        --app-navbar-bg: #ffffff;
+        --app-navbar-border: rgba(0, 0, 0, 0.08);
+        --app-footer-bg: #f8f9fa;
+        --app-footer-color: #212529;
+        --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(0, 0, 0, 0.5)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+:root[data-bs-theme='dark'] {
+        --app-body-bg: #0f0f0f;
+        --app-body-color: #f8f9fa;
+        --app-navbar-bg: #1f1f1f;
+        --app-navbar-border: rgba(255, 255, 255, 0.12);
+        --app-footer-bg: #111111;
+        --app-footer-color: #e9ecef;
+        --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.55)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
 /* Add top padding to account for fixed navbar */
 body {
         padding-top: var(--header-height);
+        background-color: var(--app-body-bg);
+        color: var(--app-body-color);
+        transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 main.container.my-4.main-content {
@@ -27,17 +50,47 @@ main.container.my-4.main-content {
 }
 
 .datatable-header-label {
-        color: #212529;
+        color: inherit;
 }
 
 .datatable-header-select {
         width: 100%;
 }
-header .navbar {
+
+.app-navbar {
+        --bs-navbar-color: var(--app-body-color);
+        --bs-navbar-hover-color: var(--color-primary);
+        --bs-navbar-active-color: var(--color-primary);
+        --bs-navbar-brand-color: var(--app-body-color);
+        --bs-navbar-brand-hover-color: var(--color-primary);
+        --bs-navbar-toggler-border-color: transparent;
+        background-color: var(--app-navbar-bg) !important;
+        border-bottom: 1px solid var(--app-navbar-border);
         min-height: var(--header-height);
+        transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
 }
 
-/* Ensure navbar toggler icon is visible when using Bootstrap/MDB markup */
-.navbar-light .navbar-toggler-icon {
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(0, 0, 0, 0.5)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+.app-navbar .navbar-toggler-icon {
+        background-image: var(--app-toggler-icon);
+}
+
+.app-navbar .nav-link {
+        transition: color 0.2s ease-in-out;
+}
+
+.app-navbar .nav-link.active,
+.app-navbar .nav-link:focus,
+.app-navbar .nav-link:hover {
+        color: var(--color-primary);
+}
+
+.app-footer {
+        background-color: var(--app-footer-bg);
+        color: var(--app-footer-color);
+        border-top: 1px solid var(--app-navbar-border);
+        transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+.theme-toggle .btn {
+        white-space: nowrap;
 }

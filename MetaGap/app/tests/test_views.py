@@ -627,7 +627,15 @@ class SampleGroupExportViewTests(SampleGroupTestDataMixin, TestCase):
         self.assertIsNotNone(reader.fieldnames)
 
         normalized_headers = {header.lower() for header in reader.fieldnames}
-        for expected_header in {"chrom", "pos", "ref", "alt", "variant_id"}:
+        for expected_header in {
+            "chrom",
+            "pos",
+            "ref",
+            "alt",
+            "variant_id",
+            "info_af",
+            "info_clinvar_significance",
+        }:
             self.assertIn(expected_header, normalized_headers)
 
         rows = list(reader)
@@ -642,8 +650,8 @@ class SampleGroupExportViewTests(SampleGroupTestDataMixin, TestCase):
             row.get("variant_id") or row.get("Variant_ID"), self.allele.variant_id
         )
 
-        info_af = row.get("info_af") or row.get("info__af") or row.get("Info_AF")
-        self.assertEqual(info_af, str(self.allele.info.af))
+        self.assertEqual(row.get("info_af"), str(self.allele.info.af))
+        self.assertEqual(row.get("info_clinvar_significance"), "Pathogenic")
 
     def test_non_owner_cannot_export(self) -> None:
         self.client.force_login(self.other_user)

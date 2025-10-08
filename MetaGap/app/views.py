@@ -241,25 +241,69 @@ def export_sample_group_variants(request, pk: int) -> HttpResponse:
         f"attachment; filename=\"{filename}.{file_extension}\""
     )
 
-    writer = csv.writer(response, delimiter=delimiter)
-    writer.writerow(["Chrom", "Pos", "Ref", "Alt", "AF", "INFO"])
-
-    allele_frequencies = sample_group.allele_frequencies.select_related("info").order_by(
+    allele_frequencies_qs = sample_group.allele_frequencies.select_related("info").order_by(
         "chrom", "pos", "pk"
     )
+    allele_frequencies = list(allele_frequencies_qs)
+
+    info_field_columns = [
+        f"info_{field.name.lower()}"
+        for field in Info._meta.concrete_fields
+        if field.name not in {"id", "additional"}
+    ]
+
+    additional_info_keys = set()
+    for allele in allele_frequencies:
+        info = allele.info
+        if info and isinstance(info.additional, dict):
+            additional_info_keys.update(str(key) for key in info.additional.keys())
+
+    additional_info_columns = [
+        f"info_{key.lower()}" for key in sorted(additional_info_keys)
+    ]
+
+    fieldnames = [
+        "chrom",
+        "pos",
+        "ref",
+        "alt",
+        "variant_id",
+        *info_field_columns,
+        *additional_info_columns,
+    ]
+
+    writer = csv.DictWriter(response, fieldnames=fieldnames, delimiter=delimiter)
+    writer.writeheader()
 
     for allele in allele_frequencies:
         info = allele.info
-        writer.writerow(
-            [
-                allele.chrom,
-                allele.pos,
-                allele.ref,
-                allele.alt,
-                info.af if info and info.af else "",
-                _serialize_info(info),
-            ]
-        )
+        row: Dict[str, Any] = {
+            "chrom": allele.chrom,
+            "pos": allele.pos,
+            "ref": allele.ref,
+            "alt": allele.alt,
+            "variant_id": allele.variant_id or "",
+        }
+
+        if info:
+            for field in Info._meta.concrete_fields:
+                if field.name in {"id", "additional"}:
+                    continue
+                column = f"info_{field.name.lower()}"
+                value = getattr(info, field.name)
+                if value not in (None, ""):
+                    row[column] = value
+
+            if isinstance(info.additional, dict):
+                for key, value in info.additional.items():
+                    column = f"info_{str(key).lower()}"
+                    if value not in (None, ""):
+                        row[column] = value
+
+        for column in fieldnames:
+            row.setdefault(column, "")
+
+        writer.writerow(row)
 
     return response
 

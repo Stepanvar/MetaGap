@@ -24,8 +24,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
 
-DEBUG = os.getenv("DEBUG","1") == "1"
-SECRET_KEY = os.getenv("SECRET_KEY","dev-secret")
+DEBUG = os.getenv("DEBUG", "1") == "1"
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
 ALLOWED_HOSTS = _split_env_list(
     "ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,*.github.dev"
 )
@@ -33,6 +33,12 @@ CSRF_TRUSTED_ORIGINS = _split_env_list(
     "CSRF_TRUSTED_ORIGINS",
     "https://*.github.dev,http://0.0.0.0:8000,http://localhost:8000",
 )
+
+SITE_NAME = os.getenv("SITE_NAME", "MetaGaP")
+SITE_COLORS = {
+    "primary": os.getenv("SITE_COLOR_PRIMARY", "#1f6feb"),
+    "secondary": os.getenv("SITE_COLOR_SECONDARY", "#2ea043"),
+}
 DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL","sqlite:///db.sqlite3"),
@@ -83,12 +89,13 @@ TEMPLATES = [
 		"DIRS": [],
 		"APP_DIRS": True,
 		"OPTIONS": {
-			"context_processors": [
-				"django.template.context_processors.debug",
-				"django.template.context_processors.request",
-				"django.contrib.auth.context_processors.auth",
-				"django.contrib.messages.context_processors.messages",
-			],
+                        "context_processors": [
+                                "django.template.context_processors.debug",
+                                "django.template.context_processors.request",
+                                "django.contrib.auth.context_processors.auth",
+                                "django.contrib.messages.context_processors.messages",
+                                "MetaGap.context_processors.branding",
+                        ],
 		},
 	},
 ]

@@ -1,6 +1,10 @@
-{% extends 'layout.html' %}
+{% extends 'base.html' %}
 
-{% block title %}Profile - MetaGaP{% endblock %}
+{% block title %}Profile - {{ SITE_NAME }}{% endblock %}
+
+{% block breadcrumbs %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title='Profile' %}
+{% endblock %}
 
 {% block content %}
 <div class="container mt-5">

@@ -173,6 +173,43 @@ class ProfileView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class DashboardView(LoginRequiredMixin, TemplateView):
+    """Authenticated dashboard summarising recent datasets and activity."""
+
+    template_name = "dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+
+        dataset_queryset = (
+            SampleGroup.objects.select_related("created_by", "created_by__user")
+            .order_by("-pk")
+        )
+        action_queryset = (
+            AlleleFrequency.objects.select_related(
+                "sample_group",
+                "sample_group__created_by",
+                "sample_group__created_by__user",
+            )
+            .order_by("-pk")
+        )
+
+        if organization_profile is not None:
+            dataset_queryset = dataset_queryset.filter(created_by=organization_profile)
+            action_queryset = action_queryset.filter(
+                sample_group__created_by=organization_profile
+            )
+
+        context.update(
+            {
+                "recent_datasets": list(dataset_queryset[:6]),
+                "recent_actions": list(action_queryset[:6]),
+            }
+        )
+        return context
+
+
 class EditProfileView(LoginRequiredMixin, FormView):
     form_class = EditProfileForm
     template_name = "edit_profile.html"

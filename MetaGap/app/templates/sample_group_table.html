@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% load render_table from django_tables2 %}
 
-{% block title %}Sample Groups{% endblock %}
+{% block title %}Sample Groups - MetaGaP{% endblock %}
+
+{% block breadcrumbs %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title='Sample Groups' %}
+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">

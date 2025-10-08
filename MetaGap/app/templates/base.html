@@ -23,56 +23,43 @@
         {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-body text-body" style="--color-primary: {{ SITE_COLORS.primary|default:'#1f6feb' }}; --color-secondary: {{ SITE_COLORS.secondary|default:'#2ea043' }};">
-<div class="d-flex flex-column min-vh-100">
+<div class="app-shell d-flex flex-column min-vh-100">
 {% block body %}
-<header>
-        <!-- Navigation Bar -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm fixed-top">
-                <div class="container-fluid">
-                        <a class="navbar-brand" href="{% url 'home' %}">{{ SITE_NAME }}</a>
-                        <button class="navbar-toggler"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#navbarNav"
-                                aria-controls="navbarNav"
-                                aria-expanded="false"
-                                aria-label="Toggle navigation">
-                                <span class="navbar-toggler-icon"></span>
-                        </button>
-                        <div class="collapse navbar-collapse" id="navbarNav">
-                                <ul class="navbar-nav ms-auto">
-                                        <li class="nav-item">
-                                                <a class="nav-link" href="{% url 'about' %}">About</a>
-                                        </li>
-                                        <li class="nav-item">
-                                                <a class="nav-link" href="{% url 'contact' %}">Contact</a>
-                                        </li>
-                                        {% include 'loginpartial.html' %}
-                                </ul>
-                        </div>
-                </div>
-        </nav>
+<header class="app-header">
+        {% include "partials/navbar.html" %}
 </header>
 
-<!-- Breadcrumbs -->
 {% block breadcrumbs %}
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb m-3">
-    <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-    {% block breadcrumb_items %}{% endblock %}
-  </ol>
+<nav aria-label="breadcrumb" class="app-breadcrumbs">
+        <div class="container">
+                <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+                        {% block breadcrumb_items %}{% endblock %}
+                </ol>
+        </div>
 </nav>
 {% endblock %}
 
-<!-- Main Content -->
-<main id="main-content" role="main" class="container my-4 main-content">
-        {% block content %}{% endblock %}
+<main id="main-content" role="main" class="flex-grow-1 py-5">
+        <div class="container">
+                {% block main_container %}
+                <div class="app-surface">
+                        {% block content %}{% endblock %}
+                </div>
+                {% endblock %}
+        </div>
 </main>
 
-<!-- Footer -->
-<footer class="bg-light text-center text-lg-start">
-        <div class="text-center p-3">
-                © {% now "Y" %} {{ SITE_NAME }}
+<footer class="app-footer mt-auto">
+        <div class="container py-4 text-center text-lg-start">
+                <div class="row align-items-center g-3">
+                        <div class="col-lg-6 text-lg-start">
+                                <span class="fw-semibold">© {% now "Y" %} {{ SITE_NAME }}</span>
+                        </div>
+                        <div class="col-lg-6 text-lg-end">
+                                <span class="small opacity-75">Empowering genomic data management with confidence.</span>
+                        </div>
+                </div>
         </div>
 </footer>
 {% endblock %}

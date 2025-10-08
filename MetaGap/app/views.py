@@ -19,6 +19,7 @@ from django.urls import reverse_lazy
 from django.utils.text import slugify
 from django.views.generic import (
     CreateView,
+    DeleteView,
     DetailView,
     FormView,
     ListView,
@@ -443,6 +444,35 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
+class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
+    """Provide a confirmation flow for removing imported sample groups."""
+
+    model = SampleGroup
+    template_name = "sample_group_confirm_delete.html"
+    success_url = reverse_lazy("profile")
+
+    def get_queryset(self):
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+        if organization_profile is None:
+            return SampleGroup.objects.none()
+        return SampleGroup.objects.filter(created_by=organization_profile)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault(
+            "cancel_url",
+            reverse_lazy("sample_group_detail", args=[self.object.pk]),
+        )
+        return context
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        group_name = self.object.name
+        response = super().delete(request, *args, **kwargs)
+        messages.success(request, f"Deleted {group_name} successfully.")
+        return response
+
+
 class SampleGroupDetailView(LoginRequiredMixin, DetailView):
     """Display an individual sample group's metadata and variant catalogue."""
 
@@ -603,6 +633,18 @@ class ImportDataView(LoginRequiredMixin, FormView):
     template_name = "import_data.html"
     form_class = ImportDataForm
     success_url = reverse_lazy("profile")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        organization_profile = getattr(self.request.user, "organization_profile", None)
+        if organization_profile is None:
+            sample_groups = SampleGroup.objects.none()
+        else:
+            sample_groups = SampleGroup.objects.filter(
+                created_by=organization_profile
+            ).order_by("name")
+        context.setdefault("sample_groups", sample_groups)
+        return context
 
     METADATA_SECTION_MAP = {
         "SAMPLE_GROUP": "sample_group",

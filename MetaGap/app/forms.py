@@ -77,12 +77,33 @@ class CustomUserCreationForm(UserCreationForm):
             del self._pending_organization_name
 
 class SampleGroupForm(forms.ModelForm):
+    """ModelForm that assigns ``created_by`` using the authenticated user."""
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = SampleGroup
-        exclude = ['created_by']
+        exclude = ["created_by"]  # Exclude fields that will be set in the view
         widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            # Add widgets for other fields as needed
         }
+
+    def save(self, commit=True):
+        sample_group = super().save(commit=False)
+
+        if sample_group.created_by_id is None:
+            if self.user is None:
+                raise ValueError("SampleGroupForm.save() requires a user when creating a sample group.")
+            sample_group.created_by = self.user
+
+        if commit:
+            sample_group.save()
+            self.save_m2m()
+
+        return sample_group
 
 class ImportDataForm(forms.Form):
     data_file = forms.FileField(

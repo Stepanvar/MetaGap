@@ -104,6 +104,21 @@ class SampleGroupForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
+        text_like_widgets = (
+            forms.TextInput,
+            forms.EmailInput,
+            forms.NumberInput,
+            forms.URLInput,
+            forms.PasswordInput,
+            forms.Textarea,
+        )
+        select_widgets = (forms.Select, forms.SelectMultiple)
+        for field in self.fields.values():
+            widget = field.widget
+            if isinstance(widget, text_like_widgets):
+                widget.attrs.setdefault("class", "form-control")
+            elif isinstance(widget, select_widgets):
+                widget.attrs.setdefault("class", "form-select")
 
     class Meta:
         model = SampleGroup

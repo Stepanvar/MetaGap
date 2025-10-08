@@ -456,43 +456,61 @@ class ImportDataView(LoginRequiredMixin, FormView):
             raise ValueError("The current user does not have an organisation profile.")
 
         metadata: Dict[str, Any] = {}
+        sample_group: Optional[SampleGroup] = None
         try:
             with pysam.VariantFile(file_path) as vcf_in:
                 metadata = self.extract_sample_group_metadata(vcf_in)
+                sample_group = self._create_sample_group(
+                    metadata, file_path, organization_profile
+                )
+
+                for record in vcf_in.fetch():
+                    info_instance = self._create_info_instance(record.info)
+                    format_instance, format_sample = self._create_format_instance(
+                        record.samples
+                    )
+
+                    self._create_allele_frequency(
+                        sample_group,
+                        chrom=record.chrom,
+                        pos=record.pos,
+                        variant_id=record.id,
+                        ref=record.ref,
+                        alt=self._serialize_alt(record.alts),
+                        qual=record.qual,
+                        filter_value=self._serialize_filter(record.filter),
+                        info=info_instance,
+                        format_instance=format_instance,
+                        format_sample=format_sample,
+                    )
         except (OSError, ValueError) as exc:  # pragma: no cover - defensive fallback
             messages.warning(
                 self.request,
                 f"Could not parse VCF metadata with pysam: {exc}. Falling back to a text parser.",
             )
+            if sample_group is not None:
+                sample_group.delete()
             metadata = self._extract_metadata_text_fallback(file_path)
+            sample_group = self._create_sample_group(
+                metadata, file_path, organization_profile
+            )
+            self._parse_vcf_text_fallback(file_path, sample_group)
 
-            created_alleles = []
-            for record in vcf_in.fetch():
-                info_instance = self._create_info_instance(record.info)
-                format_instance, format_sample = self._create_format_instance(record.samples)
+        assert sample_group is not None
+        return sample_group
 
-                allele = AlleleFrequency.objects.create(
-                    sample_group=sample_group,
-                    chrom=record.chrom,
-                    pos=record.pos,
-                    variant_id=record.id,
-                    ref=record.ref,
-                    alt=self._serialize_alt(record.alts),
-                    qual=record.qual,
-                    filter=self._serialize_filter(record.filter),
-                    info=info_instance,
-                    format=format_instance,
-                )
-        sample_group = SampleGroup.objects.create(
+    def _create_sample_group(
+        self,
+        metadata: Dict[str, Any],
+        file_path: str,
+        organization_profile: Any,
+    ) -> SampleGroup:
+        return SampleGroup.objects.create(
             name=metadata.get("name")
             or os.path.splitext(os.path.basename(file_path))[0],
             created_by=organization_profile,
             comments=metadata.get("description"),
         )
-
-        self._parse_vcf_text_fallback(file_path, sample_group)
-
-        return sample_group
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}

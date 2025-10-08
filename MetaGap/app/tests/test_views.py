@@ -1,7 +1,5 @@
 """Focused regression tests for the primary application views."""
 
-from app.models import SampleGroup
-
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
@@ -29,10 +27,16 @@ class ProfileViewTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.user = get_user_model().objects.create_user(
-            username="importer",
-            email="importer@example.com",
-            password="super-secret",
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="profile_user",
+            password="password123",
+            email="user@example.com",
+        )
+        self.other_user = User.objects.create_user(
+            username="other_user",
+            password="password123",
+            email="other@example.com",
         )
 
     def test_profile_lists_user_groups_and_import_form(self) -> None:
@@ -41,27 +45,24 @@ class ProfileViewTests(TestCase):
             created_by=self.user.organization_profile,
         )
 
-        self.client.login(username="importer", password="super-secret")
+        self.client.login(username="profile_user", password="password123")
         response = self.client.get(reverse("profile"))
 
         self.assertEqual(response.status_code, 200)
 
-
-class ProfileViewTests(TestCase):
-    def setUp(self):
-        super().setUp()
-        User = get_user_model()
-        self.user = User.objects.create_user(
-            username="profile_user", password="password123", email="user@example.com"
+    def test_profile_context_includes_only_owned_sample_groups(self) -> None:
+        SampleGroup.objects.create(
+            name="Alpha",
+            created_by=self.user.organization_profile,
         )
-        self.other_user = User.objects.create_user(
-            username="other_user", password="password123", email="other@example.com"
+        SampleGroup.objects.create(
+            name="Beta",
+            created_by=self.user.organization_profile,
         )
-
-    def test_profile_context_includes_owned_sample_groups(self):
-        SampleGroup.objects.create(name="Alpha", created_by=self.user)
-        SampleGroup.objects.create(name="Beta", created_by=self.user)
-        SampleGroup.objects.create(name="Gamma", created_by=self.other_user)
+        SampleGroup.objects.create(
+            name="Gamma",
+            created_by=self.other_user.organization_profile,
+        )
 
         self.client.force_login(self.user)
         response = self.client.get(reverse("profile"))
@@ -77,12 +78,17 @@ class ProfileViewTests(TestCase):
         )
         self.assertQuerySetEqual(
             response.context["sample_groups"],
-            SampleGroup.objects.filter(created_by=self.user.organization_profile).order_by("name"),
+            SampleGroup.objects.filter(
+                created_by=self.user.organization_profile
+            ).order_by("name"),
             transform=lambda group: group,
         )
         self.assertIsInstance(response.context["import_form"], ImportDataForm)
         self.assertEqual(response.context["import_form_action"], reverse("import_data"))
-        self.assertEqual(response.context["import_form_enctype"], "multipart/form-data")
+        self.assertEqual(
+            response.context["import_form_enctype"],
+            "multipart/form-data",
+        )
 
 
 class ImportDataViewTests(TestCase):

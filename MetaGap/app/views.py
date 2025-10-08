@@ -18,6 +18,7 @@ from django_filters.views import FilterView
 from django_tables2 import RequestConfig
 from django_tables2.views import SingleTableMixin
 
+from .filters import SampleGroupFilter
 from .forms import (
     CustomUserCreationForm,
     DeleteAccountForm,
@@ -90,17 +91,46 @@ class SampleGroupTableView(ListView):
         return context
 
 class SearchResultsView(SingleTableMixin, FilterView):
-    template_name = 'results.html'
+    template_name = "results.html"
     model = SampleGroup
-    context_object_name = 'sample_groups'
+    context_object_name = "sample_groups"
     paginate_by = 10
+    filterset_class = SampleGroupFilter
 
     # Dynamically create a table class that includes all related fields.
-    table_class = create_dynamic_table(SampleGroup, table_name="CombinedTable", include_related=True)
+    table_class = create_dynamic_table(
+        SampleGroup, table_name="CombinedTable", include_related=True
+    )
 
     def get_queryset(self):
-        # Adjust the queryset if needed (for example, using select_related/prefetch_related)
-        return SampleGroup.objects.all()
+        base_queryset = SampleGroup.objects.select_related(
+            "reference_genome_build",
+            "genome_complexity",
+            "sample_origin",
+            "material_type",
+            "library_construction",
+            "illumina_seq",
+            "ont_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
+            "platform_independent",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+            "bioinfo_post_proc",
+            "created_by",
+        ).prefetch_related("allele_frequencies")
+
+        # Instantiate the filter set manually so that we can reuse it in the template context.
+        self.filterset = self.filterset_class(
+            self.request.GET or None, queryset=base_queryset
+        )
+        return self.filterset.qs.distinct()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault("filter", getattr(self, "filterset", None))
+        context["form"] = SearchForm(self.request.GET or None)
+        return context
 
 
 class HomePageView(TemplateView):

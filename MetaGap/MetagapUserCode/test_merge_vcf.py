@@ -441,6 +441,14 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
 
 
     header = reader.header
+
+    for line in header.lines:
+        if isinstance(getattr(line, "key", None), str) and line.key.upper().startswith("GVCF"):
+            handle_non_critical_error(
+                f"{file_path} appears to be a gVCF (found header line {line.key}). Skipping."
+            )
+            return False
+
     fileformat = None
     for line in header.lines:
         if line.key == "fileformat":
@@ -467,6 +475,21 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
 
 
     try:
+        from itertools import islice
+
+        for record in islice(reader, 5):
+            if any(
+                (
+                    (alt_value := getattr(alt, "value", "")) in {"<NON_REF>", "NON_REF"}
+                    or str(alt) in {"<NON_REF>", "SymbolicAllele('NON_REF')"}
+                )
+                for alt in getattr(record, "ALT", [])
+            ):
+                handle_non_critical_error(
+                    f"{file_path} appears to be a gVCF (found <NON_REF> ALT allele). Skipping."
+                )
+                return False
+
         _ = next(reader)
     except StopIteration:
         pass

@@ -74,13 +74,10 @@ class ProfileView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile:
-            sample_groups = SampleGroup.objects.filter(
-                created_by=organization_profile
-            ).order_by("name")
-        else:
-            sample_groups = SampleGroup.objects.none()
+        user = self.request.user
+        organization_profile = getattr(user, "organization_profile", None)
+
+        sample_groups = SampleGroup.objects.filter(created_by=user).order_by("name")
 
         context.update(
             {
@@ -175,7 +172,7 @@ def parse_vcf_file(self, file_path, user):
     # Create a SampleGroup object
     sample_group = SampleGroup.objects.create(
         name=sample_group_metadata.get("name", "Sample Group"),
-        created_by=user.organization_profile,
+        created_by=user,
         doi=sample_group_metadata.get("doi"),
         source_lab=sample_group_metadata.get("source_lab"),
         contact_email=sample_group_metadata.get("contact_email"),

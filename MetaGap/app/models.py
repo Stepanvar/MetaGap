@@ -1,6 +1,6 @@
 # app/models.py
 
-from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
 from .signals import create_user_profile, save_user_profile
@@ -261,7 +261,11 @@ class SampleGroup(models.Model):
     Model representing a group of samples along with their metadata.
     """
     name = models.CharField(max_length=255)
-    created_by = models.ForeignKey(OrganizationProfile, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sample_groups",
+    )
     tissue = models.CharField(max_length=100, blank=True, null=True)
     collection_method = models.CharField(max_length=100, blank=True, null=True)
     storage_conditions = models.CharField(max_length=100, blank=True, null=True)

@@ -160,16 +160,24 @@ main.flex-grow-1 {
 }
 
 .app-navbar .theme-toggle .btn {
-        --bs-btn-color: rgba(255, 255, 255, 0.9);
+        --bs-btn-color: rgba(255, 255, 255, 0.92);
+        --bs-btn-hover-color: #ffffff;
+        --bs-btn-active-color: #ffffff;
         --bs-btn-border-color: rgba(255, 255, 255, 0.35);
         --bs-btn-hover-bg: rgba(255, 255, 255, 0.2);
         --bs-btn-hover-border-color: rgba(255, 255, 255, 0.45);
         --bs-btn-active-bg: rgba(255, 255, 255, 0.28);
         --bs-btn-active-border-color: rgba(255, 255, 255, 0.5);
+        --bs-btn-disabled-color: rgba(255, 255, 255, 0.6);
         border-radius: 999px;
         padding-inline: 0.85rem;
         white-space: nowrap;
+        color: rgba(255, 255, 255, 0.92);
         backdrop-filter: blur(12px);
+}
+
+.app-navbar .theme-toggle .btn [data-theme-label] {
+        color: inherit;
 }
 
 .app-navbar .btn-link.nav-link {

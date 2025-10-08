@@ -1,5 +1,6 @@
 """Application views."""
 
+import csv
 import json
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple
@@ -8,10 +9,14 @@ import pysam
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
 from django.db import models as django_models
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
+from django.utils.text import slugify
 from django.views.generic import (
     CreateView,
     DetailView,
@@ -181,6 +186,82 @@ class ProfileView(LoginRequiredMixin, TemplateView):
             }
         )
         return context
+
+
+def _serialize_info(info: Optional[Info]) -> str:
+    """Serialise an ``Info`` instance into a flattened key/value string."""
+
+    if not info:
+        return ""
+
+    serialized: Dict[str, Any] = {}
+    for field in info._meta.concrete_fields:
+        if field.name == "id":
+            continue
+        value = getattr(info, field.name)
+        if value in (None, "", {}):
+            continue
+        if field.name == "additional":
+            if isinstance(value, dict):
+                for key, additional_value in value.items():
+                    if additional_value in (None, "", {}):
+                        continue
+                    serialized[str(key).upper()] = additional_value
+            continue
+        serialized[field.name.upper()] = value
+
+    return ";".join(f"{key}={value}" for key, value in serialized.items())
+
+
+@login_required
+def export_sample_group_variants(request, pk: int) -> HttpResponse:
+    """Export allele frequency data for a user's sample group."""
+
+    sample_group = get_object_or_404(
+        SampleGroup.objects.select_related("created_by"), pk=pk
+    )
+    organization_profile = getattr(request.user, "organization_profile", None)
+
+    if organization_profile is None or sample_group.created_by != organization_profile:
+        raise Http404("Sample group not found.")
+
+    export_format = request.GET.get("format", "csv").lower()
+    if export_format == "tsv":
+        delimiter = "\t"
+        file_extension = "tsv"
+        content_type = "text/tab-separated-values"
+    else:
+        delimiter = ","
+        file_extension = "csv"
+        content_type = "text/csv"
+
+    filename = slugify(sample_group.name) or f"sample-group-{sample_group.pk}"
+    response = HttpResponse(content_type=content_type)
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{filename}.{file_extension}\""
+    )
+
+    writer = csv.writer(response, delimiter=delimiter)
+    writer.writerow(["Chrom", "Pos", "Ref", "Alt", "AF", "INFO"])
+
+    allele_frequencies = sample_group.allele_frequencies.select_related("info").order_by(
+        "chrom", "pos", "pk"
+    )
+
+    for allele in allele_frequencies:
+        info = allele.info
+        writer.writerow(
+            [
+                allele.chrom,
+                allele.pos,
+                allele.ref,
+                allele.alt,
+                info.af if info and info.af else "",
+                _serialize_info(info),
+            ]
+        )
+
+    return response
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):

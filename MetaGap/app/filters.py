@@ -1,5 +1,6 @@
 # filters.py
 import django_filters
+from django.db.models import Q
 from .models import AlleleFrequency, SampleGroup
 
 class AlleleFrequencyFilter(django_filters.FilterSet):

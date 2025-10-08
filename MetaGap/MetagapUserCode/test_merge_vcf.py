@@ -23,6 +23,7 @@ import logging
 import datetime
 import shutil
 import re
+from collections import OrderedDict
 
 try:
     import vcfpy
@@ -74,20 +75,36 @@ def parse_arguments():
     )
     return parser.parse_args()
 
-from vcfpy import MetaHeaderLine
+def _format_sample_metadata_value(value: str) -> str:
+    """Return a VCF-safe representation of the provided metadata value."""
 
-class CustomMetaHeaderLine(MetaHeaderLine):
-    def __init__(self, key, value, mapping=None):
-        # Here we include extra mapping information. Adjust keys as needed.
-        if mapping is None:
-            mapping = {"ID": key, "Type": "String", "Value": value}
-        super().__init__(key=key, value=value, mapping=mapping)
-    def __str__(self):
-        # Format the header line exactly as desired.
-        return f"##{self.key}=\"{self.value}\""
-    def copy(self):
-        # Create a new instance with the same mapping.
-        return CustomMetaHeaderLine(self.key, self.value, mapping=self.mapping.copy())
+    value = str(value)
+    needs_quotes = any(char in value for char in [" ", ",", "\t", "\"", "<", ">", "="])
+    if not needs_quotes:
+        return value
+
+    escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
+    return f'"{escaped}"'
+
+
+def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
+    """Serialize an ordered mapping into a single ##SAMPLE metadata line."""
+
+    id_value = entries.get("ID", "").strip()
+    if not id_value:
+        raise ValueError("Sample metadata must include a non-empty ID value.")
+
+    parts = []
+    for key, raw_value in entries.items():
+        if raw_value is None:
+            continue
+        value = str(raw_value).strip()
+        if not value and key != "ID":
+            continue
+        parts.append(f"{key}={_format_sample_metadata_value(value)}")
+
+    serialized = ",".join(parts)
+    return f"##SAMPLE=<{serialized}>"
 
 
 def prompt_input(prompt_message, validation_regex=None, error_message="Invalid input."):
@@ -102,13 +119,22 @@ def prompt_input(prompt_message, validation_regex=None, error_message="Invalid i
         return value
 
 
+def prompt_optional_input(prompt_message):
+    return input(prompt_message + " (optional): ").strip()
+
+
 def prompt_metadata_interactive():
     """
     Prompts the user to enter all metadata fields interactively.
-    The metadata is written to final_metadata.txt with one line per metadata field.
+    The metadata is written to final_metadata.txt as a single ##SAMPLE line.
     """
     print("Entering interactive metadata input mode...\n")
     
+    sample_group_id = prompt_input(
+        "Enter Sample Group Name/ID (used as the SampleGroup identifier)"
+    )
+    sample_description = prompt_optional_input("Enter Sample Group Description")
+
     # 1. REFERENCE_GENOME_BUILD
     ref_build = prompt_input("Enter Reference Genome Build (e.g., GRCh38)")
     
@@ -163,20 +189,22 @@ def prompt_metadata_interactive():
     iontorrent_floworder = prompt_input("Enter Ion Torrent Flow Order")
     iontorrent_ionsphere = prompt_input("Enter Ion Torrent IonSphere Metrics")
     
-    # 11. PLATFORM_INDEPENDENT (Pooling, SequencingKit, BaseCallingAlg, Q30, NormalizedCoverage, RunSpecificCalibration)
+    # 11. PLATFORM_INDEPENDENT (Instrument, Pooling, SequencingKit, BaseCallingAlg, Q30, NormalizedCoverage, RunSpecificCalibration)
+    platform_independent_instrument = prompt_input("Enter Platform-Independent Instrument")
     pooling = prompt_input("Enter Pooling Strategy")
     sequencing_kit = prompt_input("Enter Sequencing Kit")
     base_calling = prompt_input("Enter Base Calling Algorithm")
     q30 = prompt_input("Enter Q30")
     normalized_cov = prompt_input("Enter Normalized Coverage")
     run_calibration = prompt_input("Enter Run Specific Calibration")
-    
-    # 12. BIOINFO_ALIGNMENT (Software, Params, RefGenomeVers, RecalibrationSettings)
+
+    # 12. BIOINFO_ALIGNMENT (Tool, Software, Params, RefGenomeVers, RecalibrationSettings)
+    align_tool = prompt_input("Enter Alignment Tool")
     align_software = prompt_input("Enter Alignment Software")
     align_params = prompt_input("Enter Alignment Parameters")
     align_refvers = prompt_input("Enter Reference Genome Version for Alignment")
     recalibration = prompt_input("Enter Recalibration Settings")
-    
+
     # 13. BIOINFO_VARIANT_CALLING (Tool, Version, FilteringThresholds, DuplicateHandling, MQ)
     variant_tool = prompt_input("Enter Variant Calling Tool")
     variant_version = prompt_input("Enter Variant Calling Tool Version")
@@ -188,60 +216,203 @@ def prompt_metadata_interactive():
     normalization = prompt_input("Enter Post-Processing Normalization")
     harmonization = prompt_input("Enter Post-Processing Harmonization")
     
-    # 15. SAMPLE_GROUP (LabName, LabMail, LabPhone, SampleCount, InclusionCriteria)
+    # 15. SAMPLE_GROUP (LabName, LabMail, LabPhone, SampleCount, InclusionCriteria, ExclusionCriteria)
     lab_name = prompt_input("Enter Lab Name")
     lab_mail = prompt_input("Enter Lab Email")
     lab_phone = prompt_input("Enter Lab Phone")
     sample_count = prompt_input("Enter Sample Count", r"^[1-9][0-9]*$", "Sample Count must be a positive integer")
     inclusion = prompt_input("Enter Inclusion Criteria")
+    exclusion = prompt_input("Enter Exclusion Criteria")
     
-    metadata_lines = [
-        f"##REFERENCE_GENOME_BUILD={ref_build}",
-        f"##GENOME_COMPLEXITY=\"Size={genome_size};Ploidy={ploidy};GC={gc_content}\"",
-        f"##SAMPLE_ORIGIN=\"Tissue={tissue};CollectionMethod={collection_method};StorageConditions={storage_cond};TimeStored={time_stored}\"",
-        f"##MATERIAL_TYPE=\"Type={material_type};IntegrityNumber={integrity_number}\"",
-        f"##LIBRARY_CONSTRUCTION=\"Kit={lib_kit};Fragmentation={fragmentation};AdapterLigationEfficiency={adapter_efficiency};PCRCycles={pcr_cycles}\"",
-        f"##INPUT_QUALITY=\"A260_A280={a260_a280};A260_A230={a260_a230};NucleicAcidConcentration={na_concentration}\"",
-        f"##ILLUMINA_SEQ=\"Instrument={illumina_instrument};FlowCell={illumina_flowcell};ChannelMethod={illumina_channel};ClusterDensity={illumina_cluster};QCSoftware={illumina_qc}\"",
-        f"##ONT_SEQ=\"Instrument={ont_instrument};FlowCellVersion={ont_flowcell_version};PoreType={ont_pore};BiasVoltage={ont_bias}\"",
-        f"##PACBIO_SEQ=\"Instrument={pacbio_instrument};SMRTCellType={pacbio_smrtcell};ZMWDensity={pacbio_zmwdensity}\"",
-        f"##IONTORRENT_SEQ=\"Instrument={iontorrent_instrument};ChipType={iontorrent_chip};pHCalibration={iontorrent_ph};FlowOrder={iontorrent_floworder};IonSphereMetrics={iontorrent_ionsphere}\"",
-        f"##PLATFORM_INDEPENDENT=\"Pooling={pooling};SequencingKit={sequencing_kit};BaseCallingAlg={base_calling};Q30={q30};NormalizedCoverage={normalized_cov};RunSpecificCalibration={run_calibration}\"",
-        f"##BIOINFO_ALIGNMENT=\"Software={align_software};Params={align_params};RefGenomeVers={align_refvers};RecalibrationSettings={recalibration}\"",
-        f"##BIOINFO_VARIANT_CALLING=\"Tool={variant_tool};Version={variant_version};FilteringThresholds={filtering_thresholds};DuplicateHandling={duplicate_handling};MQ={mq}\"",
-        f"##BIOINFO_POSTPROC=\"Normalization={normalization};Harmonization={harmonization}\"",
-        f"##SAMPLE_GROUP=\"LabName={lab_name};LabMail={lab_mail};LabPhone={lab_phone};SampleCount={sample_count};InclusionCriteria={inclusion}\"",
-    ]
-    
+    metadata_entries = OrderedDict(
+        [
+            ("ID", sample_group_id),
+            ("Description", sample_description),
+            ("Reference_Genome_Build", ref_build),
+            ("Genome_Size", genome_size),
+            ("Genome_Ploidy", ploidy),
+            ("Genome_GC_Content", gc_content),
+            ("Tissue", tissue),
+            ("Collection_Method", collection_method),
+            ("Storage_Conditions", storage_cond),
+            ("Time_Stored", time_stored),
+            ("Material_Type", material_type),
+            ("Integrity_Number", integrity_number),
+            ("Library_Kit", lib_kit),
+            ("Library_Fragmentation", fragmentation),
+            ("Adapter_Ligation_Efficiency", adapter_efficiency),
+            ("PCR_Cycles", pcr_cycles),
+            ("A260_A280", a260_a280),
+            ("A260_A230", a260_a230),
+            ("Nucleic_Acid_Concentration", na_concentration),
+            ("Illumina_Instrument", illumina_instrument),
+            ("Illumina_FlowCell", illumina_flowcell),
+            ("Illumina_Channel_Method", illumina_channel),
+            ("Illumina_Cluster_Density", illumina_cluster),
+            ("Illumina_QC_Software", illumina_qc),
+            ("ONT_Instrument", ont_instrument),
+            ("ONT_FlowCell_Version", ont_flowcell_version),
+            ("ONT_Pore_Type", ont_pore),
+            ("ONT_Bias_Voltage", ont_bias),
+            ("PacBio_Instrument", pacbio_instrument),
+            ("PacBio_SMRT_Cell_Type", pacbio_smrtcell),
+            ("PacBio_ZMW_Density", pacbio_zmwdensity),
+            ("IonTorrent_Instrument", iontorrent_instrument),
+            ("IonTorrent_Chip_Type", iontorrent_chip),
+            ("IonTorrent_pH_Calibration", iontorrent_ph),
+            ("IonTorrent_Flow_Order", iontorrent_floworder),
+            ("IonTorrent_IonSphere_Metrics", iontorrent_ionsphere),
+            ("Pooling", pooling),
+            ("Sequencing_Kit", sequencing_kit),
+            ("Base_Calling_Alg", base_calling),
+            ("Q30", q30),
+            ("Normalized_Coverage", normalized_cov),
+            ("Run_Specific_Calibration", run_calibration),
+            ("Alignment_Software", align_software),
+            ("Alignment_Params", align_params),
+            ("Alignment_Ref_Genome_Vers", align_refvers),
+            ("Recalibration_Settings", recalibration),
+            ("Variant_Tool", variant_tool),
+            ("Variant_Version", variant_version),
+            ("Filtering_Thresholds", filtering_thresholds),
+            ("Duplicate_Handling", duplicate_handling),
+            ("Mapping_Quality", mq),
+            ("Normalization", normalization),
+            ("Harmonization", harmonization),
+            ("Source_Lab", lab_name),
+            ("Contact_Email", lab_mail),
+            ("Contact_Phone", lab_phone),
+            ("Total_Samples", sample_count),
+            ("Inclusion_Criteria", inclusion),
+        ]
+    )
+
+    metadata_line = build_sample_metadata_line(metadata_entries)
+
     with open("final_metadata.txt", "w") as mf:
-        for line in metadata_lines:
-            mf.write(line + "\n")
-    
+        mf.write(metadata_line + "\n")
+
     print("Metadata has been successfully saved to final_metadata.txt")
     sys.exit(0)
 
 
 def generate_template():
-    template = """##REFERENCE_GENOME_BUILD=
-##GENOME_COMPLEXITY="Size=;Ploidy=;GC="
-##SAMPLE_ORIGIN="Tissue=;CollectionMethod=;StorageConditions=;TimeStored="
-##MATERIAL_TYPE="Type=DNA/RNA/cDNA;IntegrityNumber="
-##LIBRARY_CONSTRUCTION="Kit=;Fragmentation=;AdapterLigationEfficiency=;PCRCycles="
-##INPUT_QUALITY="A260_A280=;A260_A230=;NucleicAcidConcentration="
-##ILLUMINA_SEQ="Instrument=;FlowCell=;ChannelMethod=;ClusterDensity=;QCSoftware="
-##ONT_SEQ="Instrument=;FlowCellVersion=;PoreType=;BiasVoltage="
-##PACBIO_SEQ="Instrument=;SMRTCellType=;ZMWDensity="
-##IONTORRENT_SEQ="Instrument=;ChipType=;pHCalibration=;FlowOrder=;IonSphereMetrics="
-##PLATFORM_INDEPENDENT="Pooling=;SequencingKit=;BaseCallingAlg=;Q30=;NormalizedCoverage=;RunSpecificCalibration="
-##BIOINFO_ALIGNMENT="Software=;Params=;RefGenomeVers=;RecalibrationSettings="
-##BIOINFO_VARIANT_CALLING="Tool=;Version=;FilteringThresholds=;DuplicateHandling=;MQ="
-##BIOINFO_POSTPROC="Normalization=;Harmonization="
-##SAMPLE_GROUP="LabName=;LabMail=;LabPhone=;SampleCount=;InclusionCriteria="
-"""
+    template_entries = OrderedDict(
+        [
+            ("ID", "SampleGroupName"),
+            ("Description", "Brief description of the cohort"),
+            ("Reference_Genome_Build", "GRCh38"),
+            ("Genome_Size", "3.2Gb"),
+            ("Genome_Ploidy", "2"),
+            ("Genome_GC_Content", "40%"),
+            ("Tissue", "Blood"),
+            ("Collection_Method", "EDTA"),
+            ("Storage_Conditions", "-80C"),
+            ("Time_Stored", "30"),
+            ("Material_Type", "DNA"),
+            ("Integrity_Number", "9.5"),
+            ("Library_Kit", "Illumina TruSeq"),
+            ("Library_Fragmentation", "Mechanical"),
+            ("Adapter_Ligation_Efficiency", "High"),
+            ("PCR_Cycles", "12"),
+            ("A260_A280", "1.8"),
+            ("A260_A230", "2.0"),
+            ("Nucleic_Acid_Concentration", "50"),
+            ("Illumina_Instrument", "NovaSeq 6000"),
+            ("Illumina_FlowCell", "S4"),
+            ("Illumina_Channel_Method", "Dual"),
+            ("Illumina_Cluster_Density", "250K/mm2"),
+            ("Illumina_QC_Software", "BaseSpace"),
+            ("ONT_Instrument", "MinION"),
+            ("ONT_FlowCell_Version", "R9.4"),
+            ("ONT_Pore_Type", "R9"),
+            ("ONT_Bias_Voltage", "180mV"),
+            ("PacBio_Instrument", "Sequel II"),
+            ("PacBio_SMRT_Cell_Type", "8M"),
+            ("PacBio_ZMW_Density", "50%"),
+            ("IonTorrent_Instrument", "S5"),
+            ("IonTorrent_Chip_Type", "530"),
+            ("IonTorrent_pH_Calibration", "Standard"),
+            ("IonTorrent_Flow_Order", "TACG"),
+            ("IonTorrent_IonSphere_Metrics", "Pass"),
+            ("Pooling", "Multiplex"),
+            ("Sequencing_Kit", "Universal"),
+            ("Base_Calling_Alg", "Guppy"),
+            ("Q30", "85%"),
+            ("Normalized_Coverage", "30X"),
+            ("Run_Specific_Calibration", "Complete"),
+            ("Alignment_Software", "BWA"),
+            ("Alignment_Params", "-t 8"),
+            ("Alignment_Ref_Genome_Vers", "GRCh38"),
+            ("Recalibration_Settings", "Default"),
+            ("Variant_Tool", "GATK"),
+            ("Variant_Version", "4.2"),
+            ("Filtering_Thresholds", "QD<2.0"),
+            ("Duplicate_Handling", "MarkDuplicates"),
+            ("Mapping_Quality", "60"),
+            ("Normalization", "LeftAlign"),
+            ("Harmonization", "VEP"),
+            ("Source_Lab", "Genomics Lab"),
+            ("Contact_Email", "contact@genomicslab.org"),
+            ("Contact_Phone", "+1234567890"),
+            ("Total_Samples", "100"),
+            ("Inclusion_Criteria", "Age>18"),
+        ]
+    )
+
+    template_line = build_sample_metadata_line(template_entries)
+
     with open("final_metadata_template.txt", "w") as tf:
-        tf.write(template)
+        tf.write(template_line + "\n")
     print("Template final_metadata_template.txt created. Please fill it and rerun the script.")
     sys.exit(0)
+
+
+def normalize_vcf_version(version_value):
+    """Extract the numeric portion of the VCF version if present."""
+    if not version_value:
+        return version_value
+    match = re.search(r"(\d+\.\d+)", version_value)
+    if match:
+        return match.group(1)
+    return version_value.strip()
+
+
+def find_first_vcf_with_header(input_dir, verbose=False):
+    """Locate the first readable VCF file and return its header metadata."""
+    candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
+    for file_path in candidates:
+        try:
+            reader = vcfpy.Reader.from_path(file_path)
+        except Exception as e:
+            handle_non_critical_error(
+                f"Unable to open {file_path} for auto-detection: {str(e)}. Trying next file.",
+            )
+            continue
+
+        header = reader.header
+        fileformat = None
+        reference = None
+        for line in header.lines:
+            if line.key == "fileformat" and fileformat is None:
+                fileformat = line.value
+            elif line.key == "reference" and reference is None:
+                reference = line.value
+            if fileformat and reference:
+                break
+
+        if fileformat and reference:
+            log_message(
+                f"Auto-detection using {file_path}: fileformat={fileformat}, reference={reference}",
+                verbose,
+            )
+            return file_path, fileformat, reference
+
+        handle_non_critical_error(
+            f"Required metadata missing in {file_path} during auto-detection. Trying next file.",
+        )
+
+    return None, None, None
 
 
 def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
@@ -266,8 +437,14 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
         if line.key == "fileformat":
             fileformat = line.value
             break
-    if fileformat is None or not fileformat.endswith(vcf_version):
-        handle_non_critical_error(f"VCF version mismatch in {file_path}. Expected: {vcf_version}, Found: {fileformat}. Skipping.")
+
+    expected_version = normalize_vcf_version(vcf_version)
+    actual_version = normalize_vcf_version(fileformat)
+
+    if fileformat is None or expected_version != actual_version:
+        handle_non_critical_error(
+            f"VCF version mismatch in {file_path}. Expected: {vcf_version}, Found: {fileformat}. Skipping.",
+        )
         return False
 
     ref = None
@@ -340,28 +517,47 @@ def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
         return
 
     log_message("Appending final metadata to merged VCF header.", verbose)
-    metadata_lines = []
+    metadata_line = None
     with open(metadata_file, "r") as mf:
         for line in mf:
-            line = line.strip()
-            if line.startswith("##"):
-                try:
-                    key, value = line[2:].split("=", 1)
-                    metadata_lines.append((key, value))
-                except ValueError:
-                    continue
+            stripped = line.strip()
+            if stripped.startswith("##SAMPLE="):
+                metadata_line = stripped
+                break
 
-    reader = vcfpy.Reader.from_path(merged_vcf)
-    header = reader.header.copy()
-    for key, value in metadata_lines:
-        header.lines.append(CustomMetaHeaderLine(key, value))
+    if metadata_line is None:
+        log_message(
+            "final_metadata.txt does not contain a ##SAMPLE line. Skipping metadata append.",
+            verbose,
+        )
+        return
 
-    tmp_merged = merged_vcf + ".tmp"
-    writer = vcfpy.Writer.from_path(tmp_merged, header)
-    for record in reader:
-        writer.write_record(record)
-    writer.close()
-    shutil.move(tmp_merged, merged_vcf)
+    if "<" not in metadata_line or not metadata_line.endswith(">"):
+        log_message(
+            "Malformed ##SAMPLE metadata detected; expected angle bracket encapsulation.",
+            verbose,
+        )
+        return
+
+    with open(merged_vcf, "r") as vf:
+        merged_lines = vf.readlines()
+
+    filtered_lines = [line for line in merged_lines if not line.startswith("##SAMPLE=")]
+
+    insertion_index = next(
+        (idx for idx, line in enumerate(filtered_lines) if line.startswith("#CHROM")),
+        len(filtered_lines),
+    )
+
+    formatted_metadata_line = metadata_line
+    if not formatted_metadata_line.endswith("\n"):
+        formatted_metadata_line += "\n"
+
+    filtered_lines.insert(insertion_index, formatted_metadata_line)
+
+    with open(merged_vcf, "w") as vf:
+        vf.writelines(filtered_lines)
+
     log_message("Metadata appended successfully.", verbose)
 
 def preprocess_vcf(file_path):
@@ -460,8 +656,44 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
     log_message("Output directory: " + output_dir, verbose)
 
-    ref_genome = "1000GenomesPilot-NCBI36"#input("Enter the reference genome build (e.g., GRCh38): ").strip()
-    vcf_version = "4.0" #input("Enter the expected VCF version (e.g., 4.2): ").strip()
+    ref_genome = ""
+    vcf_version = ""
+
+    auto_choice = input(
+        "Would you like to auto-detect the reference genome and VCF version from the first VCF header? (Y/N): "
+    ).strip().upper()
+
+    if auto_choice == "Y":
+        detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(input_dir, verbose)
+        if detected_file and detected_fileformat and detected_reference:
+            detected_version = normalize_vcf_version(detected_fileformat)
+            print("Auto-detected values:")
+            print(f"  Source file: {detected_file}")
+            print(f"  Reference genome: {detected_reference}")
+            print(f"  VCF fileformat: {detected_fileformat} (version {detected_version})")
+            confirm = input("Use these detected values? (Y/N): ").strip().upper()
+            if confirm == "Y":
+                ref_genome = detected_reference
+                vcf_version = detected_version
+            else:
+                print("Proceeding with manual entry.")
+        else:
+            print("Auto-detection was unable to determine both reference and fileformat. Proceeding with manual entry.")
+
+    while not ref_genome:
+        user_input = input("Enter the reference genome build (e.g., GRCh38): ").strip()
+        if user_input:
+            ref_genome = user_input
+        else:
+            print("Reference genome build cannot be empty.")
+
+    while not vcf_version:
+        user_input = input("Enter the expected VCF version (e.g., 4.2): ").strip()
+        if user_input:
+            vcf_version = normalize_vcf_version(user_input)
+        else:
+            print("VCF version cannot be empty.")
+
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 
     choice = input("Do you want to (I)nput metadata interactively, (T)emplate file, or (S)kip metadata? [I/T/S]: ").strip().upper()

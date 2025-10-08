@@ -482,25 +482,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
                     metadata, file_path, organization_profile
                 )
 
-                for record in vcf_in.fetch():
-                    info_instance = self._create_info_instance(record.info)
-                    format_instance, format_sample = self._create_format_instance(
-                        record.samples
-                    )
-
-                    self._create_allele_frequency(
-                        sample_group,
-                        chrom=record.chrom,
-                        pos=record.pos,
-                        variant_id=record.id,
-                        ref=record.ref,
-                        alt=self._serialize_alt(record.alts),
-                        qual=record.qual,
-                        filter_value=self._serialize_filter(record.filter),
-                        info=info_instance,
-                        format_instance=format_instance,
-                        format_sample=format_sample,
-                    )
+                self._populate_sample_group_from_pysam(vcf_in, sample_group)
         except (OSError, ValueError) as exc:  # pragma: no cover - defensive fallback
             messages.warning(
                 self.request,
@@ -516,6 +498,29 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
         assert sample_group is not None
         return sample_group
+
+    def _populate_sample_group_from_pysam(
+        self, vcf_in: pysam.VariantFile, sample_group: SampleGroup
+    ) -> None:
+        for record in vcf_in.fetch():
+            info_instance = self._create_info_instance(record.info)
+            format_instance, format_sample = self._create_format_instance(record.samples)
+
+            self._create_allele_frequency(
+                sample_group,
+                chrom=record.chrom,
+                pos=record.pos,
+                variant_id=record.id,
+                ref=record.ref,
+                alt=self._serialize_alt(record.alts),
+                qual=record.qual,
+                filter_value=self._serialize_filter(record.filter),
+                info=info_instance,
+                format_instance=format_instance,
+                format_sample=format_sample,
+            )
+
+        return None
 
     def _create_sample_group(
         self,

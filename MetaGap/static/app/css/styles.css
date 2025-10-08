@@ -14,13 +14,13 @@ body {
 }
 
 .navbar .navbar-brand {
-        color: var(--bs-body-color);
+        color: var(--color-primary-contrast);
         font-weight: 600;
 }
 
 .navbar .navbar-brand:hover,
 .navbar .navbar-brand:focus {
-        color: var(--color-primary);
+        color: var(--color-primary-contrast);
 }
 
 a {

@@ -562,6 +562,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
         for key, value in info_dict.items():
             normalized = key.lower()
+            mapped_field = self.INFO_FIELD_MAP.get(normalized)
+            if mapped_field:
+                structured[mapped_field] = self._stringify(value)
+            else:
+                additional[normalized] = self._stringify(value)
             target = (
                 structured if normalized in self.INFO_FIELD_MAP else additional
             )
@@ -588,6 +593,10 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 serialized = self._serialize_genotype(sample_data, key)
             else:
                 serialized = self._stringify(sample_data[key])
+
+            mapped_field = self.FORMAT_FIELD_MAP.get(normalized)
+            if mapped_field:
+                structured[mapped_field] = serialized
             if normalized in self.FORMAT_FIELD_MAP:
                 structured[normalized] = serialized
             else:

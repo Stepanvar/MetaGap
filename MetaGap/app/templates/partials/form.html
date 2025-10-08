@@ -1,0 +1,112 @@
+{# app/templates/partials/form.html #}
+{% load i18n %}
+<div class="{{ wrapper_class|default:'mt-4' }}">
+  {% if form_title %}
+    <h2 class="{{ form_title_class|default:'mb-4' }}">{{ form_title }}</h2>
+  {% endif %}
+  <form
+    {% if form_id %}id="{{ form_id }}"{% endif %}
+    method="{{ form_method|default:'post' }}"
+    action="{{ form_action|default:'' }}"
+    {% if form_enctype %}
+      enctype="{{ form_enctype }}"
+    {% elif form.is_multipart %}
+      enctype="multipart/form-data"
+    {% endif %}
+    {% if form_novalidate|default:True %}novalidate{% endif %}
+    {% if form_class %}class="{{ form_class }}"{% endif %}
+    {% if form_attrs %}
+      {% for attr_name, attr_value in form_attrs.items %}
+        {{ attr_name }}="{{ attr_value }}"
+      {% endfor %}
+    {% endif %}
+  >
+    {% if form_method|default:'post'|lower != 'get' %}
+      {% csrf_token %}
+    {% endif %}
+    {{ form.media }}
+    {% for hidden_field in form.hidden_fields %}
+      {{ hidden_field }}
+    {% endfor %}
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {% for error in form.non_field_errors %}
+          <div>{{ error }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% for field in form.visible_fields %}
+      {% with widget=field.field.widget widget_class_name=field.field.widget.attrs.data_widget_class_name|default:'' %}
+        {% if widget.input_type == 'checkbox' or widget_class_name == 'CheckboxInput' %}
+          <div class="form-check mb-3">
+            {{ field }}
+            {% if field.label %}
+              <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {% endif %}
+            {% if field.help_text %}
+              <div id="{{ field.auto_id }}_help" class="form-text">{{ field.help_text }}</div>
+            {% endif %}
+            {% for error in field.errors %}
+              <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% elif widget_class_name == 'CheckboxSelectMultiple' %}
+          <fieldset class="mb-3">
+            <legend class="form-label">{{ field.label }}</legend>
+            {{ field }}
+            {% if field.help_text %}
+              <div id="{{ field.auto_id }}_help" class="form-text">{{ field.help_text }}</div>
+            {% endif %}
+            {% for error in field.errors %}
+              <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+          </fieldset>
+        {% else %}
+            <div class="mb-3">
+              {% if field.label %}
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {% endif %}
+              {{ field }}
+            {% if field.help_text %}
+              <div id="{{ field.auto_id }}_help" class="form-text">{{ field.help_text }}</div>
+            {% endif %}
+            {% for error in field.errors %}
+              <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+    {% endfor %}
+    {% with resolved_submit_label=submit_button_label|default:'Submit' %}
+      {% if not hide_submit_button|default:False or extra_actions or extra_actions_html %}
+        <div class="d-flex flex-wrap gap-2">
+          {% if not hide_submit_button|default:False %}
+            <button type="{{ submit_button_type|default:'submit' }}" class="{{ submit_button_class|default:'btn btn-primary' }}">
+              {{ resolved_submit_label }}
+            </button>
+          {% endif %}
+        {% if extra_actions %}
+          {% for action in extra_actions %}
+            {% if action.url %}
+              <a href="{{ action.url }}" class="{{ action.class|default:'btn btn-outline-secondary' }}"
+                 {% if action.attrs %}{% for attr_name, attr_value in action.attrs.items %} {{ attr_name }}="{{ attr_value }}"{% endfor %}{% endif %}>
+                {{ action.label|default:action.text|default:action }}
+              </a>
+            {% elif action.html %}
+              {{ action.html|safe }}
+            {% else %}
+              <button type="{{ action.type|default:'button' }}" class="{{ action.class|default:'btn btn-outline-secondary' }}"
+                      {% if action.attrs %}{% for attr_name, attr_value in action.attrs.items %} {{ attr_name }}="{{ attr_value }}"{% endfor %}{% endif %}>
+                {{ action.label|default:action.text|default:action }}
+              </button>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        {% if extra_actions_html %}
+          {{ extra_actions_html|safe }}
+        {% endif %}
+        </div>
+      {% endif %}
+    {% endwith %}
+  </form>
+</div>

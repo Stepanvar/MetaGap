@@ -7,6 +7,7 @@
 {% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Import Data</h2>
-{% include 'form_template.html' with form=form %}
+<div class="container mt-5">
+        {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' extra_actions=form_extra_actions|default:'' %}
+</div>
 {% endblock %}

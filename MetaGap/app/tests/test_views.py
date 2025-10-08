@@ -2,16 +2,157 @@
 
 from __future__ import annotations
 
+import csv
+import io
+
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
 from ..filters import SampleGroupFilter
 from ..forms import ImportDataForm, SearchForm
-from ..models import AlleleFrequency, SampleGroup, SampleOrigin
+from ..models import (
+    AlleleFrequency,
+    BioinfoAlignment,
+    BioinfoPostProc,
+    BioinfoVariantCalling,
+    Format,
+    GenomeComplexity,
+    IlluminaSeq,
+    Info,
+    InputQuality,
+    IonTorrentSeq,
+    LibraryConstruction,
+    MaterialType,
+    OntSeq,
+    PacBioSeq,
+    PlatformIndependent,
+    ReferenceGenomeBuild,
+    SampleGroup,
+    SampleOrigin,
+)
 from ..views import EditProfileView
+
+
+class SampleGroupTestDataMixin:
+    """Utility helpers for constructing richly populated sample groups."""
+
+    def create_sample_group_with_variant(self, owner):
+        reference = ReferenceGenomeBuild.objects.create(
+            build_name="GRCh38",
+            build_version="v1",
+        )
+        genome_complexity = GenomeComplexity.objects.create(
+            size="3.2Gb",
+            ploidy="Diploid",
+            gc_content="41%",
+        )
+        sample_origin = SampleOrigin.objects.create(
+            tissue="Lung",
+            collection_method="Biopsy",
+            storage_conditions="-80C",
+        )
+        material_type = MaterialType.objects.create(
+            material_type="DNA",
+            integrity_number="9.8",
+        )
+        library_construction = LibraryConstruction.objects.create(
+            kit="MetaPrep",
+            fragmentation="Acoustic",
+            adapter_ligation_efficiency="95%",
+        )
+        platform_independent = PlatformIndependent.objects.create(
+            instrument="NovaSeq",
+            pooling="Single",
+            sequencing_kit="v3 Chemistry",
+        )
+        illumina_seq = IlluminaSeq.objects.create(
+            instrument="NovaSeq 6000",
+            flow_cell="S4",
+        )
+        ont_seq = OntSeq.objects.create(
+            instrument="PromethION",
+            flow_cell_version="R10.4",
+        )
+        pacbio_seq = PacBioSeq.objects.create(
+            instrument="Sequel II",
+            smrt_cell_type="8M",
+        )
+        iontorrent_seq = IonTorrentSeq.objects.create(
+            instrument="Ion S5",
+            chip_type="530",
+        )
+        bioinfo_alignment = BioinfoAlignment.objects.create(
+            tool="BWA",
+            ref_genome_version="GRCh38",
+        )
+        bioinfo_variant_calling = BioinfoVariantCalling.objects.create(
+            tool="GATK",
+            version="4.2",
+        )
+        bioinfo_post_proc = BioinfoPostProc.objects.create(
+            normalization="bcftools",
+        )
+        input_quality = InputQuality.objects.create(
+            a260_a280=1.8,
+            dna_concentration=15.2,
+        )
+
+        sample_group = SampleGroup.objects.create(
+            name="Detail Cohort",
+            created_by=owner.organization_profile,
+            doi="10.1000/detail-cohort",
+            source_lab="MetaLab",
+            contact_email="lab@example.com",
+            contact_phone="123-456-7890",
+            total_samples=5,
+            inclusion_criteria="Adults",
+            exclusion_criteria="Under 18",
+            comments="Rich metadata snapshot",
+            reference_genome_build=reference,
+            genome_complexity=genome_complexity,
+            sample_origin=sample_origin,
+            material_type=material_type,
+            library_construction=library_construction,
+            platform_independent=platform_independent,
+            illumina_seq=illumina_seq,
+            ont_seq=ont_seq,
+            pacbio_seq=pacbio_seq,
+            iontorrent_seq=iontorrent_seq,
+            bioinfo_alignment=bioinfo_alignment,
+            bioinfo_variant_calling=bioinfo_variant_calling,
+            bioinfo_post_proc=bioinfo_post_proc,
+            input_quality=input_quality,
+        )
+
+        info = Info.objects.create(
+            af="0.5",
+            additional={"clinvar_significance": "Pathogenic"},
+        )
+        fmt = Format.objects.create(
+            genotype="0/1",
+            payload={
+                "fields": {"gq": "99"},
+                "additional": {"sample_id": "Sample001"},
+            },
+        )
+
+        allele = AlleleFrequency.objects.create(
+            sample_group=sample_group,
+            chrom="1",
+            pos=123456,
+            variant_id="rsDetail1",
+            ref="A",
+            alt="T",
+            qual=42.0,
+            filter="PASS",
+            info=info,
+            format=fmt,
+        )
+
+        return sample_group, allele
 
 
 class HomePageViewTests(TestCase):
@@ -349,6 +490,168 @@ class DashboardViewTests(TestCase):
                 ).order_by("-pk")[:6]
             ),
         )
+
+
+class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
+    """Exercise the sample group detail view and its access controls."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+        self.owner = User.objects.create_user(
+            username="detail_owner",
+            password="detail-pass",
+            email="owner@example.com",
+        )
+        self.other_user = User.objects.create_user(
+            username="detail_other",
+            password="detail-pass",
+            email="other@example.com",
+        )
+        self.sample_group, self.allele = self.create_sample_group_with_variant(self.owner)
+
+    def detail_url(self) -> str:
+        for name in (
+            "sample_group_detail",
+            "profile_sample_group_detail",
+            "sample-group-detail",
+        ):
+            try:
+                return reverse(name, args=[self.sample_group.pk])
+            except NoReverseMatch:
+                continue
+        self.fail("Sample group detail route is not configured")
+
+    def test_owner_can_view_detail(self) -> None:
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self.detail_url())
+
+        self.assertEqual(response.status_code, 200)
+        context_object = response.context.get("sample_group") or response.context.get(
+            "object"
+        )
+        self.assertEqual(context_object, self.sample_group)
+
+    def test_forbids_access_for_non_owner(self) -> None:
+        self.client.force_login(self.other_user)
+
+        response = self.client.get(self.detail_url())
+
+        self.assertIn(response.status_code, {403, 404})
+
+    def test_metadata_sections_and_variant_table_present(self) -> None:
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self.detail_url())
+
+        metadata_sections = response.context.get("metadata_sections")
+        if metadata_sections is None:
+            metadata_sections = response.context.get("metadata")
+        self.assertIsNotNone(metadata_sections)
+
+        if isinstance(metadata_sections, dict):
+            sections = metadata_sections.values()
+        else:
+            sections = metadata_sections
+
+        metadata_values = {
+            str(value)
+            for section in sections
+            if isinstance(section, dict)
+            for value in section.values()
+            if value not in (None, "", [])
+        }
+
+        for expected_value in {
+            self.sample_group.name,
+            self.sample_group.source_lab,
+            self.sample_group.contact_email,
+            self.sample_group.reference_genome_build.build_name,
+            self.sample_group.genome_complexity.size,
+        }:
+            self.assertIn(expected_value, metadata_values)
+
+        variant_table = response.context.get("variant_table")
+        if variant_table is None:
+            variant_table = response.context.get("table")
+        self.assertIsNotNone(variant_table)
+
+        table_html = variant_table.as_html(response.wsgi_request)
+        self.assertIn(self.allele.variant_id, table_html)
+        self.assertIn(str(self.allele.pos), table_html)
+        self.assertIn(self.allele.ref, table_html)
+        self.assertIn(self.allele.alt, table_html)
+
+
+class SampleGroupExportViewTests(SampleGroupTestDataMixin, TestCase):
+    """Validate CSV exports for sample groups and their access controls."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+        self.owner = User.objects.create_user(
+            username="export_owner",
+            password="export-pass",
+            email="export-owner@example.com",
+        )
+        self.other_user = User.objects.create_user(
+            username="export_other",
+            password="export-pass",
+            email="export-other@example.com",
+        )
+        self.sample_group, self.allele = self.create_sample_group_with_variant(self.owner)
+
+    def export_url(self) -> str:
+        for name in (
+            "sample_group_export",
+            "profile_sample_group_export",
+            "sample-group-export",
+        ):
+            try:
+                return reverse(name, args=[self.sample_group.pk])
+            except NoReverseMatch:
+                continue
+        self.fail("Sample group export route is not configured")
+
+    def test_owner_receives_csv_with_variant_rows(self) -> None:
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self.export_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+
+        content_stream = io.StringIO(response.content.decode())
+        reader = csv.DictReader(content_stream)
+        self.assertIsNotNone(reader.fieldnames)
+
+        normalized_headers = {header.lower() for header in reader.fieldnames}
+        for expected_header in {"chrom", "pos", "ref", "alt", "variant_id"}:
+            self.assertIn(expected_header, normalized_headers)
+
+        rows = list(reader)
+        self.assertEqual(len(rows), 1)
+
+        row = rows[0]
+        self.assertEqual(row.get("chrom") or row.get("Chrom"), self.allele.chrom)
+        self.assertEqual(row.get("pos") or row.get("Pos"), str(self.allele.pos))
+        self.assertEqual(row.get("ref") or row.get("Ref"), self.allele.ref)
+        self.assertEqual(row.get("alt") or row.get("Alt"), self.allele.alt)
+        self.assertEqual(
+            row.get("variant_id") or row.get("Variant_ID"), self.allele.variant_id
+        )
+
+        info_af = row.get("info_af") or row.get("info__af") or row.get("Info_AF")
+        self.assertEqual(info_af, str(self.allele.info.af))
+
+    def test_non_owner_cannot_export(self) -> None:
+        self.client.force_login(self.other_user)
+
+        response = self.client.get(self.export_url())
+
+        self.assertIn(response.status_code, {403, 404})
+
 
 class ImportDataViewTests(TestCase):
     """Validate the VCF import workflow end to end."""

@@ -649,9 +649,6 @@
     "fields": {
       "name": "Lung Tumor Cohort",
       "created_by": 1,
-      "tissue": "Non-small cell lung carcinoma",
-      "collection_method": "FFPE extraction",
-      "storage_conditions": "-80\u00b0C",
       "comments": "Clinical trial enrollment arm A",
       "reference_genome_build": 1,
       "genome_complexity": 1,
@@ -674,9 +671,6 @@
     "fields": {
       "name": "Rare Disease Trio",
       "created_by": 2,
-      "tissue": "Peripheral blood mononuclear cells",
-      "collection_method": "Fresh isolation",
-      "storage_conditions": "-196\u00b0C",
       "comments": "Linked to family RD-204",
       "reference_genome_build": 2,
       "genome_complexity": 2,
@@ -699,9 +693,6 @@
     "fields": {
       "name": "Microbiome Case Study",
       "created_by": 3,
-      "tissue": "Gut microbiome",
-      "collection_method": "Stool swab",
-      "storage_conditions": "Liquid nitrogen",
       "comments": "Metagenomic profiling for inflammatory markers",
       "reference_genome_build": 3,
       "genome_complexity": 3,
@@ -722,8 +713,8 @@
     "model": "app.sampleorigin",
     "pk": 1,
     "fields": {
-      "tissue": "Lung tissue",
-      "collection_method": "Surgical biopsy",
+      "tissue": "Non-small cell lung carcinoma",
+      "collection_method": "FFPE extraction",
       "storage_conditions": "-80\u00b0C",
       "time_stored": "4 months"
     }
@@ -732,9 +723,9 @@
     "model": "app.sampleorigin",
     "pk": 2,
     "fields": {
-      "tissue": "Whole blood",
-      "collection_method": "EDTA tube",
-      "storage_conditions": "-20\u00b0C",
+      "tissue": "Peripheral blood mononuclear cells",
+      "collection_method": "Fresh isolation",
+      "storage_conditions": "-196\u00b0C",
       "time_stored": "6 weeks"
     }
   },
@@ -743,7 +734,7 @@
     "pk": 3,
     "fields": {
       "tissue": "Gut microbiome",
-      "collection_method": "Swab collection",
+      "collection_method": "Stool swab",
       "storage_conditions": "Liquid nitrogen",
       "time_stored": "2 weeks"
     }

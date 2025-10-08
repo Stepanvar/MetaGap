@@ -482,27 +482,118 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
     return valid_vcfs
 
 
-def merge_vcfs(
-    valid_files,
-    output_dir,
-    verbose=False,
-    sample_header_line=None,
-    simple_header_lines=None,
-):
+def union_headers(valid_files):
+    """Return a merged header with combined metadata from *valid_files*."""
+
+    combined_header = None
+    info_ids = set()
+    format_ids = set()
+    filter_ids = set()
+    contig_ids = set()
+    sample_order = []
+    merged_sample_metadata = None
+
+    for file_path in valid_files:
+        preprocessed_file = preprocess_vcf(file_path)
+        reader = None
+        try:
+            reader = vcfpy.Reader.from_path(preprocessed_file)
+            header = reader.header
+
+            if combined_header is None:
+                combined_header = header.copy()
+                for line in combined_header.lines:
+                    if isinstance(line, vcfpy.header.InfoHeaderLine):
+                        info_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                        format_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                        filter_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                        contig_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                        mapping = OrderedDict(getattr(line, "mapping", {}))
+                        if mapping.get("ID"):
+                            merged_sample_metadata = OrderedDict(mapping)
+
+                if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+                    sample_order = list(combined_header.samples.names)
+                else:
+                    sample_order = []
+                continue
+
+            if hasattr(header, "samples") and hasattr(header.samples, "names"):
+                for sample_name in header.samples.names:
+                    if sample_name not in sample_order:
+                        sample_order.append(sample_name)
+
+            for line in header.lines:
+                if isinstance(line, vcfpy.header.InfoHeaderLine):
+                    if line.id not in info_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        info_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                    if line.id not in format_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        format_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                    if line.id not in filter_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        filter_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                    if line.id not in contig_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        contig_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                    mapping = OrderedDict(getattr(line, "mapping", {}))
+                    sample_id = mapping.get("ID")
+                    if not sample_id:
+                        continue
+                    if merged_sample_metadata is None:
+                        merged_sample_metadata = OrderedDict(mapping)
+                        continue
+                    for key, value in mapping.items():
+                        if key not in merged_sample_metadata or not merged_sample_metadata[key]:
+                            merged_sample_metadata[key] = value
+        except Exception as exc:
+            handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}")
+        finally:
+            if reader is not None:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+            if preprocessed_file != file_path and os.path.exists(preprocessed_file):
+                os.remove(preprocessed_file)
+
+    if combined_header is None:
+        handle_critical_error("Unable to construct a merged VCF header.")
+
+    if sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+        combined_header.samples.names = sample_order
+
+    if merged_sample_metadata:
+        serialized = build_sample_metadata_line(merged_sample_metadata)
+        parsed_mapping = _parse_sample_metadata_line(serialized)
+        sample_line = vcfpy.header.SampleHeaderLine.from_mapping(parsed_mapping)
+        combined_header.lines = [
+            line for line in combined_header.lines if getattr(line, "key", None) != "SAMPLE"
+        ]
+        combined_header.add_line(sample_line)
+
+    return combined_header
+
+
+def merge_vcfs(valid_files, output_dir, verbose=False):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     log_message("Merging VCF files...", verbose)
     try:
-        reader0 = vcfpy.Reader.from_path(valid_files[0])
-    except Exception as e:
-        handle_critical_error("Failed to open the first valid VCF: " + str(e))
-    header = reader0.header.copy()
-    header = apply_metadata_to_header(
-        header,
-        sample_header_line=sample_header_line,
-        simple_header_lines=simple_header_lines,
-        verbose=verbose,
-    )
+        header = union_headers(valid_files)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        handle_critical_error(f"Failed to construct merged header: {exc}")
 
     writer = vcfpy.Writer.from_path(merged_filename, header)
     for file_path in valid_files:

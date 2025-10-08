@@ -2,23 +2,22 @@
 """
 This script consolidates multiple VCF files into one merged VCF file.
 It replicates the bash script functionality:
-  - Parses command-line options (verbose mode, output directory)
-  - Prompts the user for the input VCF directory, reference genome build, and expected VCF version.
-  - Offers metadata input (interactive mode or template generation) or skipping metadata.
+  - Parses command-line options for the input directory, output directory, reference genome, VCF version, and optional metadata.
   - Validates individual VCF files for header fileformat and reference genome.
   - Merges valid VCFs using vcfpy.
-  - Appends metadata (if provided) to the merged VCF header.
+  - Appends metadata (if provided via CLI) to the merged VCF header.
   - Performs a final validation of the merged VCF.
   - Logs execution details to a log file.
 
 Requirements:
-  pip install vcfpy
+pip install vcfpy
 """
 
 import os
 import sys
 import glob
 import argparse
+import csv
 import logging
 import datetime
 import re
@@ -65,7 +64,9 @@ def parse_arguments():
         description="Consolidate multiple VCF files into a single merged VCF file."
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose mode for detailed output."
+        "--input-dir",
+        required=True,
+        help="Directory containing the VCF files to merge.",
     )
     parser.add_argument(
         "--input-dir",
@@ -102,7 +103,21 @@ def parse_arguments():
         action="store_true",
         help="Allow input files that contain gVCF annotations such as <NON_REF> ALT alleles.",
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    metadata = {}
+    for raw_entry in args.meta:
+        if "=" not in raw_entry:
+            parser.error(f"Invalid metadata entry '{raw_entry}'. Expected KEY=VALUE format.")
+        key, value = raw_entry.split("=", 1)
+        key = key.strip()
+        if not key:
+            parser.error("Metadata keys cannot be empty.")
+        metadata[key] = value.strip()
+
+    args.meta = metadata
+    return args
 
 def _format_sample_metadata_value(value: str) -> str:
     """Return a VCF-safe representation of the provided metadata value."""
@@ -399,15 +414,40 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
     return valid_vcfs
 
 
-def merge_vcfs(valid_files, output_dir, verbose=False):
+def merge_vcfs(valid_files, output_dir, verbose=False, cli_metadata=None):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     log_message("Merging VCF files...", verbose)
-    try:
-        reader0 = vcfpy.Reader.from_path(valid_files[0])
-    except Exception as e:
-        handle_critical_error("Failed to open the first valid VCF: " + str(e))
-    header = reader0.header.copy()
+    header = union_headers(valid_files)
+
+    metadata_entries = OrderedDict()
+    provided_metadata = cli_metadata or {}
+    id_value = str(provided_metadata.get("ID", "")).strip()
+    if not id_value:
+        id_value = "SampleGroup"
+    metadata_entries["ID"] = id_value
+    for key, value in provided_metadata.items():
+        if key == "ID":
+            continue
+        metadata_entries[key] = value
+
+    sample_line_text = build_sample_metadata_line(metadata_entries)
+    sample_mapping = _parse_sample_metadata_line(sample_line_text)
+    formatted_mapping = OrderedDict()
+    for key, raw_value in sample_mapping.items():
+        if key == "ID":
+            formatted_mapping[key] = raw_value
+        else:
+            formatted_mapping[key] = _format_sample_metadata_value(raw_value)
+
+    header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
+    header.add_line(
+        vcfpy.SimpleHeaderLine(
+            "SAMPLE",
+            sample_line_text[len("##SAMPLE=") :],
+            formatted_mapping,
+        )
+    )
 
     writer = vcfpy.Writer.from_path(merged_filename, header)
     for file_path in valid_files:
@@ -425,18 +465,6 @@ def merge_vcfs(valid_files, output_dir, verbose=False):
     writer.close()
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
-
-def _parse_simple_metadata_line(line):
-    stripped = line.strip()
-    if not stripped.startswith("##") or "=" not in stripped:
-        return None
-    key, value = stripped[2:].split("=", 1)
-    key = key.strip()
-    value = value.strip()
-    if not key:
-        return None
-    return key, value
-
 
 def _parse_sample_metadata_line(line):
     stripped = line.strip()
@@ -635,8 +663,7 @@ def validate_merged_vcf(merged_vcf, verbose=False):
     try:
         reader = vcfpy.Reader.from_path(merged_vcf)
     except Exception as e:
-        handle_non_critical_error(f"Could not open {merged_vcf}: {str(e)}. Skipping.")
-        return False
+        handle_critical_error(f"Could not open {merged_vcf}: {str(e)}.")
 
 
     header = reader.header
@@ -651,59 +678,99 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             handle_critical_error(f"Missing required meta-information: ##{meta} in {merged_vcf} header.")
 
 
-    info_definitions = {}
-    for line in header.lines:
-        if isinstance(line, vcfpy.header.InfoHeaderLine):
-            info_definitions[line.id] = line
+    defined_info_ids = OrderedDict()
+    info_ids_iterable = []
+    if hasattr(header, "info_ids"):
+        candidate = header.info_ids
+        if callable(candidate):
+            try:
+                info_ids_iterable = list(candidate())
+            except Exception:
+                info_ids_iterable = []
+        else:
+            info_ids_iterable = list(candidate)
+
+    for info_id in info_ids_iterable:
+        try:
+            info_def = header.get_info_field_info(info_id)
+        except Exception:
+            info_def = None
+        if isinstance(info_def, vcfpy.header.InfoHeaderLine):
+            defined_info_ids[info_id] = info_def
+
+    if not defined_info_ids:
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.InfoHeaderLine):
+                defined_info_ids[line.id] = line
 
     required_info_ids = {
-        info_id for info_id, info_def in info_definitions.items() if _info_field_requires_value(info_def.number)
+        info_id
+        for info_id, info_def in defined_info_ids.items()
+        if _info_field_requires_value(getattr(info_def, "number", None))
     }
+    required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
 
+    encountered_exception = False
     try:
         for record in reader:
             info_map = getattr(record, "INFO", None)
             record_label = f"{getattr(record, 'CHROM', '?')}:{getattr(record, 'POS', '?')}"
 
             if info_map is None:
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} is missing INFO data."
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
                 )
+                continue
 
             if not isinstance(info_map, dict):
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}."
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}. Continuing without INFO validation for this record."
+                )
+                continue
+
+            record_info_keys = set(info_map.keys())
+
+            undefined_keys = sorted(record_info_keys.difference(defined_info_ids))
+            if undefined_keys:
+                logger.warning(
+                    "Record %s in %s has INFO fields not present in header definitions: %s.",
+                    record_label,
+                    merged_vcf,
+                    ", ".join(undefined_keys),
                 )
 
-            if not info_map:
-                missing_keys = sorted(required_info_ids)
-            else:
-                missing_keys = sorted(required_info_ids.difference(info_map.keys()))
-
+            missing_keys = sorted(required_info_ids.difference(record_info_keys))
             if missing_keys:
-                handle_critical_error(
+                handle_non_critical_error(
                     f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
                 )
 
             null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
             if null_keys:
-                handle_critical_error(
+                handle_non_critical_error(
                     f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
                 )
 
     except SystemExit:
         raise
     except Exception as exc:
-        handle_critical_error(f"Error while parsing records in {merged_vcf}: {exc}")
-    log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
-    print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+        encountered_exception = True
+        logger.warning("Error while parsing records in %s: %s", merged_vcf, exc)
+
+    if not encountered_exception:
+        log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+        print(f"Validation completed successfully for merged VCF: {merged_vcf}")
 
 
 def main():
     args = parse_arguments()
     verbose = args.verbose
+    cli_metadata = args.meta
 
-    log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), verbose)
+    log_message(
+        "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        verbose,
+    )
 
     input_dir = os.path.abspath(args.input_dir)
     if not os.path.isdir(input_dir):

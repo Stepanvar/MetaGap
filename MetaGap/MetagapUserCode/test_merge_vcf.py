@@ -115,11 +115,6 @@ def parse_arguments():
         help="Directory containing the VCF files to merge.",
     )
     parser.add_argument(
-        "--input-dir",
-        required=True,
-        help="Directory containing VCF files that should be validated and merged.",
-    )
-    parser.add_argument(
         "-o",
         "--output-dir",
         "--output",
@@ -166,9 +161,10 @@ def parse_arguments():
         help="Add an arbitrary metadata header line (##key=value). The '##' prefix is optional.",
     )
     parser.add_argument(
-        "--allow-gvcf",
+        "-v",
+        "--verbose",
         action="store_true",
-        help="Allow processing of gVCF inputs that would otherwise be skipped.",
+        help="Enable verbose console logging in addition to the log file.",
     )
     return parser.parse_args()
 

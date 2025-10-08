@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -62,3 +64,31 @@ class ImportDataViewIntegrationTests(TestCase):
             alleles,
         )
         self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+
+    @mock.patch("app.views.pysam.VariantFile", side_effect=OSError("boom"))
+    def test_import_falls_back_to_text_parser(self, mocked_variant_file: mock.Mock) -> None:
+        """If pysam fails to open the VCF, the text fallback still imports data."""
+
+        self.client.login(username="vcf_user", password="import-pass")
+
+        upload = SimpleUploadedFile(
+            "import.vcf",
+            self.VCF_CONTENT.encode("utf-8"),
+            content_type="text/vcf",
+        )
+
+        response = self.client.post(reverse("import_data"), {"data_file": upload})
+
+        self.assertRedirects(response, reverse("profile"))
+        mocked_variant_file.assert_called()
+
+        sample_group = SampleGroup.objects.get(name="GroupA")
+        self.assertEqual(sample_group.comments, "Imported group")
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertEqual(allele.chrom, "1")
+        self.assertEqual(allele.pos, 1234)
+        self.assertEqual(allele.variant_id, "rsTest")
+        self.assertEqual(allele.info.af, "0.5")
+        self.assertEqual(allele.format.gt, "0/1")
+        self.assertEqual(allele.format.additional["sample_id"], "Sample001")

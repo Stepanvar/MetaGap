@@ -5,8 +5,8 @@
 {% block content %}
 <div class="container mt-5">
 	{% url 'login' as login_action %}
-	{% with form_title="Login" form_method="post" form_action=login_action submit_button_label="Log in" %}
-	{% include 'form_template.html' %}
-	{% endwith %}
+        {% with form_title="Login" form_method="post" form_action=login_action submit_button_label="Log in" extra_actions=form_extra_actions|default:'' %}
+        {% include 'partials/form.html' %}
+        {% endwith %}
 </div>
 {% endblock %}

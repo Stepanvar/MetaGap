@@ -4,22 +4,6 @@
 
 {% block content %}
 <div class="container mt-5">
-        <h2>Are you sure you want to delete your account?</h2>
-        <form method="post" novalidate>
-                {% csrf_token %}
-                <div class="form-check my-3">
-                        {{ form.confirm }}
-                        <label class="form-check-label" for="{{ form.confirm.id_for_label }}">{{ form.confirm.label }}</label>
-                        {% if form.confirm.errors %}
-                        <div class="invalid-feedback d-block">
-                                {% for error in form.confirm.errors %}
-                                {{ error }}
-                                {% endfor %}
-                        </div>
-                        {% endif %}
-                </div>
-                <button type="submit" class="btn btn-danger">Yes, Delete My Account</button>
-                <a href="{% url 'profile' %}" class="btn btn-secondary ms-2">Cancel</a>
-        </form>
+        {% include 'partials/form.html' with form=form form_title="Are you sure you want to delete your account?" submit_button_label="Yes, Delete My Account" submit_button_class="btn btn-danger" extra_actions=form_extra_actions form_novalidate=True wrapper_class='mt-4' %}
 </div>
 {% endblock %}

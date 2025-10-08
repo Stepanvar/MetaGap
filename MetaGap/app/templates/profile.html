@@ -12,7 +12,7 @@
         {% endif %}
         <hr>
         <h3>Import Data</h3>
-        {% include 'form_template.html' with form=import_form submit_button_label="Import" form_action=import_form_action form_enctype=import_form_enctype %}
+        {% include 'partials/form.html' with form=import_form submit_button_label="Import" form_action=import_form_action form_enctype=import_form_enctype extra_actions=form_extra_actions|default:'' %}
         <hr>
         <h3>Sample Groups</h3>
         {% if sample_groups %}

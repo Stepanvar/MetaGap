@@ -1,12 +1,11 @@
-<!-- app/templates/base.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	{% load static %}
-	{% load django_bootstrap5 %}
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{% block title %}MetaGaP{% endblock %}</title>
+        {% load static %}
+        {% load django_bootstrap5 %}
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{% block title %}MetaGaP{% endblock %}</title>
         <!-- MDB5 CSS -->
         <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.2.0/mdb.min.css"
               rel="stylesheet" />
@@ -17,17 +16,29 @@
               crossorigin="anonymous"
               referrerpolicy="no-referrer" />
         <!-- Custom CSS -->
-	<link rel="stylesheet" href="{% static 'app/css/styles.css' %}">
-	{% block extra_head %}{% endblock %}
+        <link rel="stylesheet" href="{% static 'app/css/styles.css' %}">
+        {% block extra_head %}{% endblock %}
 </head>
-<body>
-{% block body %}
-<!-- Content will be injected here -->
-{% endblock %}
-<!-- MDB5 JS -->
-<script type="text/javascript"
-        src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.2.0/mdb.min.js"></script>
-<!-- Custom JS -->
-{% block extra_scripts %}{% endblock %}
+<body class="d-flex flex-column min-vh-100 {% block body_class %}{% endblock %}">
+        {% block body %}
+        {% include 'partials/navbar.html' %}
+        <div class="app-shell pt-5 flex-grow-1">
+                {% block hero %}{% endblock %}
+                <div class="container py-4">
+                        {% block breadcrumbs %}
+                        {% include 'partials/breadcrumbs.html' %}
+                        {% endblock %}
+                        {% include 'partials/alerts.html' %}
+                        <main role="main" class="main-content">
+                                {% block content %}{% endblock %}
+                        </main>
+                </div>
+        </div>
+        {% include 'partials/footer.html' %}
+        {% endblock %}
+        <!-- MDB5 JS -->
+        <script type="text/javascript"
+                src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.2.0/mdb.min.js"></script>
+        {% block extra_scripts %}{% endblock %}
 </body>
 </html>

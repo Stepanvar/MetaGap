@@ -369,9 +369,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "total_samples": ["samples", "sample_count", "n_samples"],
             "inclusion_criteria": ["inclusion", "inclusioncriteria"],
             "exclusion_criteria": ["exclusion", "exclusioncriteria"],
-            "tissue": ["tissue_type"],
-            "collection_method": ["collection", "method"],
-            "storage_conditions": ["storage", "storage_conditions"],
             "comments": ["description", "notes"],
         },
         "input_quality": {
@@ -393,9 +390,23 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "gc_content": ["gc", "gc_percent"],
         },
         "sample_origin": {
-            "tissue": ["tissue_type"],
-            "collection_method": ["collection", "method"],
-            "storage_conditions": ["storage", "storage_conditions"],
+            "tissue": [
+                "tissue_type",
+                "sample_group_tissue",
+                "samplegroup_tissue",
+            ],
+            "collection_method": [
+                "collection",
+                "method",
+                "sample_group_collection_method",
+                "samplegroup_collection_method",
+            ],
+            "storage_conditions": [
+                "storage",
+                "storage_conditions",
+                "sample_group_storage_conditions",
+                "samplegroup_storage_conditions",
+            ],
             "time_stored": ["time", "storage_time"],
         },
         "material_type": {

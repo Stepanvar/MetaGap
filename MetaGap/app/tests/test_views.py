@@ -118,13 +118,11 @@ class SearchResultsViewTests(TestCase):
 
         self.kidney_group = SampleGroup.objects.create(
             name="Kidney Cohort",
-            tissue="Kidney",
             sample_origin=self.kidney_origin,
             created_by=self.user.organization_profile,
         )
         self.liver_group = SampleGroup.objects.create(
             name="Liver Cohort",
-            tissue="Liver",
             sample_origin=self.liver_origin,
             created_by=self.user.organization_profile,
         )
@@ -140,7 +138,7 @@ class SearchResultsViewTests(TestCase):
         sample_filter = response.context["filter"]
         self.assertIsInstance(sample_filter, SampleGroupFilter)
         self.assertEqual(sample_filter.data.get("query"), "Kidney")
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             sample_filter.qs,
             [self.kidney_group],
             transform=lambda group: group,
@@ -164,7 +162,7 @@ class SearchResultsViewTests(TestCase):
         sample_filter = response.context["filter"]
         self.assertIsInstance(sample_filter, SampleGroupFilter)
         self.assertEqual(sample_filter.data.get("query"), "")
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             sample_filter.qs.order_by("pk"),
             SampleGroup.objects.order_by("pk"),
             transform=lambda group: group,

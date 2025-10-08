@@ -1,10 +1,13 @@
-{% extends "layout.html" %}
+{% extends "base.html" %}
+
+{% block title %}About - MetaGaP{% endblock %}
+
+{% block breadcrumbs %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title='About' %}
+{% endblock %}
 
 {% block content %}
-
 <h2>{{ title }}.</h2>
 <h3>{{ message }}</h3>
-
 <p>Use this area to provide additional information.</p>
-
 {% endblock %}

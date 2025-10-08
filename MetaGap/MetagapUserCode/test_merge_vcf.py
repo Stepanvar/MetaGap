@@ -244,6 +244,53 @@ def generate_template():
     sys.exit(0)
 
 
+def normalize_vcf_version(version_value):
+    """Extract the numeric portion of the VCF version if present."""
+    if not version_value:
+        return version_value
+    match = re.search(r"(\d+\.\d+)", version_value)
+    if match:
+        return match.group(1)
+    return version_value.strip()
+
+
+def find_first_vcf_with_header(input_dir, verbose=False):
+    """Locate the first readable VCF file and return its header metadata."""
+    candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
+    for file_path in candidates:
+        try:
+            reader = vcfpy.Reader.from_path(file_path)
+        except Exception as e:
+            handle_non_critical_error(
+                f"Unable to open {file_path} for auto-detection: {str(e)}. Trying next file.",
+            )
+            continue
+
+        header = reader.header
+        fileformat = None
+        reference = None
+        for line in header.lines:
+            if line.key == "fileformat" and fileformat is None:
+                fileformat = line.value
+            elif line.key == "reference" and reference is None:
+                reference = line.value
+            if fileformat and reference:
+                break
+
+        if fileformat and reference:
+            log_message(
+                f"Auto-detection using {file_path}: fileformat={fileformat}, reference={reference}",
+                verbose,
+            )
+            return file_path, fileformat, reference
+
+        handle_non_critical_error(
+            f"Required metadata missing in {file_path} during auto-detection. Trying next file.",
+        )
+
+    return None, None, None
+
+
 def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
     log_message(f"Validating file: {file_path}", verbose)
     if not os.path.isfile(file_path):
@@ -266,8 +313,14 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False):
         if line.key == "fileformat":
             fileformat = line.value
             break
-    if fileformat is None or not fileformat.endswith(vcf_version):
-        handle_non_critical_error(f"VCF version mismatch in {file_path}. Expected: {vcf_version}, Found: {fileformat}. Skipping.")
+
+    expected_version = normalize_vcf_version(vcf_version)
+    actual_version = normalize_vcf_version(fileformat)
+
+    if fileformat is None or expected_version != actual_version:
+        handle_non_critical_error(
+            f"VCF version mismatch in {file_path}. Expected: {vcf_version}, Found: {fileformat}. Skipping.",
+        )
         return False
 
     ref = None
@@ -460,8 +513,44 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
     log_message("Output directory: " + output_dir, verbose)
 
-    ref_genome = "1000GenomesPilot-NCBI36"#input("Enter the reference genome build (e.g., GRCh38): ").strip()
-    vcf_version = "4.0" #input("Enter the expected VCF version (e.g., 4.2): ").strip()
+    ref_genome = ""
+    vcf_version = ""
+
+    auto_choice = input(
+        "Would you like to auto-detect the reference genome and VCF version from the first VCF header? (Y/N): "
+    ).strip().upper()
+
+    if auto_choice == "Y":
+        detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(input_dir, verbose)
+        if detected_file and detected_fileformat and detected_reference:
+            detected_version = normalize_vcf_version(detected_fileformat)
+            print("Auto-detected values:")
+            print(f"  Source file: {detected_file}")
+            print(f"  Reference genome: {detected_reference}")
+            print(f"  VCF fileformat: {detected_fileformat} (version {detected_version})")
+            confirm = input("Use these detected values? (Y/N): ").strip().upper()
+            if confirm == "Y":
+                ref_genome = detected_reference
+                vcf_version = detected_version
+            else:
+                print("Proceeding with manual entry.")
+        else:
+            print("Auto-detection was unable to determine both reference and fileformat. Proceeding with manual entry.")
+
+    while not ref_genome:
+        user_input = input("Enter the reference genome build (e.g., GRCh38): ").strip()
+        if user_input:
+            ref_genome = user_input
+        else:
+            print("Reference genome build cannot be empty.")
+
+    while not vcf_version:
+        user_input = input("Enter the expected VCF version (e.g., 4.2): ").strip()
+        if user_input:
+            vcf_version = normalize_vcf_version(user_input)
+        else:
+            print("VCF version cannot be empty.")
+
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 
     choice = input("Do you want to (I)nput metadata interactively, (T)emplate file, or (S)kip metadata? [I/T/S]: ").strip().upper()

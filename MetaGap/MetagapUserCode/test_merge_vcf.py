@@ -189,20 +189,22 @@ def prompt_metadata_interactive():
     iontorrent_floworder = prompt_input("Enter Ion Torrent Flow Order")
     iontorrent_ionsphere = prompt_input("Enter Ion Torrent IonSphere Metrics")
     
-    # 11. PLATFORM_INDEPENDENT (Pooling, SequencingKit, BaseCallingAlg, Q30, NormalizedCoverage, RunSpecificCalibration)
+    # 11. PLATFORM_INDEPENDENT (Instrument, Pooling, SequencingKit, BaseCallingAlg, Q30, NormalizedCoverage, RunSpecificCalibration)
+    platform_independent_instrument = prompt_input("Enter Platform-Independent Instrument")
     pooling = prompt_input("Enter Pooling Strategy")
     sequencing_kit = prompt_input("Enter Sequencing Kit")
     base_calling = prompt_input("Enter Base Calling Algorithm")
     q30 = prompt_input("Enter Q30")
     normalized_cov = prompt_input("Enter Normalized Coverage")
     run_calibration = prompt_input("Enter Run Specific Calibration")
-    
-    # 12. BIOINFO_ALIGNMENT (Software, Params, RefGenomeVers, RecalibrationSettings)
+
+    # 12. BIOINFO_ALIGNMENT (Tool, Software, Params, RefGenomeVers, RecalibrationSettings)
+    align_tool = prompt_input("Enter Alignment Tool")
     align_software = prompt_input("Enter Alignment Software")
     align_params = prompt_input("Enter Alignment Parameters")
     align_refvers = prompt_input("Enter Reference Genome Version for Alignment")
     recalibration = prompt_input("Enter Recalibration Settings")
-    
+
     # 13. BIOINFO_VARIANT_CALLING (Tool, Version, FilteringThresholds, DuplicateHandling, MQ)
     variant_tool = prompt_input("Enter Variant Calling Tool")
     variant_version = prompt_input("Enter Variant Calling Tool Version")
@@ -214,12 +216,13 @@ def prompt_metadata_interactive():
     normalization = prompt_input("Enter Post-Processing Normalization")
     harmonization = prompt_input("Enter Post-Processing Harmonization")
     
-    # 15. SAMPLE_GROUP (LabName, LabMail, LabPhone, SampleCount, InclusionCriteria)
+    # 15. SAMPLE_GROUP (LabName, LabMail, LabPhone, SampleCount, InclusionCriteria, ExclusionCriteria)
     lab_name = prompt_input("Enter Lab Name")
     lab_mail = prompt_input("Enter Lab Email")
     lab_phone = prompt_input("Enter Lab Phone")
     sample_count = prompt_input("Enter Sample Count", r"^[1-9][0-9]*$", "Sample Count must be a positive integer")
     inclusion = prompt_input("Enter Inclusion Criteria")
+    exclusion = prompt_input("Enter Exclusion Criteria")
     
     metadata_entries = OrderedDict(
         [

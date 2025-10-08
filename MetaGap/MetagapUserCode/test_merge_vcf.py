@@ -103,21 +103,23 @@ def parse_arguments():
         action="store_true",
         help="Allow input files that contain gVCF annotations such as <NON_REF> ALT alleles.",
     )
-
-    args = parser.parse_args()
-
-    metadata = {}
-    for raw_entry in args.meta:
-        if "=" not in raw_entry:
-            parser.error(f"Invalid metadata entry '{raw_entry}'. Expected KEY=VALUE format.")
-        key, value = raw_entry.split("=", 1)
-        key = key.strip()
-        if not key:
-            parser.error("Metadata keys cannot be empty.")
-        metadata[key] = value.strip()
-
-    args.meta = metadata
-    return args
+    parser.add_argument(
+        "--sample-metadata",
+        dest="sample_metadata_entries",
+        action="append",
+        metavar="KEY=VALUE",
+        default=[],
+        help="Add a key/value pair to the ##SAMPLE metadata line. Provide at least ID=... to emit the line.",
+    )
+    parser.add_argument(
+        "--header-metadata",
+        dest="header_metadata_lines",
+        action="append",
+        metavar="LINE",
+        default=[],
+        help="Add an arbitrary metadata header line (##key=value). The '##' prefix is optional.",
+    )
+    return parser.parse_args()
 
 def _format_sample_metadata_value(value: str) -> str:
     """Return a VCF-safe representation of the provided metadata value."""
@@ -151,27 +153,93 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
-def _parse_metadata_arguments(meta_args):
-    if not meta_args:
-        return None
+def parse_metadata_arguments(args, verbose=False):
+    """Return header metadata derived from CLI arguments."""
 
-    metadata_entries = OrderedDict()
-    for raw_entry in meta_args:
-        if "=" not in raw_entry:
-            raise ValueError(
-                f"Metadata entry '{raw_entry}' is invalid; expected KEY=VALUE formatting."
+    sample_entries = getattr(args, "sample_metadata_entries", None) or []
+    additional_lines = getattr(args, "header_metadata_lines", None) or []
+
+    sample_mapping = OrderedDict()
+    for raw_entry in sample_entries:
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            handle_critical_error(
+                f"Invalid sample metadata entry '{raw_entry}'. Expected KEY=VALUE format."
             )
-        key, value = raw_entry.split("=", 1)
+        key, value = entry.split("=", 1)
         key = key.strip()
         value = value.strip()
         if not key:
-            raise ValueError("Metadata keys must be non-empty.")
-        metadata_entries[key] = value
+            handle_critical_error("Sample metadata keys cannot be empty.")
+        sample_mapping[key] = value
 
-    if "ID" not in metadata_entries or not metadata_entries["ID"].strip():
-        raise ValueError("Metadata must include an ID entry when provided.")
+    sample_header_line = None
+    if sample_mapping:
+        try:
+            sample_line = build_sample_metadata_line(sample_mapping)
+        except ValueError as exc:
+            handle_critical_error(str(exc))
+        log_message(f"Using CLI sample metadata: {sample_line}", verbose)
+        sample_header_line = vcfpy.SampleHeaderLine.from_mapping(sample_mapping)
 
-    return metadata_entries
+    simple_header_lines = []
+    for raw_line in additional_lines:
+        normalized = raw_line.strip()
+        if not normalized:
+            continue
+        if not normalized.startswith("##"):
+            normalized = "##" + normalized
+        parsed = _parse_simple_metadata_line(normalized)
+        if not parsed:
+            handle_critical_error(
+                f"Additional metadata '{raw_line}' must be in '##key=value' format."
+            )
+        key, value = parsed
+        simple_header_lines.append(vcfpy.SimpleHeaderLine(key, value))
+
+    if simple_header_lines:
+        log_message(
+            "Using CLI header metadata lines: "
+            + ", ".join(f"##{line.key}={line.value}" for line in simple_header_lines),
+            verbose,
+        )
+
+    return sample_header_line, simple_header_lines
+
+
+def apply_metadata_to_header(
+    header, sample_header_line=None, simple_header_lines=None, verbose=False
+):
+    """Return ``header`` with CLI metadata applied."""
+
+    if sample_header_line is None and not simple_header_lines:
+        return header
+
+    simple_header_lines = simple_header_lines or []
+
+    if simple_header_lines:
+        existing_simple = {
+            (line.key, getattr(line, "value", None))
+            for line in header.lines
+            if isinstance(line, vcfpy.SimpleHeaderLine)
+        }
+        for simple_line in simple_header_lines:
+            identifier = (simple_line.key, simple_line.value)
+            if identifier in existing_simple:
+                continue
+            header.add_line(simple_line)
+            existing_simple.add(identifier)
+
+    if sample_header_line is not None:
+        header.lines = [
+            line for line in header.lines if getattr(line, "key", None) != "SAMPLE"
+        ]
+        header.add_line(sample_header_line)
+
+    log_message("Applied CLI metadata to merged header.", verbose)
+    return header
 
 
 def normalize_vcf_version(version_value):
@@ -414,39 +482,26 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
     return valid_vcfs
 
 
-def merge_vcfs(valid_files, output_dir, verbose=False, cli_metadata=None):
+def merge_vcfs(
+    valid_files,
+    output_dir,
+    verbose=False,
+    sample_header_line=None,
+    simple_header_lines=None,
+):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     log_message("Merging VCF files...", verbose)
-    header = union_headers(valid_files)
-
-    metadata_entries = OrderedDict()
-    provided_metadata = cli_metadata or {}
-    id_value = str(provided_metadata.get("ID", "")).strip()
-    if not id_value:
-        id_value = "SampleGroup"
-    metadata_entries["ID"] = id_value
-    for key, value in provided_metadata.items():
-        if key == "ID":
-            continue
-        metadata_entries[key] = value
-
-    sample_line_text = build_sample_metadata_line(metadata_entries)
-    sample_mapping = _parse_sample_metadata_line(sample_line_text)
-    formatted_mapping = OrderedDict()
-    for key, raw_value in sample_mapping.items():
-        if key == "ID":
-            formatted_mapping[key] = raw_value
-        else:
-            formatted_mapping[key] = _format_sample_metadata_value(raw_value)
-
-    header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
-    header.add_line(
-        vcfpy.SimpleHeaderLine(
-            "SAMPLE",
-            sample_line_text[len("##SAMPLE=") :],
-            formatted_mapping,
-        )
+    try:
+        reader0 = vcfpy.Reader.from_path(valid_files[0])
+    except Exception as e:
+        handle_critical_error("Failed to open the first valid VCF: " + str(e))
+    header = reader0.header.copy()
+    header = apply_metadata_to_header(
+        header,
+        sample_header_line=sample_header_line,
+        simple_header_lines=simple_header_lines,
+        verbose=verbose,
     )
 
     writer = vcfpy.Writer.from_path(merged_filename, header)
@@ -466,117 +521,17 @@ def merge_vcfs(valid_files, output_dir, verbose=False, cli_metadata=None):
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
 
-def _parse_sample_metadata_line(line):
+def _parse_simple_metadata_line(line):
     stripped = line.strip()
-    if not stripped.startswith("##SAMPLE="):
+    if not stripped.startswith("##") or "=" not in stripped:
         return None
+    key, value = stripped[2:].split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        return None
+    return key, value
 
-    payload = stripped[len("##SAMPLE=") :].strip()
-    if not payload.startswith("<") or not payload.endswith(">"):
-        raise ValueError("Malformed ##SAMPLE metadata detected; expected angle bracket encapsulation.")
-
-    inner = payload[1:-1]
-    entries = []
-    current = []
-    in_quotes = False
-    escape = False
-
-    for char in inner:
-        if escape:
-            current.append(char)
-            escape = False
-            continue
-
-        if char == "\\":
-            if in_quotes:
-                escape = True
-                continue
-            current.append(char)
-            continue
-
-        if char == '"':
-            in_quotes = not in_quotes
-            continue
-
-        if char == "," and not in_quotes:
-            entry = "".join(current).strip()
-            if entry:
-                entries.append(entry)
-            current = []
-            continue
-
-        current.append(char)
-
-    if current:
-        entry = "".join(current).strip()
-        if entry:
-            entries.append(entry)
-
-    mapping = OrderedDict()
-    for entry in entries:
-        if "=" not in entry:
-            continue
-        key, raw_value = entry.split("=", 1)
-        key = key.strip()
-        value = raw_value.strip()
-        mapping[key] = value
-
-    if "ID" not in mapping or not mapping["ID"]:
-        raise ValueError("Sample metadata must include an ID entry.")
-
-    return mapping
-
-
-def append_metadata_to_merged_vcf(merged_vcf, sample_metadata_lines=None, verbose=False):
-    if not sample_metadata_lines:
-        log_message("No metadata provided. Skipping metadata append step.", verbose)
-        return
-
-    log_message("Appending provided metadata to merged VCF header.", verbose)
-
-    try:
-        reader = vcfpy.Reader.from_path(merged_vcf)
-    except Exception as exc:
-        handle_non_critical_error(f"Could not open {merged_vcf}: {exc}. Skipping metadata append.")
-        return
-
-    header = reader.header
-
-    sample_mappings = []
-
-    try:
-        for line in sample_metadata_lines:
-            mapping = _parse_sample_metadata_line(line)
-            if mapping:
-                sample_mappings.append(mapping)
-    except ValueError as exc:
-        reader.close()
-        handle_non_critical_error(str(exc))
-        return
-
-    if not sample_mappings:
-        reader.close()
-        log_message("No valid sample metadata lines were supplied. Skipping metadata append.", verbose)
-        return
-
-    header.lines = [line for line in header.lines if getattr(line, "key", None) != "SAMPLE"]
-
-    for mapping in sample_mappings:
-        sample_line = vcfpy.SampleHeaderLine.from_mapping(mapping)
-        header.add_line(sample_line)
-
-    temp_path = merged_vcf + ".tmp"
-    writer = vcfpy.Writer.from_path(temp_path, header)
-
-    for record in reader:
-        writer.write_record(record)
-
-    writer.close()
-    reader.close()
-
-    os.replace(temp_path, merged_vcf)
-
-    log_message("Metadata appended successfully.", verbose)
 
 def preprocess_vcf(file_path):
     """
@@ -765,7 +720,7 @@ def validate_merged_vcf(merged_vcf, verbose=False):
 def main():
     args = parse_arguments()
     verbose = args.verbose
-    cli_metadata = args.meta
+    sample_header_line, simple_header_lines = parse_metadata_arguments(args, verbose)
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -815,23 +770,14 @@ def main():
 
     log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
 
-    sample_metadata_lines = None
-    if args.meta:
-        try:
-            metadata_entries = _parse_metadata_arguments(args.meta)
-            sample_metadata_lines = [build_sample_metadata_line(metadata_entries)]
-        except ValueError as exc:
-            handle_critical_error(str(exc))
-
-    valid_files = validate_all_vcfs(
-        input_dir,
-        ref_genome,
-        vcf_version,
+    valid_files = validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose)
+    merged_vcf = merge_vcfs(
+        valid_files,
+        output_dir,
         verbose,
-        allow_gvcf=args.allow_gvcf,
+        sample_header_line=sample_header_line,
+        simple_header_lines=simple_header_lines,
     )
-    merged_vcf = merge_vcfs(valid_files, output_dir, verbose)
-    append_metadata_to_merged_vcf(merged_vcf, sample_metadata_lines=sample_metadata_lines, verbose=verbose)
     validate_merged_vcf(merged_vcf, verbose)
 
     print("----------------------------------------")

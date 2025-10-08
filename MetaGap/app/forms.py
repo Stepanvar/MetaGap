@@ -1,5 +1,3 @@
-# app/forms.py
-
 from django import forms
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
@@ -81,10 +79,9 @@ class CustomUserCreationForm(UserCreationForm):
 class SampleGroupForm(forms.ModelForm):
     class Meta:
         model = SampleGroup
-        exclude = ['created_by']  # Exclude fields that will be set in the view
+        exclude = ['created_by']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
-            # Add widgets for other fields as needed
         }
 
 class ImportDataForm(forms.Form):

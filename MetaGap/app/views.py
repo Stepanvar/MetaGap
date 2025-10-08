@@ -124,7 +124,12 @@ class ProfileView(LoginRequiredMixin, TemplateView):
         user = self.request.user
         organization_profile = getattr(user, "organization_profile", None)
 
-        sample_groups = SampleGroup.objects.filter(created_by=user).order_by("name")
+        if organization_profile is None:
+            sample_groups = SampleGroup.objects.none()
+        else:
+            sample_groups = SampleGroup.objects.filter(
+                created_by=organization_profile
+            ).order_by("name")
 
         context.update(
             {

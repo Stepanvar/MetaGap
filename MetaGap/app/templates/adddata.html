@@ -1,15 +1,17 @@
-{% extends 'layout.html' %}
+{% extends 'base.html' %}
+
+{% block title %}Add Data - MetaGaP{% endblock %}
+
+{% block breadcrumbs %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title='Add Data' %}
+{% endblock %}
 
 {% block content %}
-<div class="row">
-	<div class="col-md-6 offset-md-3">
-		<h2>Add Data</h2>
-		<form method="post" class="form">
-			{% csrf_token %}
-			{{ form.as_p }}
-			{{ form2.as_p }}
-			<button type="submit" class="btn btn-primary">Submit</button>
-		</form>
-	</div>
-</div>
+<h2 class="mb-4">Add Data</h2>
+<form method="post" class="form">
+        {% csrf_token %}
+        {{ form.as_p }}
+        {{ form2.as_p }}
+        <button type="submit" class="btn btn-primary">Submit</button>
+</form>
 {% endblock %}

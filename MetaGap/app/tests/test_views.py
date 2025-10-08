@@ -8,8 +8,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
+from ..filters import SampleGroupFilter
 from ..forms import ImportDataForm, SearchForm
-from ..models import AlleleFrequency, SampleGroup
+from ..models import AlleleFrequency, SampleGroup, SampleOrigin
 
 
 class HomePageViewTests(TestCase):
@@ -90,6 +91,88 @@ class ProfileViewTests(TestCase):
             response.context["import_form_enctype"],
             "multipart/form-data",
         )
+
+
+class SearchResultsViewTests(TestCase):
+    """Validate search behaviour, filter context, and table population."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="search_user",
+            password="search-pass",
+            email="search@example.com",
+        )
+
+        self.kidney_origin = SampleOrigin.objects.create(
+            tissue="Kidney",
+            collection_method="Biopsy",
+            storage_conditions="Cryogenic",
+        )
+        self.liver_origin = SampleOrigin.objects.create(
+            tissue="Liver",
+            collection_method="Surgical",
+            storage_conditions="Room Temperature",
+        )
+
+        self.kidney_group = SampleGroup.objects.create(
+            name="Kidney Cohort",
+            tissue="Kidney",
+            sample_origin=self.kidney_origin,
+            created_by=self.user.organization_profile,
+        )
+        self.liver_group = SampleGroup.objects.create(
+            name="Liver Cohort",
+            tissue="Liver",
+            sample_origin=self.liver_origin,
+            created_by=self.user.organization_profile,
+        )
+
+    def test_search_query_filters_expected_sample_group(self) -> None:
+        response = self.client.get(reverse("search_results"), {"query": "Kidney"})
+
+        self.assertEqual(response.status_code, 200)
+
+        table = response.context["table"]
+        self.assertEqual([row.record for row in table.rows], [self.kidney_group])
+
+        sample_filter = response.context["filter"]
+        self.assertIsInstance(sample_filter, SampleGroupFilter)
+        self.assertEqual(sample_filter.data.get("query"), "Kidney")
+        self.assertQuerysetEqual(
+            sample_filter.qs,
+            [self.kidney_group],
+            transform=lambda group: group,
+        )
+
+        form = response.context["form"]
+        self.assertIsInstance(form, SearchForm)
+        self.assertEqual(form.data.get("query"), "Kidney")
+
+    def test_empty_query_returns_all_records(self) -> None:
+        response = self.client.get(reverse("search_results"), {"query": ""})
+
+        self.assertEqual(response.status_code, 200)
+
+        table = response.context["table"]
+        self.assertCountEqual(
+            [row.record for row in table.rows],
+            [self.kidney_group, self.liver_group],
+        )
+
+        sample_filter = response.context["filter"]
+        self.assertIsInstance(sample_filter, SampleGroupFilter)
+        self.assertEqual(sample_filter.data.get("query"), "")
+        self.assertQuerysetEqual(
+            sample_filter.qs.order_by("pk"),
+            SampleGroup.objects.order_by("pk"),
+            transform=lambda group: group,
+        )
+
+        form = response.context["form"]
+        self.assertIsInstance(form, SearchForm)
+        self.assertEqual(form.data.get("query"), "")
 
 
 class ImportDataViewTests(TestCase):

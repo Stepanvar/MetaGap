@@ -133,3 +133,64 @@ class ImportDataViewTests(TestCase):
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")
 
         self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+
+
+class SampleGroupUpdateViewTests(TestCase):
+    """Ensure sample group metadata can be edited securely."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="editor",
+            email="editor@example.com",
+            password="pass12345",
+        )
+        self.other_user = User.objects.create_user(
+            username="intruder",
+            email="intruder@example.com",
+            password="pass12345",
+        )
+        self.sample_group = SampleGroup.objects.create(
+            name="Editable Group",
+            created_by=self.user.organization_profile,
+            contact_email="old@example.com",
+        )
+
+    def test_login_required(self) -> None:
+        response = self.client.get(
+            reverse("sample_group_edit", args=[self.sample_group.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_user_can_update_owned_group(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("sample_group_edit", args=[self.sample_group.pk]),
+            {
+                "name": "Updated Group",
+                "contact_email": "new@example.com",
+                "total_samples": 42,
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.sample_group.refresh_from_db()
+        self.assertEqual(self.sample_group.name, "Updated Group")
+        self.assertEqual(self.sample_group.contact_email, "new@example.com")
+        self.assertEqual(self.sample_group.total_samples, 42)
+
+    def test_user_cannot_edit_other_organisations_group(self) -> None:
+        other_group = SampleGroup.objects.create(
+            name="Locked Group",
+            created_by=self.other_user.organization_profile,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("sample_group_edit", args=[other_group.pk]))
+
+        self.assertEqual(response.status_code, 404)

@@ -15,123 +15,37 @@
     </div>
 
     <div class="row g-4">
-        <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h3 class="h5">Summary</h3>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4">DOI</dt>
-                        <dd class="col-sm-8">{{ sample_group.doi|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-4">Source lab</dt>
-                        <dd class="col-sm-8">{{ sample_group.source_lab|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-4">Total samples</dt>
-                        <dd class="col-sm-8">{{ sample_group.total_samples|default:"Not specified" }}</dd>
-
-                        <dt class="col-sm-4">Contact email</dt>
-                        <dd class="col-sm-8">
-                            {% if sample_group.contact_email %}
-                                <a href="mailto:{{ sample_group.contact_email }}">{{ sample_group.contact_email }}</a>
-                            {% else %}
-                                Not provided
-                            {% endif %}
-                        </dd>
-
-                        <dt class="col-sm-4">Contact phone</dt>
-                        <dd class="col-sm-8">{{ sample_group.contact_phone|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-4">Created by</dt>
-                        <dd class="col-sm-8">{{ sample_group.created_by.organization_name|default:sample_group.created_by }}</dd>
-                    </dl>
+        {% for section in metadata_sections %}
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h5">{{ section.title }}</h3>
+                        <dl class="row mb-0">
+                            {% for item in section.items %}
+                                <dt class="col-sm-5">{{ item.label }}</dt>
+                                <dd class="col-sm-7">
+                                    {% if item.type == 'email' and item.value %}
+                                        <a href="mailto:{{ item.value }}">{{ item.value }}</a>
+                                    {% else %}
+                                        {{ item.value|default:"Not provided" }}
+                                    {% endif %}
+                                </dd>
+                            {% endfor %}
+                        </dl>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h3 class="h5">Criteria</h3>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4">Inclusion</dt>
-                        <dd class="col-sm-8">{{ sample_group.inclusion_criteria|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-4">Exclusion</dt>
-                        <dd class="col-sm-8">{{ sample_group.exclusion_criteria|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-4">Comments</dt>
-                        <dd class="col-sm-8">{{ sample_group.comments|default:"Not provided" }}</dd>
-                    </dl>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-4 mt-1">
-        <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h3 class="h5">Sample &amp; Material</h3>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-5">Reference genome build</dt>
-                        <dd class="col-sm-7">{{ sample_group.reference_genome_build|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Genome complexity</dt>
-                        <dd class="col-sm-7">{{ sample_group.genome_complexity|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Sample origin</dt>
-                        <dd class="col-sm-7">{{ sample_group.sample_origin|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Material type</dt>
-                        <dd class="col-sm-7">{{ sample_group.material_type|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Library construction</dt>
-                        <dd class="col-sm-7">{{ sample_group.library_construction|default:"Not provided" }}</dd>
-                    </dl>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h3 class="h5">Sequencing &amp; Bioinformatics</h3>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-5">Illumina</dt>
-                        <dd class="col-sm-7">{{ sample_group.illumina_seq|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Oxford Nanopore</dt>
-                        <dd class="col-sm-7">{{ sample_group.ont_seq|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">PacBio</dt>
-                        <dd class="col-sm-7">{{ sample_group.pacbio_seq|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Ion Torrent</dt>
-                        <dd class="col-sm-7">{{ sample_group.iontorrent_seq|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Platform-independent</dt>
-                        <dd class="col-sm-7">{{ sample_group.platform_independent|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Alignment</dt>
-                        <dd class="col-sm-7">{{ sample_group.bioinfo_alignment|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Variant calling</dt>
-                        <dd class="col-sm-7">{{ sample_group.bioinfo_variant_calling|default:"Not provided" }}</dd>
-
-                        <dt class="col-sm-5">Post-processing</dt>
-                        <dd class="col-sm-7">{{ sample_group.bioinfo_post_proc|default:"Not provided" }}</dd>
-                    </dl>
-                </div>
-            </div>
-        </div>
+        {% endfor %}
     </div>
 
     <div class="card mt-4">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h3 class="h5 mb-0">Allele frequencies</h3>
-                <span class="text-muted">{{ allele_frequency_table.rows|length }} variants</span>
+                <span class="text-muted">{{ variant_table.rows|length }} variants</span>
             </div>
-            {% if allele_frequency_table.rows %}
-                {% render_table allele_frequency_table %}
+            {% if variant_table.rows %}
+                {% render_table variant_table %}
             {% else %}
                 <p class="text-muted mb-0">No variant data has been imported for this sample group yet.</p>
             {% endif %}

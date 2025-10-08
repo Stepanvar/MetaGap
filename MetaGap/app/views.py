@@ -2,6 +2,7 @@
 
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple
+from pathlib import Path
 
 import pysam
 from django.conf import settings
@@ -9,6 +10,8 @@ from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
+from django.db import models as django_models
+from django.db import transaction
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView
 from django_filters.views import FilterView
@@ -22,7 +25,26 @@ from .forms import (
     ImportDataForm,
     SearchForm,
 )
-from .models import AlleleFrequency, Format, Info, SampleGroup
+from .models import (
+    AlleleFrequency,
+    BioinfoAlignment,
+    BioinfoPostProc,
+    BioinfoVariantCalling,
+    Format,
+    GenomeComplexity,
+    IlluminaSeq,
+    InputQuality,
+    IonTorrentSeq,
+    Info,
+    LibraryConstruction,
+    MaterialType,
+    OntSeq,
+    PacBioSeq,
+    PlatformIndependent,
+    ReferenceGenomeBuild,
+    SampleGroup,
+    SampleOrigin,
+)
 from .tables import create_dynamic_table
 
 class SampleGroupTableView(ListView):
@@ -34,7 +56,28 @@ class SampleGroupTableView(ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return super().get_queryset().select_related("allele_frequency")
+        # Optimize query by selecting related metadata and prefetching variants
+        return (
+            super()
+            .get_queryset()
+            .select_related(
+                "reference_genome_build",
+                "genome_complexity",
+                "sample_origin",
+                "material_type",
+                "library_construction",
+                "illumina_seq",
+                "ont_seq",
+                "pacbio_seq",
+                "iontorrent_seq",
+                "platform_independent",
+                "bioinfo_alignment",
+                "bioinfo_variant_calling",
+                "bioinfo_post_proc",
+                "input_quality",
+            )
+            .prefetch_related("allele_frequencies")
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -144,11 +187,187 @@ class ImportDataView(LoginRequiredMixin, FormView):
     form_class = ImportDataForm
     success_url = reverse_lazy("profile")
 
-    INFO_FIELDS = {
-        field.name for field in Info._meta.fields if field.name not in {"id", "additional"}
+    METADATA_SECTION_MAP = {
+        "SAMPLE_GROUP": "sample_group",
+        "SAMPLEGROUP": "sample_group",
+        "GROUP": "sample_group",
+        "REFERENCE_GENOME_BUILD": "reference_genome_build",
+        "REFERENCE_GENOME": "reference_genome_build",
+        "REFERENCE": "reference_genome_build",
+        "GENOME_COMPLEXITY": "genome_complexity",
+        "SAMPLE_ORIGIN": "sample_origin",
+        "ORIGIN": "sample_origin",
+        "MATERIAL_TYPE": "material_type",
+        "LIBRARY_CONSTRUCTION": "library_construction",
+        "LIBRARY_PREP": "library_construction",
+        "ILLUMINA_SEQ": "illumina_seq",
+        "ONT_SEQ": "ont_seq",
+        "PACBIO_SEQ": "pacbio_seq",
+        "IONTORRENT_SEQ": "iontorrent_seq",
+        "ION_TORRENT_SEQ": "iontorrent_seq",
+        "PLATFORM_INDEPENDENT": "platform_independent",
+        "BIOINFO_ALIGNMENT": "bioinfo_alignment",
+        "ALIGNMENT": "bioinfo_alignment",
+        "BIOINFO_VARIANT_CALLING": "bioinfo_variant_calling",
+        "VARIANT_CALLING": "bioinfo_variant_calling",
+        "BIOINFO_POSTPROC": "bioinfo_post_proc",
+        "BIOINFO_POST_PROC": "bioinfo_post_proc",
+        "BIOINFO_POST_PROCESSING": "bioinfo_post_proc",
+        "INPUT_QUALITY": "input_quality",
     }
-    FORMAT_FIELDS = {
-        field.name for field in Format._meta.fields if field.name not in {"id", "additional"}
+
+    METADATA_MODEL_MAP = {
+        "reference_genome_build": ReferenceGenomeBuild,
+        "genome_complexity": GenomeComplexity,
+        "sample_origin": SampleOrigin,
+        "material_type": MaterialType,
+        "library_construction": LibraryConstruction,
+        "illumina_seq": IlluminaSeq,
+        "ont_seq": OntSeq,
+        "pacbio_seq": PacBioSeq,
+        "iontorrent_seq": IonTorrentSeq,
+        "platform_independent": PlatformIndependent,
+        "bioinfo_alignment": BioinfoAlignment,
+        "bioinfo_variant_calling": BioinfoVariantCalling,
+        "bioinfo_post_proc": BioinfoPostProc,
+    }
+
+    METADATA_FIELD_ALIASES = {
+        "sample_group": {
+            "name": ["group", "group_name", "dataset", "id"],
+            "doi": ["dataset_doi", "group_doi"],
+            "source_lab": ["lab", "lab_name", "source"],
+            "contact_email": ["email", "lab_email", "contact"],
+            "contact_phone": ["phone", "lab_phone"],
+            "total_samples": ["samples", "sample_count", "n_samples"],
+            "inclusion_criteria": ["inclusion", "inclusioncriteria"],
+            "exclusion_criteria": ["exclusion", "exclusioncriteria"],
+            "tissue": ["tissue_type"],
+            "collection_method": ["collection", "method"],
+            "storage_conditions": ["storage", "storage_conditions"],
+            "comments": ["description", "notes"],
+        },
+        "input_quality": {
+            "a260_a280": ["a260_280", "ratio_a260_a280"],
+            "a260_a230": ["a260_230", "ratio_a260_a230"],
+            "dna_concentration": ["dna_conc", "dna_concentration_ng_ul", "concentration"],
+            "rna_concentration": ["rna_conc", "rna_concentration_ng_ul"],
+            "notes": ["note", "comment", "comments"],
+        },
+        "reference_genome_build": {
+            "build_name": ["name", "reference", "build"],
+            "build_version": ["version", "build_version"],
+        },
+        "genome_complexity": {
+            "size": ["genome_size", "size_bp"],
+            "ploidy": ["ploidy_level"],
+            "gc_content": ["gc", "gc_percent"],
+        },
+        "sample_origin": {
+            "tissue": ["tissue_type"],
+            "collection_method": ["collection", "method"],
+            "storage_conditions": ["storage", "storage_conditions"],
+            "time_stored": ["time", "storage_time"],
+        },
+        "material_type": {
+            "material_type": ["type"],
+            "integrity_number": ["rin", "din", "integrity"],
+        },
+        "library_construction": {
+            "kit": ["library_kit", "kit_name"],
+            "fragmentation": ["fragmentation_method"],
+            "adapter_ligation_efficiency": ["adapter_efficiency"],
+            "pcr_cycles": ["pcr", "pcr_cycles"],
+        },
+        "illumina_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "channel_method": ["channel"],
+            "cluster_density": ["cluster"],
+            "qc_software": ["qc", "software"],
+        },
+        "ont_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "flow_cell_version": ["flowcell_version"],
+            "pore_type": ["pore"],
+            "bias_voltage": ["bias"],
+        },
+        "pacbio_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "smrt_cell_type": ["smrt_cell", "cell_type"],
+            "zmw_density": ["zmw"],
+        },
+        "iontorrent_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "chip_type": ["chip"],
+            "ph_calibration": ["ph"],
+            "flow_order": ["floworder"],
+            "ion_sphere_metrics": ["ionsphere", "sphere_metrics"],
+        },
+        "platform_independent": {
+            "pooling": ["pool"],
+            "sequencing_kit": ["seq_kit", "kit"],
+            "base_calling_alg": ["basecalling", "base_calling"],
+            "q30": ["q30_rate"],
+            "normalized_coverage": ["coverage"],
+            "run_specific_calibration": ["calibration"],
+        },
+        "bioinfo_alignment": {
+            "software": ["aligner", "software"],
+            "params": ["parameters", "params"],
+            "ref_genome_version": ["reference_version"],
+            "recalibration_settings": ["recalibration", "recal_settings"],
+        },
+        "bioinfo_variant_calling": {
+            "tool": ["caller", "tool"],
+            "version": ["tool_version", "version"],
+            "filtering_thresholds": ["filters", "thresholds"],
+            "duplicate_handling": ["duplicates"],
+            "mq": ["mapping_quality"],
+        },
+        "bioinfo_post_proc": {
+            "normalization": ["normalisation", "normalization_method"],
+            "harmonization": ["harmonisation", "harmonization_method"],
+        },
+    }
+
+    INFO_FIELD_MAP = {
+        "aa": "aa",
+        "ac": "ac",
+        "af": "af",
+        "an": "an",
+        "bq": "bq",
+        "cigar": "cigar",
+        "db": "db",
+        "dp": "dp",
+        "end": "end",
+        "h2": "h2",
+        "h3": "h3",
+        "mq": "mq",
+        "mq0": "mq0",
+        "ns": "ns",
+        "sb": "sb",
+    }
+
+    FORMAT_FIELD_MAP = {
+        "ad": "ad",
+        "adf": "adf",
+        "adr": "adr",
+        "dp": "dp",
+        "ec": "ec",
+        "ft": "ft",
+        "gl": "gl",
+        "gp": "gp",
+        "gq": "gq",
+        "gt": "gt",
+        "hq": "hq",
+        "mq": "mq",
+        "pl": "pl",
+        "pq": "pq",
+        "ps": "ps",
     }
 
     def form_valid(self, form):

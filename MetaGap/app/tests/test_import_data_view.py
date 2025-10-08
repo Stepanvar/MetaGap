@@ -27,6 +27,11 @@ class ImportDataViewIntegrationTests(TestCase):
 1\t5678\trsMeta\tC\tG\t88\tPASS\tAF=0.25\tGT:GQ\t0/1:80
 """
 
+    MALFORMED_HEADER_VCF = """##fileformat=VCFv4.2
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t1234\trsMalformed\tA\tC\t60\tPASS\tSOMATIC;AF=0.1\tGT:GQ\t0/1:45
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(

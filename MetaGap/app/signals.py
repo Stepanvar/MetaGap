@@ -10,7 +10,7 @@ def create_user_profile(sender, instance, created, **kwargs):
         return
 
     if created:
-        OrganizationProfile = apps.get_model('app', 'OrganizationProfile')
+        OrganizationProfile = apps.get_model("app", "OrganizationProfile")
         OrganizationProfile.objects.create(user=instance)
 
 @receiver(post_save, sender=User)

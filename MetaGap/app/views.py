@@ -121,12 +121,11 @@ class ProfileView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        sample_groups = (
-            SampleGroup.objects.filter(created_by=organization_profile).order_by("name")
-            if organization_profile
-            else SampleGroup.objects.none()
-        )
+        user = self.request.user
+        organization_profile = getattr(user, "organization_profile", None)
+
+        sample_groups = SampleGroup.objects.filter(created_by=user).order_by("name")
+
         context.update(
             {
                 "organization_profile": organization_profile,

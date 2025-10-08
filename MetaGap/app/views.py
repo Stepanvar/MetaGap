@@ -747,7 +747,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
         prefixes: list[str] = []
         for variant in section_variants:
-            for suffix in ("_", "."):
+            for suffix in ("_", ".", "-"):
                 candidate_prefix = f"{variant}{suffix}"
                 if candidate_prefix not in prefixes:
                     prefixes.append(candidate_prefix)
@@ -798,7 +798,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         consumed: Iterable[str],
     ) -> Optional[Dict[str, Any]]:
         consumed_set = set(consumed)
-        prefixes = (f"{section}_", f"{section}.")
+        prefixes = (f"{section}_", f"{section}.", f"{section}-")
         additional: Dict[str, Any] = {}
 
         for key, value in metadata.items():

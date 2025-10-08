@@ -175,6 +175,124 @@ class SearchResultsViewTests(TestCase):
         self.assertEqual(form.data.get("query"), "")
 
 
+class DashboardViewTests(TestCase):
+    """Confirm the dashboard only surfaces recent data from the logged-in user."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        User = get_user_model()
+
+        self.user_one = User.objects.create_user(
+            username="dashboard_user_one",
+            password="dashboard-pass-one",
+            email="one@example.com",
+        )
+        self.user_two = User.objects.create_user(
+            username="dashboard_user_two",
+            password="dashboard-pass-two",
+            email="two@example.com",
+        )
+
+        # Create more than six datasets for the first user to exercise the cap.
+        self.user_one_groups = [
+            SampleGroup.objects.create(
+                name=f"User One Group {index}",
+                created_by=self.user_one.organization_profile,
+            )
+            for index in range(8)
+        ]
+
+        self.user_two_groups = [
+            SampleGroup.objects.create(
+                name=f"User Two Group {index}",
+                created_by=self.user_two.organization_profile,
+            )
+            for index in range(2)
+        ]
+
+        # Populate allele frequencies for each organization.
+        self.user_one_actions = [
+            AlleleFrequency.objects.create(
+                sample_group=group,
+                chrom="1",
+                pos=index + 1,
+                ref="A",
+                alt="T",
+            )
+            for index, group in enumerate(self.user_one_groups)
+        ]
+
+        self.user_two_actions = [
+            AlleleFrequency.objects.create(
+                sample_group=group,
+                chrom="2",
+                pos=index + 10,
+                ref="C",
+                alt="G",
+            )
+            for index, group in enumerate(self.user_two_groups)
+        ]
+
+    def test_dashboard_limits_and_filters_datasets_and_actions(self) -> None:
+        self.client.force_login(self.user_one)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "dashboard.html")
+
+        recent_datasets = response.context["recent_datasets"]
+        expected_datasets = list(
+            SampleGroup.objects.filter(
+                created_by=self.user_one.organization_profile
+            ).order_by("-pk")[:6]
+        )
+
+        self.assertEqual(recent_datasets, expected_datasets)
+        self.assertTrue(all(dataset.created_by == self.user_one.organization_profile for dataset in recent_datasets))
+        self.assertLessEqual(len(recent_datasets), 6)
+
+        recent_actions = response.context["recent_actions"]
+        expected_actions = list(
+            AlleleFrequency.objects.filter(
+                sample_group__created_by=self.user_one.organization_profile
+            ).order_by("-pk")[:6]
+        )
+
+        self.assertEqual(recent_actions, expected_actions)
+        self.assertTrue(
+            all(
+                action.sample_group.created_by == self.user_one.organization_profile
+                for action in recent_actions
+            )
+        )
+        self.assertLessEqual(len(recent_actions), 6)
+
+    def test_dashboard_respects_organization_for_different_user(self) -> None:
+        self.client.force_login(self.user_two)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "dashboard.html")
+
+        self.assertEqual(
+            response.context["recent_datasets"],
+            list(
+                SampleGroup.objects.filter(
+                    created_by=self.user_two.organization_profile
+                ).order_by("-pk")[:6]
+            ),
+        )
+        self.assertEqual(
+            response.context["recent_actions"],
+            list(
+                AlleleFrequency.objects.filter(
+                    sample_group__created_by=self.user_two.organization_profile
+                ).order_by("-pk")[:6]
+            ),
+        )
+
 class ImportDataViewTests(TestCase):
     """Validate the VCF import workflow end to end."""
 

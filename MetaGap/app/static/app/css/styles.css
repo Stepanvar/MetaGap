@@ -16,7 +16,7 @@
 
 :root[data-bs-theme='light'] {
         --app-body-bg: #f1f4fc;
-        --app-body-color: #1b1f24;
+        --app-body-color: #101828;
         --app-body-gradient-start: rgba(31, 111, 235, 0.18);
         --app-body-gradient-end: rgba(46, 160, 67, 0.12);
         --app-navbar-bg: linear-gradient(135deg, #123873, #0f2d5c);
@@ -32,7 +32,7 @@
 
 :root[data-bs-theme='dark'] {
         --app-body-bg: #0f0f0f;
-        --app-body-color: #f8f9fa;
+        --app-body-color: #f4f7fb;
         --app-body-gradient-start: rgba(31, 111, 235, 0.24);
         --app-body-gradient-end: rgba(46, 160, 67, 0.18);
         --app-navbar-bg: rgba(24, 24, 24, 0.95);

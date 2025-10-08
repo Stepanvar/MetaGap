@@ -21,6 +21,12 @@ class ImportDataViewIntegrationTests(TestCase):
 1\t1234\trsTest\tA\tT\t99\tPASS\tAF=0.5;CLNSIG=Pathogenic\tGT:GQ\t0/1:99
 """
 
+    MALFORMED_HEADER_VCF = """##fileformat=VCFv4.2
+##SAMPLE=<ID=BrokenSample,Description=Missing terminator
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t1234\trsMalformed\tG\tC\t50\tq10\tAF=0.2;SOMATIC\tGT:GQ\t0/1:45
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -91,4 +97,34 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(allele.variant_id, "rsTest")
         self.assertEqual(allele.info.af, "0.5")
         self.assertEqual(allele.format.gt, "0/1")
+        self.assertEqual(allele.format.additional["sample_id"], "Sample001")
+
+    @mock.patch("app.views.pysam.VariantFile", side_effect=ValueError("malformed header"))
+    def test_import_handles_malformed_header_with_text_fallback(
+        self, mocked_variant_file: mock.Mock
+    ) -> None:
+        """A malformed VCF header triggers the text fallback without crashing."""
+
+        self.client.login(username="vcf_user", password="import-pass")
+
+        upload = SimpleUploadedFile(
+            "malformed_header.vcf",
+            self.MALFORMED_HEADER_VCF.encode("utf-8"),
+            content_type="text/vcf",
+        )
+
+        response = self.client.post(reverse("import_data"), {"data_file": upload})
+
+        self.assertRedirects(response, reverse("profile"))
+        mocked_variant_file.assert_called()
+
+        sample_group = SampleGroup.objects.get()
+        # Fallback uses the filename when metadata cannot be extracted from the header
+        self.assertEqual(sample_group.name, "malformed_header")
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertEqual(allele.chrom, "1")
+        self.assertEqual(allele.pos, 1234)
+        self.assertEqual(allele.variant_id, "rsMalformed")
+        self.assertTrue(allele.info.additional["somatic"])
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")

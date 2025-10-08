@@ -2,17 +2,17 @@
 """
 This script consolidates multiple VCF files into one merged VCF file.
 It replicates the bash script functionality:
-  - Parses command-line options (verbose mode, output directory)
-  - Prompts the user for the input VCF directory, reference genome build, and expected VCF version.
-  - Offers metadata input (interactive mode or template generation) or skipping metadata.
-  - Validates individual VCF files for header fileformat and reference genome.
-  - Merges valid VCFs using vcfpy.
-  - Appends metadata (if provided) to the merged VCF header.
-  - Performs a final validation of the merged VCF.
-  - Logs execution details to a log file.
+- Parses command-line options (verbose mode, output directory)
+- Prompts the user for the input VCF directory, reference genome build, and expected VCF version.
+- Offers metadata input (interactive mode or template generation) or skipping metadata.
+- Validates individual VCF files for header fileformat and reference genome.
+- Merges valid VCFs using vcfpy.
+- Appends metadata (if provided) to the merged VCF header.
+- Performs a final validation of the merged VCF.
+- Logs execution details to a log file.
 
 Requirements:
-  pip install vcfpy
+pip install vcfpy
 """
 
 import os

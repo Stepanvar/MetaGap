@@ -140,7 +140,7 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(sample_group.platform_independent.q30, "92.5")
 
         self.assertIsNotNone(sample_group.bioinfo_alignment)
-        self.assertEqual(sample_group.bioinfo_alignment.software, "BWA")
+        self.assertEqual(sample_group.bioinfo_alignment.tool, "BWA")
         self.assertEqual(sample_group.bioinfo_alignment.params, "-M")
 
         self.assertIsNotNone(sample_group.bioinfo_variant_calling)

@@ -124,7 +124,12 @@ class ProfileView(LoginRequiredMixin, TemplateView):
         user = self.request.user
         organization_profile = getattr(user, "organization_profile", None)
 
-        sample_groups = SampleGroup.objects.filter(created_by=user).order_by("name")
+        if organization_profile is not None:
+            sample_groups = SampleGroup.objects.filter(
+                created_by=organization_profile
+            ).order_by("name")
+        else:
+            sample_groups = SampleGroup.objects.none()
 
         context.update(
             {
@@ -392,46 +397,152 @@ class ImportDataView(LoginRequiredMixin, FormView):
         if organization_profile is None:
             raise ValueError("The current user does not have an organisation profile.")
 
-        with pysam.VariantFile(file_path) as vcf_in:
-            metadata = self.extract_sample_group_metadata(vcf_in)
-            sample_group = SampleGroup.objects.create(
-                name=metadata.get("name")
-                or os.path.splitext(os.path.basename(file_path))[0],
-                created_by=organization_profile,
-                comments=metadata.get("description"),
+        metadata: Dict[str, Any] = {}
+        try:
+            with pysam.VariantFile(file_path) as vcf_in:
+                metadata = self.extract_sample_group_metadata(vcf_in)
+        except (OSError, ValueError) as exc:  # pragma: no cover - defensive fallback
+            messages.warning(
+                self.request,
+                f"Could not parse VCF metadata with pysam: {exc}. Falling back to a text parser.",
             )
+            metadata = self._extract_metadata_text_fallback(file_path)
 
-            created_alleles = []
-            for record in vcf_in.fetch():
-                info_instance = self._create_info_instance(record.info)
-                format_instance, format_sample = self._create_format_instance(record.samples)
+        sample_group = SampleGroup.objects.create(
+            name=metadata.get("name")
+            or os.path.splitext(os.path.basename(file_path))[0],
+            created_by=organization_profile,
+            comments=metadata.get("description"),
+        )
 
-                allele = AlleleFrequency.objects.create(
-                    chrom=record.chrom,
-                    pos=record.pos,
-                    variant_id=record.id,
-                    ref=record.ref,
-                    alt=self._serialize_alt(record.alts),
-                    qual=record.qual,
-                    filter=self._serialize_filter(record.filter),
-                    info=info_instance,
-                    format=format_instance,
-                )
-
-                if format_instance and format_sample:
-                    format_instance.additional = {
-                        **(format_instance.additional or {}),
-                        "sample_id": format_sample,
-                    }
-                    format_instance.save(update_fields=["additional"])
-
-                created_alleles.append(allele)
-
-        if created_alleles and sample_group.allele_frequency is None:
-            sample_group.allele_frequency = created_alleles[0]
-            sample_group.save(update_fields=["allele_frequency"])
+        self._parse_vcf_text_fallback(file_path, sample_group)
 
         return sample_group
+
+    def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = {}
+        with open(file_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("##SAMPLE"):
+                    start = stripped.find("<")
+                    end = stripped.rfind(">")
+                    if start == -1 or end == -1 or end <= start:
+                        continue
+                    content = stripped[start + 1 : end]
+                    for item in content.split(","):
+                        if "=" not in item:
+                            continue
+                        key, value = item.split("=", 1)
+                        metadata[key.lower()] = value
+                    metadata.setdefault("name", metadata.get("id"))
+                if stripped.startswith("#CHROM"):
+                    break
+        return metadata
+
+    def _create_allele_frequency(
+        self,
+        sample_group: SampleGroup,
+        *,
+        chrom: str,
+        pos: int,
+        variant_id: Optional[str],
+        ref: str,
+        alt: str,
+        qual: Optional[float],
+        filter_value: Optional[str],
+        info: Optional[Info],
+        format_instance: Optional[Format],
+        format_sample: Optional[str],
+    ) -> AlleleFrequency:
+        allele = AlleleFrequency.objects.create(
+            sample_group=sample_group,
+            chrom=chrom,
+            pos=pos,
+            variant_id=variant_id,
+            ref=ref,
+            alt=alt,
+            qual=qual,
+            filter=filter_value,
+            info=info,
+            format=format_instance,
+        )
+
+        if format_instance and format_sample:
+            format_instance.additional = {
+                **(format_instance.additional or {}),
+                "sample_id": format_sample,
+            }
+            format_instance.save(update_fields=["additional"])
+
+        return allele
+
+    def _parse_vcf_text_fallback(
+        self, file_path: str, sample_group: SampleGroup
+    ) -> None:
+        header_sample: Optional[str] = None
+
+        with open(file_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("#CHROM"):
+                    columns = stripped.lstrip("#").split("\t")
+                    if len(columns) > 9:
+                        header_sample = columns[9]
+                    continue
+                if stripped.startswith("#"):
+                    continue
+
+                fields = stripped.split("\t")
+                if len(fields) < 8:
+                    continue
+
+                chrom, pos, variant_id, ref, alt, qual, filter_value, info_field = fields[:8]
+                info_mapping: Dict[str, Any] = {}
+                for entry in info_field.split(";"):
+                    if not entry:
+                        continue
+                    if "=" in entry:
+                        key, value = entry.split("=", 1)
+                        info_mapping[key] = value
+                    else:
+                        info_mapping[entry] = True
+
+                info_instance = self._create_info_instance(info_mapping)
+
+                format_instance: Optional[Format] = None
+                sample_identifier: Optional[str] = None
+                if len(fields) > 9:
+                    format_keys = fields[8].split(":") if len(fields) > 8 else []
+                    format_values = fields[9].split(":")
+                    sample_identifier = header_sample or "Sample"
+                    samples = (
+                        {sample_identifier: dict(zip(format_keys, format_values))}
+                        if format_keys
+                        else {}
+                    )
+                    if samples:
+                        format_instance, sample_identifier = self._create_format_instance(samples)
+
+                self._create_allele_frequency(
+                    sample_group,
+                    chrom=chrom,
+                    pos=int(pos),
+                    variant_id=None if variant_id == "." else variant_id,
+                    ref=ref,
+                    alt=self._serialize_alt((alt,)),
+                    qual=None if qual in {".", ""} else float(qual),
+                    filter_value=self._serialize_filter(filter_value),
+                    info=info_instance,
+                    format_instance=format_instance,
+                    format_sample=sample_identifier,
+                )
+
+        return None
 
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
@@ -451,7 +562,9 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
         for key, value in info_dict.items():
             normalized = key.lower()
-            target = structured if normalized in self.INFO_FIELDS else additional
+            target = (
+                structured if normalized in self.INFO_FIELD_MAP else additional
+            )
             target[normalized] = self._stringify(value)
 
         if not structured and not additional:
@@ -475,7 +588,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 serialized = self._serialize_genotype(sample_data, key)
             else:
                 serialized = self._stringify(sample_data[key])
-            if normalized in self.FORMAT_FIELDS:
+            if normalized in self.FORMAT_FIELD_MAP:
                 structured[normalized] = serialized
             else:
                 additional[normalized] = serialized
@@ -495,6 +608,8 @@ class ImportDataView(LoginRequiredMixin, FormView):
     def _serialize_filter(filter_field: Any) -> Optional[str]:
         if not filter_field:
             return None
+        if isinstance(filter_field, str):
+            return filter_field
         values = filter_field.keys() if hasattr(filter_field, "keys") else filter_field
         serialized = [str(value) for value in values]
         return ",".join(serialized) if serialized else None

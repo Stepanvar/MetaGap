@@ -16,12 +16,21 @@ class ImportDataViewIntegrationTests(TestCase):
     """Ensure VCF uploads produce related allele frequency records."""
 
     VCF_CONTENT = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">
+##INFO=<ID=CLNSIG,Number=1,Type=String,Description="Clinical significance">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
 ##SAMPLE=<ID=GroupA,Description=Imported group>
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t1234\trsTest\tA\tT\t99\tPASS\tAF=0.5;CLNSIG=Pathogenic\tGT:GQ\t0/1:99
 """
 
     VCF_WITH_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
 ##SAMPLE=<ID=GroupB,Description=Detailed group,Source_Lab=MetaLab,Contact_Email=lab@example.com,Total_Samples=5,Inclusion=Adults,Exclusion=Under18,Reference_Genome_Build_Build_Name=GRCh38,Reference_Genome_Build_Build_Version=v1,Reference_Genome_Build_Additional_Info={\"notes\":\"GRCh\"},Genome_Complexity_Size=3.2Gb,Genome_Complexity_Ploidy=Diploid,Genome_Complexity_GC_Content=41%,Sample_Origin_Tissue=Blood,Sample_Origin_Collection_Method=Venipuncture,Sample_Origin_Storage_Conditions=-80C,Material_Type_Material_Type=DNA,Material_Type_Integrity_Number=9.5,Input_Quality_A260_A280=1.8,Input_Quality_A260_A230=2.1,Input_Quality_DNA_Concentration=15.2,Input_Quality_Additional_Metrics={\"rna_integrity\":7.4},Input_Quality_Metric_RNA_Integrity=7.4,Platform_Independent_Q30=92.5,Bioinfo_Alignment_Software=BWA,Bioinfo_Alignment_Params=-M,Bioinfo_Variant_Calling_Tool=GATK,Bioinfo_Variant_Calling_Version=4.2,Bioinfo_PostProc_Normalization=Global>
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t5678\trsMeta\tC\tG\t88\tPASS\tAF=0.25\tGT:GQ\t0/1:80

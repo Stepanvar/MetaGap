@@ -55,10 +55,11 @@ class SampleGroupTableView(ListView):
     template_name = "sample_group_table.html"
     context_object_name = "sample_groups"
     paginate_by = 10
+    ordering = ("name",)
 
     def get_queryset(self):
         # Optimize query by selecting related metadata and prefetching variants
-        return (
+        queryset = (
             super()
             .get_queryset()
             .select_related(
@@ -79,6 +80,7 @@ class SampleGroupTableView(ListView):
             )
             .prefetch_related("allele_frequencies")
         )
+        return queryset.order_by("name", "pk")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -96,6 +98,7 @@ class SearchResultsView(SingleTableMixin, FilterView):
     context_object_name = "sample_groups"
     paginate_by = 10
     filterset_class = SampleGroupFilter
+    ordering = ("name", "pk")
 
     # Dynamically create a table class that includes all related fields.
     table_class = create_dynamic_table(
@@ -118,13 +121,13 @@ class SearchResultsView(SingleTableMixin, FilterView):
             "bioinfo_variant_calling",
             "bioinfo_post_proc",
             "created_by",
-        ).prefetch_related("allele_frequencies")
+        ).prefetch_related("allele_frequencies").order_by(*self.ordering)
 
         # Instantiate the filter set manually so that we can reuse it in the template context.
         self.filterset = self.filterset_class(
             self.request.GET or None, queryset=base_queryset
         )
-        return self.filterset.qs.distinct()
+        return self.filterset.qs.order_by(*self.ordering).distinct()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

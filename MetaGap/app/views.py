@@ -408,6 +408,23 @@ class ImportDataView(LoginRequiredMixin, FormView):
             )
             metadata = self._extract_metadata_text_fallback(file_path)
 
+            created_alleles = []
+            for record in vcf_in.fetch():
+                info_instance = self._create_info_instance(record.info)
+                format_instance, format_sample = self._create_format_instance(record.samples)
+
+                allele = AlleleFrequency.objects.create(
+                    sample_group=sample_group,
+                    chrom=record.chrom,
+                    pos=record.pos,
+                    variant_id=record.id,
+                    ref=record.ref,
+                    alt=self._serialize_alt(record.alts),
+                    qual=record.qual,
+                    filter=self._serialize_filter(record.filter),
+                    info=info_instance,
+                    format=format_instance,
+                )
         sample_group = SampleGroup.objects.create(
             name=metadata.get("name")
             or os.path.splitext(os.path.basename(file_path))[0],

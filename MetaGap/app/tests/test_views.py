@@ -117,8 +117,8 @@ class ImportDataViewTests(TestCase):
 
         self.assertRedirects(response, reverse("profile"))
         sample_group = SampleGroup.objects.get(name="GroupA")
+        self.assertEqual(sample_group.allele_frequencies.count(), 1)
         allele = sample_group.allele_frequencies.get()
-
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")

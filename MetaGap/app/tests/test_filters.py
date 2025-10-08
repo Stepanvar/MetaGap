@@ -66,29 +66,30 @@ class SampleGroupFilterTests(TestCase):
             storage_conditions="Frozen",
             time_stored="2 years",
         )
+        self.other_origin = SampleOrigin.objects.create(
+            tissue="Blood",
+            collection_method="Draw",
+            storage_conditions="Refrigerated",
+        )
         self.group = SampleGroup.objects.create(
             name="Kidney Cohort",
             created_by=self.user.organization_profile,
-            tissue="Kidney",
-            collection_method="Biopsy",
-            storage_conditions="Frozen",
             sample_origin=self.sample_origin,
         )
         self.other_group = SampleGroup.objects.create(
             name="Control Cohort",
             created_by=self.user.organization_profile,
-            tissue="Blood",
-            collection_method="Draw",
+            sample_origin=self.other_origin,
         )
 
-    def test_search_matches_direct_tissue_field(self):
+    def test_search_matches_sample_origin_tissue_field(self):
         qs = filters.SampleGroupFilter(
             {"query": "Kidney"}, queryset=SampleGroup.objects.all()
         ).qs
 
         self.assertEqual(list(qs), [self.group])
 
-    def test_search_matches_direct_collection_method_field(self):
+    def test_search_matches_sample_origin_collection_method_field(self):
         qs = filters.SampleGroupFilter(
             {"query": "Biopsy"}, queryset=SampleGroup.objects.all()
         ).qs

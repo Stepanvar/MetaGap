@@ -369,9 +369,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "total_samples": ["samples", "sample_count", "n_samples"],
             "inclusion_criteria": ["inclusion", "inclusioncriteria"],
             "exclusion_criteria": ["exclusion", "exclusioncriteria"],
-            "tissue": ["tissue_type"],
-            "collection_method": ["collection", "method"],
-            "storage_conditions": ["storage", "storage_conditions"],
             "comments": ["description", "notes"],
         },
         "input_quality": {

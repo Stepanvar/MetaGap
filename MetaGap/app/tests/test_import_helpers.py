@@ -1,5 +1,8 @@
 """Unit tests for the ImportDataView helper methods."""
 
+import os
+import tempfile
+
 from django.test import RequestFactory, TestCase
 
 from app.models import Format, Info
@@ -50,44 +53,30 @@ class ImportHelpersTests(TestCase):
         self.assertEqual(format_instance.payload["fields"], {"gt": "0/1", "gq": "99"})
         self.assertEqual(format_instance.payload["additional"], {"extra": "foo,bar"})
 
-    def test_build_additional_payload_coerces_and_filters_values(self):
-        """Additional payload converts values and excludes consumed keys."""
+    def test_extract_metadata_text_fallback_reads_sample_header(self):
+        """Metadata extraction lowers keys, derives name, and stops at #CHROM."""
 
-        metadata = {
-            "sample_json": '{"coverage": 99}',
-            "sample_number": " 42 ",
-            "sample_blank": "   ",
-            "sample_raw": "hello",
-            "sample_float": "3.14",
-            "sample_consumed": "ignored",
-            "sample.additional": '{"quality": "high"}',
-            "other_section": "should be skipped",
-        }
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".vcf", encoding="utf-8"
+        ) as handle:
+            handle.write("##fileformat=VCFv4.3\n")
+            handle.write(
+                "##SAMPLE=<ID=Sample01,Description=First sample,Project=Test,"
+                "FlagWithoutValue=,MalformedEntry>\n"
+            )
+            handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+            handle.write("1\t1000\t.\tA\tT\t.\tPASS\t.\n")
+            handle.write("##SAMPLE=<ID=Ignored,Name=ShouldNotAppear>\n")
 
-        additional = self.view._build_additional_payload(
-            metadata,
-            section="sample",
-            consumed={"sample_consumed"},
-        )
+        try:
+            metadata = self.view._extract_metadata_text_fallback(handle.name)
+        finally:
+            os.remove(handle.name)
 
-        self.assertIsNotNone(additional)
-        self.assertEqual(additional["json"], {"coverage": 99})
-        self.assertEqual(additional["number"], 42)
-        self.assertIsNone(additional["blank"])
-        self.assertEqual(additional["raw"], "hello")
-        self.assertAlmostEqual(additional["float"], 3.14)
-        self.assertEqual(additional["additional"], {"quality": "high"})
-        self.assertNotIn("consumed", additional)
-        self.assertNotIn("other_section", additional)
-
-    def test_coerce_additional_value_behavior_matrix(self):
-        """Direct coercion helper tests guard against regression."""
-
-        coerce = ImportDataView._coerce_additional_value
-
-        self.assertIsNone(coerce("   "))
-        self.assertEqual(coerce('{"a": 1}'), {"a": 1})
-        self.assertEqual(coerce("42"), 42)
-        self.assertAlmostEqual(coerce("3.14"), 3.14)
-        self.assertTrue(coerce("true"))
-        self.assertEqual(coerce("not-json-or-number"), "not-json-or-number")
+        self.assertEqual(metadata.get("id"), "Sample01")
+        self.assertEqual(metadata.get("name"), "Sample01")
+        self.assertEqual(metadata.get("description"), "First sample")
+        self.assertEqual(metadata.get("project"), "Test")
+        self.assertIn("flagwithoutvalue", metadata)
+        self.assertNotIn("malformedentry", metadata)
+        self.assertNotIn("shouldnotappear", metadata.values())

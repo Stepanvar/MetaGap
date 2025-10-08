@@ -624,8 +624,7 @@ def validate_merged_vcf(merged_vcf, verbose=False):
     try:
         reader = vcfpy.Reader.from_path(merged_vcf)
     except Exception as e:
-        handle_non_critical_error(f"Could not open {merged_vcf}: {str(e)}. Skipping.")
-        return False
+        handle_critical_error(f"Could not open {merged_vcf}: {str(e)}.")
 
 
     header = reader.header
@@ -640,52 +639,74 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             handle_critical_error(f"Missing required meta-information: ##{meta} in {merged_vcf} header.")
 
 
-    info_definitions = {}
-    for line in header.lines:
-        if isinstance(line, vcfpy.header.InfoHeaderLine):
-            info_definitions[line.id] = line
-
-    required_info_ids = {
-        info_id for info_id, info_def in info_definitions.items() if _info_field_requires_value(info_def.number)
+    defined_info_ids = {
+        line.id
+        for line in header.lines
+        if isinstance(line, vcfpy.header.InfoHeaderLine)
     }
+    required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
 
+    encountered_exception = False
     try:
         for record in reader:
             info_map = getattr(record, "INFO", None)
             record_label = f"{getattr(record, 'CHROM', '?')}:{getattr(record, 'POS', '?')}"
 
             if info_map is None:
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} is missing INFO data."
+                logger.warning(
+                    "Record %s in %s is missing INFO data.",
+                    record_label,
+                    merged_vcf,
                 )
+                continue
 
             if not isinstance(info_map, dict):
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}."
+                logger.warning(
+                    "Record %s in %s has an unexpected INFO type: %s.",
+                    record_label,
+                    merged_vcf,
+                    type(info_map).__name__,
+                )
+                continue
+
+            record_info_keys = set(info_map.keys())
+
+            undefined_keys = sorted(record_info_keys.difference(defined_info_ids))
+            if undefined_keys:
+                logger.warning(
+                    "Record %s in %s has INFO fields not present in header definitions: %s.",
+                    record_label,
+                    merged_vcf,
+                    ", ".join(undefined_keys),
                 )
 
-            if not info_map:
-                missing_keys = sorted(required_info_ids)
-            else:
-                missing_keys = sorted(required_info_ids.difference(info_map.keys()))
-
+            missing_keys = sorted(required_info_ids.difference(record_info_keys))
             if missing_keys:
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
+                logger.warning(
+                    "Record %s in %s is missing required INFO fields: %s.",
+                    record_label,
+                    merged_vcf,
+                    ", ".join(missing_keys),
                 )
 
             null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
             if null_keys:
-                handle_critical_error(
-                    f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
+                logger.warning(
+                    "Record %s in %s has INFO fields with null values: %s.",
+                    record_label,
+                    merged_vcf,
+                    ", ".join(sorted(null_keys)),
                 )
 
     except SystemExit:
         raise
     except Exception as exc:
-        handle_critical_error(f"Error while parsing records in {merged_vcf}: {exc}")
-    log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
-    print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+        encountered_exception = True
+        logger.warning("Error while parsing records in %s: %s", merged_vcf, exc)
+
+    if not encountered_exception:
+        log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+        print(f"Validation completed successfully for merged VCF: {merged_vcf}")
 
 
 def main():

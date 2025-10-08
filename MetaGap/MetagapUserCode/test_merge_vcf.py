@@ -413,6 +413,26 @@ def validate_vcf(file_path, ref_genome, vcf_version, verbose=False, allow_gvcf=F
     return True
 
 
+def _extract_header_definitions(header, key):
+    """Return an OrderedDict mapping header line IDs to their metadata."""
+
+    try:
+        header_lines = list(header.get_lines(key))
+    except Exception:  # pragma: no cover - defensive; vcfpy may raise AttributeError
+        header_lines = []
+
+    definitions = OrderedDict()
+    for line in header_lines:
+        line_id = getattr(line, "id", None)
+        if line_id is None and hasattr(line, "mapping"):
+            line_id = line.mapping.get("ID")
+        if line_id is None:
+            continue
+        metadata = copy.deepcopy(getattr(line, "mapping", {}))
+        definitions[line_id] = metadata
+    return definitions
+
+
 def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_gvcf=False):
     valid_vcfs = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
@@ -452,9 +472,9 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
                 header = reader.header
 
                 current_samples = list(header.samples.names)
-                current_contigs = copy.deepcopy(header.contigs)
-                current_info_defs = copy.deepcopy(header.info_defs)
-                current_format_defs = copy.deepcopy(header.format_defs)
+                current_contigs = _extract_header_definitions(header, "contig")
+                current_info_defs = _extract_header_definitions(header, "INFO")
+                current_format_defs = _extract_header_definitions(header, "FORMAT")
 
                 if reference_samples is None:
                     reference_samples = current_samples
@@ -490,41 +510,56 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
                             f"{list(current_format_defs.keys())}."
                         )
 
-                contig_order = {name: idx for idx, name in enumerate(header.contigs.keys())}
+                contig_order = {name: idx for idx, name in enumerate(current_contigs.keys())}
                 last_contig_index = None
                 last_position = None
                 last_contig_name = None
                 for record in reader:
                     chrom = record.CHROM
                     pos = record.POS
-                    if chrom not in contig_order:
-                        handle_critical_error(
-                            f"Encountered unknown contig '{chrom}' in {file_path}. MetaGap assumes vertical "
-                            "concatenation of shards with consistent headers."
-                        )
-                    contig_index = contig_order[chrom]
-                    if last_contig_index is None:
+                    if contig_order:
+                        if chrom not in contig_order:
+                            handle_critical_error(
+                                f"Encountered unknown contig '{chrom}' in {file_path}. MetaGap assumes vertical "
+                                "concatenation of shards with consistent headers."
+                            )
+                        contig_index = contig_order[chrom]
+                        if last_contig_index is None:
+                            last_contig_index = contig_index
+                            last_position = pos
+                            last_contig_name = chrom
+                            continue
+
+                        if contig_index < last_contig_index or (
+                            contig_index == last_contig_index and pos < last_position
+                        ):
+                            handle_critical_error(
+                                f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
+                                f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
+                                "so input shards must already be sorted."
+                            )
+
                         last_contig_index = contig_index
-                        last_position = pos
-                        last_contig_name = chrom
-                        continue
-
-                    if contig_index < last_contig_index or (
-                        contig_index == last_contig_index and pos < last_position
-                    ):
-                        handle_critical_error(
-                            f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
-                            f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
-                            "so input shards must already be sorted."
-                        )
-
-                    if contig_index == last_contig_index:
-                        last_position = pos
-                        last_contig_name = chrom
                     else:
-                        last_contig_index = contig_index
-                        last_position = pos
-                        last_contig_name = chrom
+                        if last_contig_name is None:
+                            last_contig_name = chrom
+                            last_position = pos
+                            continue
+
+                        if chrom == last_contig_name:
+                            if pos < last_position:
+                                handle_critical_error(
+                                    f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
+                                    f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
+                                    "so input shards must already be sorted."
+                                )
+                        else:
+                            last_contig_name = chrom
+                            last_position = pos
+                            continue
+
+                    last_contig_name = chrom
+                    last_position = pos
                 valid_vcfs.append(file_path)
             finally:
                 if reader is not None and hasattr(reader, "close"):

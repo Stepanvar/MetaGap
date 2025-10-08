@@ -354,6 +354,11 @@ class ImportDataViewTests(TestCase):
     """Validate the VCF import workflow end to end."""
 
     VCF_CONTENT = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">
+##INFO=<ID=CLNSIG,Number=1,Type=String,Description="Clinical significance">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
 ##SAMPLE=<ID=GroupA,Description=Imported group>
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t1234\trsTest\tA\tT\t99\tPASS\tAF=0.5;CLNSIG=Pathogenic\tGT:GQ\t0/1:99

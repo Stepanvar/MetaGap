@@ -14,13 +14,13 @@ body {
 }
 
 .navbar .navbar-brand {
-        color: var(--color-primary);
+        color: var(--bs-body-color);
         font-weight: 600;
 }
 
 .navbar .navbar-brand:hover,
 .navbar .navbar-brand:focus {
-        color: var(--color-secondary);
+        color: var(--color-primary);
 }
 
 a {
@@ -137,3 +137,21 @@ a:focus,
 }
 
 /* Other custom styles */
+.nav-logout-button {
+        font-size: 1rem;
+        line-height: 1.5;
+        padding: 0.5rem 1rem;
+        color: var(--bs-danger);
+        border-color: var(--bs-danger);
+        transition: color 0.2s ease-in-out, background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+.nav-logout-button:hover,
+.nav-logout-button:focus,
+.nav-logout-button:active,
+.nav-logout-button:focus-visible {
+        color: #ffffff;
+        background-color: var(--bs-danger);
+        border-color: var(--bs-danger);
+        box-shadow: none;
+}

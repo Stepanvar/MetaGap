@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container mt-5">
         <h2>Sign Up</h2>
-        {% include 'form_template.html' with form=form submit_button_label="Create Account" %}
+        {% include 'partials/form.html' with form=form submit_button_label="Create Account" extra_actions=form_extra_actions|default:'' %}
 </div>
 {% endblock %}
 

@@ -5,12 +5,13 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from ..filters import SampleGroupFilter
 from ..forms import ImportDataForm, SearchForm
 from ..models import AlleleFrequency, SampleGroup, SampleOrigin
+from ..views import EditProfileView
 
 
 class HomePageViewTests(TestCase):
@@ -90,6 +91,64 @@ class ProfileViewTests(TestCase):
         self.assertEqual(
             response.context["import_form_enctype"],
             "multipart/form-data",
+        )
+
+
+class EditProfileViewTests(TestCase):
+    """Validate the edit profile workflow and form configuration."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.factory = RequestFactory()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="edit_user",
+            password="test-pass-123",
+            email="initial@example.com",
+            first_name="Initial",
+            last_name="User",
+        )
+
+    def test_form_kwargs_uses_authenticated_user_instance(self) -> None:
+        request = self.factory.get(reverse("edit_profile"))
+        request.user = self.user
+
+        view = EditProfileView()
+        view.setup(request)
+
+        form_kwargs = view.get_form_kwargs()
+
+        self.assertIs(form_kwargs["instance"], self.user)
+
+    def test_successful_profile_update_redirects_and_persists(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("edit_profile"),
+            {
+                "username": "edit_user",
+                "email": "updated@example.com",
+                "first_name": "Updated",
+                "last_name": "Name",
+                "organization_name": "Updated Org",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "updated@example.com")
+        self.assertEqual(self.user.first_name, "Updated")
+        self.assertEqual(self.user.last_name, "Name")
+        self.assertEqual(
+            self.user.organization_profile.organization_name,
+            "Updated Org",
+        )
+
+        messages = list(get_messages(response.wsgi_request))
+        self.assertIn(
+            "Your profile has been updated.",
+            [message.message for message in messages],
         )
 
 

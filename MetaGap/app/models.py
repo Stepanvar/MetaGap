@@ -158,13 +158,12 @@ class BioinfoAlignment(models.Model):
     """Bioinformatics alignment settings."""
 
     tool = models.CharField(max_length=100, blank=True, null=True)
-    software = models.CharField(max_length=100, blank=True, null=True)
     params = models.CharField(max_length=255, blank=True, null=True)
     ref_genome_version = models.CharField(max_length=100, blank=True, null=True)
     recalibration_settings = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self) -> str:
-        label = self.tool or self.software or "Unknown"
+        label = self.tool or "Unknown"
         return f"Tool: {label}, Ref Genome Version: {self.ref_genome_version}"
 
 

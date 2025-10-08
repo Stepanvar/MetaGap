@@ -83,7 +83,6 @@ class SampleGroupFilter(django_filters.FilterSet):
             | Q(platform_independent__normalized_coverage__icontains=value)
             | Q(platform_independent__run_specific_calibration__icontains=value)
             | Q(bioinfo_alignment__tool__icontains=value)
-            | Q(bioinfo_alignment__software__icontains=value)
             | Q(bioinfo_alignment__params__icontains=value)
             | Q(bioinfo_alignment__ref_genome_version__icontains=value)
             | Q(bioinfo_alignment__recalibration_settings__icontains=value)

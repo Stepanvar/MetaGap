@@ -28,7 +28,6 @@ from ..models import (
     MaterialType,
     OntSeq,
     PacBioSeq,
-    PlatformIndependent,
     ReferenceGenomeBuild,
     SampleGroup,
     SampleOrigin,
@@ -62,11 +61,6 @@ class SampleGroupTestDataMixin:
             kit="MetaPrep",
             fragmentation="Acoustic",
             adapter_ligation_efficiency="95%",
-        )
-        platform_independent = PlatformIndependent.objects.create(
-            instrument="NovaSeq",
-            pooling="Single",
-            sequencing_kit="v3 Chemistry",
         )
         illumina_seq = IlluminaSeq.objects.create(
             instrument="NovaSeq 6000",
@@ -116,7 +110,6 @@ class SampleGroupTestDataMixin:
             sample_origin=sample_origin,
             material_type=material_type,
             library_construction=library_construction,
-            platform_independent=platform_independent,
             illumina_seq=illumina_seq,
             ont_seq=ont_seq,
             pacbio_seq=pacbio_seq,

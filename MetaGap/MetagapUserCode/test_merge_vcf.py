@@ -9,6 +9,11 @@ It replicates the bash script functionality:
   - Performs a final validation of the merged VCF.
   - Logs execution details to a log file.
 
+At completion the script prints a compact summary in the form
+``Wrote: <DIR>/<SAMPLE_XXXX>.vcf[.gz] x N`` where the directory, a
+representative sample filename, and the number of produced cohort VCF
+shards are derived from the output directory contents.
+
 Requirements:
 pip install vcfpy
 """
@@ -1530,6 +1535,38 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             pass
 
 
+def summarize_produced_vcfs(output_dir, fallback_vcf):
+    """Return a directory, representative filename, and count for output VCFs."""
+
+    discovered = []
+    output_dir = os.path.abspath(output_dir) if output_dir else None
+    if output_dir and os.path.isdir(output_dir):
+        for pattern in ("SAMPLE_*.vcf.gz", "SAMPLE_*.vcf"):
+            discovered.extend(
+                sorted(
+                    glob.glob(os.path.join(output_dir, pattern)),
+                    key=lambda path: os.path.basename(path),
+                )
+            )
+
+    if discovered:
+        # Prefer gzipped outputs when both compressed and uncompressed variants exist.
+        discovered.sort(
+            key=lambda path: (
+                0 if path.endswith(".vcf.gz") else 1,
+                os.path.basename(path),
+            )
+        )
+        representative_path = discovered[0]
+        directory = os.path.dirname(os.path.abspath(representative_path))
+        filename = os.path.basename(representative_path)
+        count = len(discovered)
+        return directory, filename, count
+
+    fallback_abs = os.path.abspath(fallback_vcf)
+    return os.path.dirname(fallback_abs), os.path.basename(fallback_abs), 1
+
+
 def main():
     args = parse_arguments()
     verbose = args.verbose
@@ -1603,13 +1640,16 @@ def main():
 
     validate_merged_vcf(final_vcf, verbose)
 
-    print("----------------------------------------")
-    print("Script Execution Summary:")
-    print("Merged VCF File: " + final_vcf)
-    print("Log File: " + LOG_FILE)
-    print("For detailed logs, refer to " + LOG_FILE)
-    print("----------------------------------------")
-    log_message("Script execution completed successfully.", verbose)
+    summary_dir, sample_filename, produced_count = summarize_produced_vcfs(
+        output_dir, final_vcf
+    )
+    summary_path = os.path.join(summary_dir, sample_filename)
+    print(f"Wrote: {summary_path} x {produced_count}")
+    log_message(
+        "Script execution completed successfully. "
+        f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
+        verbose,
+    )
 
 
 

@@ -8,11 +8,3 @@ class Migration(migrations.Migration):
     dependencies = [
         ("app", "0013_platformindependent_instrument"),
     ]
-
-    operations = [
-        migrations.AddField(
-            model_name="bioinfoalignment",
-            name="tool",
-            field=models.CharField(blank=True, max_length=100, null=True),
-        ),
-    ]

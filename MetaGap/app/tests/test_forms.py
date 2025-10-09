@@ -4,7 +4,13 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from app import forms
-from app.models import OrganizationProfile, SampleGroup, SampleOrigin
+from app.models import (
+    BioinfoAlignment,
+    MaterialType,
+    OrganizationProfile,
+    SampleGroup,
+    SampleOrigin,
+)
 
 
 class ImportDataFormTests(SimpleTestCase):
@@ -192,3 +198,26 @@ class SampleGroupFormTests(TestCase):
         self.assertEqual(updated_group.sample_origin.collection_method, "Surgical")
         self.assertEqual(updated_group.sample_origin.storage_conditions, "Ambient")
         self.assertIsNone(updated_group.sample_origin.time_stored)
+
+    def test_creatable_metadata_fields_allow_new_entries(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        form = forms.SampleGroupForm(
+            data={
+                "name": "Metadata Rich Group",
+                "material_type": "DNA",
+                "bioinfo_alignment": "BWA-MEM",
+            },
+            user=user,
+        )
+
+        self.assertTrue(form.is_valid())
+
+        sample_group = form.save()
+
+        self.assertEqual(MaterialType.objects.count(), 1)
+        self.assertIsNotNone(sample_group.material_type)
+        self.assertEqual(sample_group.material_type.material_type, "DNA")
+
+        self.assertEqual(BioinfoAlignment.objects.count(), 1)
+        self.assertIsNotNone(sample_group.bioinfo_alignment)
+        self.assertEqual(sample_group.bioinfo_alignment.tool, "BWA-MEM")

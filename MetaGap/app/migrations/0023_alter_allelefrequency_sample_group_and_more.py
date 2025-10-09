@@ -11,6 +11,29 @@ def _remove_orphan_allele_frequencies(apps, schema_editor):
     AlleleFrequency.objects.filter(sample_group__isnull=True).delete()
 
 
+def _deduplicate_allele_frequencies(apps, schema_editor):
+    """Ensure each sample group/variant combination only has one record."""
+
+    AlleleFrequency = apps.get_model("app", "AlleleFrequency")
+
+    duplicates = (
+        AlleleFrequency.objects.values(
+            "sample_group_id", "chrom", "pos", "ref", "alt"
+        )
+        .annotate(min_id=models.Min("id"), count=models.Count("id"))
+        .filter(count__gt=1)
+    )
+
+    for duplicate in duplicates:
+        AlleleFrequency.objects.filter(
+            sample_group_id=duplicate["sample_group_id"],
+            chrom=duplicate["chrom"],
+            pos=duplicate["pos"],
+            ref=duplicate["ref"],
+            alt=duplicate["alt"],
+        ).exclude(id=duplicate["min_id"]).delete()
+
+
 def _noop_reverse(apps, schema_editor):
     """No reverse operation; deleted records cannot be restored."""
     # Intentionally empty.
@@ -26,6 +49,10 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(
             _remove_orphan_allele_frequencies,
+            reverse_code=_noop_reverse,
+        ),
+        migrations.RunPython(
+            _deduplicate_allele_frequencies,
             reverse_code=_noop_reverse,
         ),
         migrations.AlterField(

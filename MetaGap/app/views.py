@@ -742,6 +742,9 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "BIOINFO_POST_PROC": "bioinfo_post_proc",
         "BIOINFO_POST_PROCESSING": "bioinfo_post_proc",
         "INPUT_QUALITY": "input_quality",
+        "PLATFORM_INDEPENDENT": "platform_independent",
+        "PLATFORM-INDEPENDENT": "platform_independent",
+        "PLATFORMINDEPENDENT": "platform_independent",
     }
 
     METADATA_MODEL_MAP = {

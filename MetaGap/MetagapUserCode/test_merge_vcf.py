@@ -918,21 +918,41 @@ def merge_vcfs(
     except Exception as exc:
         handle_critical_error(f"Failed to construct merged header: {exc}")
 
-    writer = vcfpy.Writer.from_path(merged_filename, header)
-    for file_path in valid_files:
-        log_message(f"Processing file: {file_path}", verbose)
-        preprocessed_file = preprocess_vcf(file_path)
-        try:
-            reader = vcfpy.Reader.from_path(preprocessed_file)
-            for record in reader:
-                _pad_record_samples(record, header, sample_order)
-                writer.write_record(record)
-        except Exception as e:
-            handle_non_critical_error(f"Error processing {file_path}: {str(e)}. Skipping remaining records.")
-        if preprocessed_file != file_path:
-            os.remove(preprocessed_file)
+    header_temp_path = os.path.join(output_dir, "header_final.temp")
+    body_temp_path = os.path.join(output_dir, "body.temp")
 
-    writer.close()
+    if not os.path.exists(header_temp_path):
+        handle_critical_error(
+            f"Expected temporary header file not found: {header_temp_path}"
+        )
+    if not os.path.exists(body_temp_path):
+        handle_critical_error(
+            f"Expected temporary body file not found: {body_temp_path}"
+        )
+
+    try:
+        with open(merged_filename, "w", encoding="utf-8") as merged_file:
+            with open(header_temp_path, "r", encoding="utf-8") as header_file:
+                for chunk in header_file:
+                    merged_file.write(chunk)
+            with open(body_temp_path, "r", encoding="utf-8") as body_file:
+                for chunk in body_file:
+                    merged_file.write(chunk)
+    except Exception as exc:
+        handle_critical_error(
+            f"Failed to combine temporary VCF segments into {merged_filename}: {exc}"
+        )
+    finally:
+        for temp_path in (header_temp_path, body_temp_path):
+            try:
+                os.remove(temp_path)
+            except FileNotFoundError:
+                continue
+            except Exception as exc:
+                handle_non_critical_error(
+                    f"Unable to remove temporary file {temp_path}: {exc}"
+                )
+
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
 

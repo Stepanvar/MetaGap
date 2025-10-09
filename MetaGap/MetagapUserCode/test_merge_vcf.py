@@ -23,6 +23,9 @@ import datetime
 import re
 import copy
 import tempfile
+import shutil
+import subprocess
+import gzip
 from collections import OrderedDict
 
 try:
@@ -707,7 +710,6 @@ def union_headers(valid_files, sample_order=None):
 
     combined_header = None
     info_ids = set()
-    format_ids = set()
     filter_ids = set()
     contig_ids = set()
     computed_sample_order = []
@@ -725,8 +727,6 @@ def union_headers(valid_files, sample_order=None):
                 for line in combined_header.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
                         info_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        format_ids.add(line.id)
                     elif isinstance(line, vcfpy.header.FilterHeaderLine):
                         filter_ids.add(line.id)
                     elif isinstance(line, vcfpy.header.ContigHeaderLine):
@@ -736,6 +736,7 @@ def union_headers(valid_files, sample_order=None):
                         if mapping.get("ID"):
                             merged_sample_metadata = OrderedDict(mapping)
 
+                _remove_format_and_sample_definitions(combined_header)
                 if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
                     computed_sample_order = list(combined_header.samples.names)
                 else:
@@ -752,10 +753,6 @@ def union_headers(valid_files, sample_order=None):
                     if line.id not in info_ids:
                         combined_header.add_line(copy.deepcopy(line))
                         info_ids.add(line.id)
-                elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                    if line.id not in format_ids:
-                        combined_header.add_line(copy.deepcopy(line))
-                        format_ids.add(line.id)
                 elif isinstance(line, vcfpy.header.FilterHeaderLine):
                     if line.id not in filter_ids:
                         combined_header.add_line(copy.deepcopy(line))
@@ -792,6 +789,8 @@ def union_headers(valid_files, sample_order=None):
     target_sample_order = sample_order if sample_order is not None else computed_sample_order
     if target_sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
         combined_header.samples.names = list(target_sample_order)
+
+    _remove_format_and_sample_definitions(combined_header)
 
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)
@@ -859,6 +858,33 @@ def _create_missing_call_factory(format_keys, header):
     return factory
 
 
+def _remove_format_and_sample_definitions(header):
+    """Strip FORMAT definitions and sample columns from a VCF header."""
+
+    if header is None:
+        return
+
+    if hasattr(header, "lines"):
+        filtered_lines = []
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.FormatHeaderLine):
+                continue
+            key = getattr(line, "key", None)
+            if isinstance(key, str) and key.upper() == "FORMAT":
+                continue
+            filtered_lines.append(line)
+        header.lines = filtered_lines
+
+    if hasattr(header, "formats"):
+        try:
+            header.formats.clear()
+        except AttributeError:
+            header.formats = OrderedDict()
+
+    if hasattr(header, "samples") and hasattr(header.samples, "names"):
+        header.samples.names = []
+
+
 def _pad_record_samples(record, header, sample_order):
     if not sample_order or not hasattr(record, "call_for_sample"):
         return
@@ -895,6 +921,9 @@ def _pad_record_samples(record, header, sample_order):
     record.update_calls(updated_calls)
 
 
+import os, shutil, subprocess, datetime
+import vcfpy
+
 def merge_vcfs(
     valid_files,
     output_dir,
@@ -904,212 +933,97 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
-    log_message("Merging VCF files...", verbose)
+    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")   # plain VCF
+    filled_vcf = base_vcf + ".filled.vcf"                                 # after +fill-tags
+    gz_vcf   = base_vcf + ".gz"
+
+    file_count = len(valid_files)
+    log_message(f"Found {file_count} VCF files. Merging them into a combined VCF...", verbose)
+
+    temp_files, preprocessed_files = [], []
+    for file_path in valid_files:
+        try:
+            pre = preprocess_vcf(file_path)   # your helper prepares bgzipped+indexed or plain inputs
+        except Exception as exc:
+            handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
+        preprocessed_files.append(pre)
+        if pre != file_path:
+            temp_files.append(pre)
+
+    log_message("Merging VCF files with bcftools...", verbose)
     try:
-        header = union_headers(valid_files, sample_order=sample_order)
+        # Write UNCOMPRESSED VCF so vcfpy can adjust the header easily
+        result = subprocess.run(
+            ["bcftools", "merge", "-m", "all", "-Ov", "-o", base_vcf, *preprocessed_files],
+            capture_output=True, text=True,
+        )
+    finally:
+        for tmp in temp_files:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+    if result.returncode != 0:
+        handle_critical_error((result.stderr or "bcftools merge failed").strip())
+
+    # Open merged VCF, apply metadata/header edits, rewrite
+    try:
+        reader = vcfpy.Reader.from_path(base_vcf)
+    except Exception as exc:
+        handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
+
+    try:
         header = apply_metadata_to_header(
-            header,
+            reader.header,
             sample_header_line=sample_header_line,
             simple_header_lines=simple_header_lines,
             verbose=verbose,
         )
     except SystemExit:
+        reader.close()
         raise
     except Exception as exc:
-        handle_critical_error(f"Failed to construct merged header: {exc}")
+        reader.close()
+        handle_critical_error(f"Failed to apply metadata to merged VCF: {exc}")
 
-    writer = vcfpy.Writer.from_path(merged_filename, header)
-    for file_path in valid_files:
-        log_message(f"Processing file: {file_path}", verbose)
-        preprocessed_file = preprocess_vcf(file_path)
-        try:
-            reader = vcfpy.Reader.from_path(preprocessed_file)
-            for record in reader:
-                _pad_record_samples(record, header, sample_order)
-                writer.write_record(record)
-        except Exception as e:
-            handle_non_critical_error(f"Error processing {file_path}: {str(e)}. Skipping remaining records.")
-        if preprocessed_file != file_path:
-            os.remove(preprocessed_file)
-
-    writer.close()
-    log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
-    return merged_filename
-
-
-def _format_record_label(record):
-    chrom = getattr(record, "CHROM", "?")
-    pos = getattr(record, "POS", "?")
-    return f"{chrom}:{pos}"
-
-
-def _extract_called_allele_indices(genotype_value):
-    if genotype_value is None:
-        return []
-
-    if hasattr(genotype_value, "values"):
-        tokens = genotype_value.values
-    elif isinstance(genotype_value, (list, tuple)):
-        tokens = genotype_value
-    else:
-        text = str(genotype_value)
-        if not text:
-            return []
-        normalized = text.replace("|", "/")
-        tokens = normalized.split("/")
-
-    allele_indices = []
-    for token in tokens:
-        if token is None:
-            continue
-        token_str = str(token).strip()
-        if not token_str or token_str == ".":
-            continue
-        try:
-            allele_indices.append(int(token_str))
-        except ValueError:
-            continue
-    return allele_indices
-
-
-def _ensure_ac_an_af_info_definitions(header):
-    definitions = {
-        "AC": OrderedDict(
-            [
-                ("ID", "AC"),
-                ("Number", "A"),
-                ("Type", "Integer"),
-                ("Description", "Allele count in genotypes, for each ALT allele"),
-            ]
-        ),
-        "AN": OrderedDict(
-            [
-                ("ID", "AN"),
-                ("Number", 1),
-                ("Type", "Integer"),
-                ("Description", "Total number of alleles in called genotypes"),
-            ]
-        ),
-        "AF": OrderedDict(
-            [
-                ("ID", "AF"),
-                ("Number", "A"),
-                ("Type", "Float"),
-                ("Description", "Allele frequency for each ALT allele"),
-            ]
-        ),
-    }
-
-    for info_id, mapping in definitions.items():
-        if not header.has_header_line("INFO", info_id):
-            header.add_info_line(vcfpy.InfoHeaderLine("INFO", info_id, mapping))
-
-
-def _recalculate_record_info_fields(record):
-    alt_alleles = getattr(record, "ALT", []) or []
-    alt_count = len(alt_alleles)
-    allele_counts = [0] * alt_count
-    total_alleles = 0
-
-    if alt_count == 0:
-        record.INFO.pop("AC", None)
-        record.INFO.pop("AF", None)
-        record.INFO["AN"] = 0
-        return
-
-    for call in getattr(record, "calls", []) or []:
-        genotype_indices = _extract_called_allele_indices(call.data.get("GT"))
-        for allele_index in genotype_indices:
-            if allele_index is None or allele_index < 0:
-                continue
-            if allele_index == 0:
-                total_alleles += 1
-                continue
-            adjusted_index = allele_index - 1
-            if 0 <= adjusted_index < alt_count:
-                allele_counts[adjusted_index] += 1
-                total_alleles += 1
-            else:
-                handle_non_critical_error(
-                    "Record {} has genotype allele index {} exceeding available ALT alleles. Ignoring it for AC/AN/AF recalculation.".format(
-                        _format_record_label(record), allele_index
-                    )
-                )
-
-    record.INFO["AC"] = allele_counts
-    record.INFO["AN"] = total_alleles
-    if total_alleles > 0:
-        record.INFO["AF"] = [count / total_alleles for count in allele_counts]
-    else:
-        record.INFO["AF"] = [0.0] * alt_count
-
-
-def recalculate_cohort_info_tags(merged_vcf, verbose=False):
-    if not merged_vcf:
-        handle_critical_error("Merged VCF path is required for INFO recalculation.")
-
-    if not os.path.exists(merged_vcf):
-        handle_critical_error(
-            f"Merged VCF does not exist for INFO recalculation: {merged_vcf}"
-        )
-
-    log_message(
-        "Recalculating INFO fields (AC, AN, AF) across the merged cohort...",
-        verbose,
-    )
-
+    tmp_out = base_vcf + ".tmp"
     try:
-        reader = vcfpy.Reader.from_path(merged_vcf)
-    except Exception as exc:
-        handle_critical_error(
-            f"Unable to open merged VCF for INFO recalculation: {exc}"
-        )
-
-    header = reader.header.copy()
-    _ensure_ac_an_af_info_definitions(header)
-
-    tmp_dir = os.path.dirname(os.path.abspath(merged_vcf))
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".vcf", dir=tmp_dir
-        ) as tmp_handle:
-            temp_path = tmp_handle.name
+        writer = vcfpy.Writer.from_path(tmp_out, header)  # writes full header immediately
     except Exception as exc:
         reader.close()
-        handle_critical_error(
-            f"Unable to create a temporary VCF for INFO recalculation: {exc}"
-        )
-
-    writer = vcfpy.Writer.from_path(temp_path, header)
+        handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
 
     try:
         for record in reader:
-            _recalculate_record_info_fields(record)
+            # optional: _pad_record_samples(record, header, sample_order)
             writer.write_record(record)
-    except Exception as exc:
+    finally:
         reader.close()
         writer.close()
-        os.remove(temp_path)
-        handle_critical_error(
-            f"Failed while recalculating INFO fields for {merged_vcf}: {exc}"
-        )
 
-    reader.close()
-    writer.close()
+    shutil.move(tmp_out, base_vcf)
 
-    try:
-        os.replace(temp_path, merged_vcf)
-    except Exception as exc:
-        os.remove(temp_path)
-        handle_critical_error(
-            f"Unable to write recalculated INFO fields back to {merged_vcf}: {exc}"
-        )
-
-    log_message(
-        f"INFO field recalculation completed successfully for {merged_vcf}",
-        verbose,
+    # Recalculate AC/AN/AF using bcftools +fill-tags
+    log_message("Recomputing AC, AN, AF with bcftools +fill-tags...", verbose)
+    res2 = subprocess.run(
+        ["bcftools", "+fill-tags", base_vcf, "-Ov", "-o", filled_vcf, "--", "-t", "AC,AN,AF"],
+        capture_output=True, text=True,
     )
+    if res2.returncode != 0:
+        handle_critical_error((res2.stderr or "bcftools +fill-tags failed").strip())
+    shutil.move(filled_vcf, base_vcf)
+
+    # Compress (BGZF) and index (tabix)
+    log_message("Compressing and indexing the final VCF...", verbose)
+    try:
+        subprocess.run(["bgzip", "-f", base_vcf], check=True)
+        subprocess.run(["tabix", "-p", "vcf", "-f", gz_vcf], check=True)
+    except subprocess.CalledProcessError as exc:
+        handle_critical_error(f"Failed to compress or index merged VCF ({base_vcf}): {exc}")
+
+    log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
+    return gz_vcf
 
 def _parse_simple_metadata_line(line):
     stripped = line.strip()
@@ -1207,11 +1121,27 @@ def validate_merged_vcf(merged_vcf, verbose=False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
         handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
-        
+
+    reader = None
+    gz_stream = None
     try:
         reader = vcfpy.Reader.from_path(merged_vcf)
-    except Exception as e:
-        handle_critical_error(f"Could not open {merged_vcf}: {str(e)}.")
+    except Exception as exc:
+        if merged_vcf.endswith(".gz"):
+            try:
+                gz_stream = gzip.open(merged_vcf, "rt")
+                reader = vcfpy.Reader.from_stream(gz_stream, merged_vcf)
+            except Exception as gzip_exc:
+                if gz_stream is not None:
+                    gz_stream.close()
+                handle_critical_error(
+                    f"Could not open {merged_vcf}: {str(gzip_exc)}."
+                )
+        else:
+            handle_critical_error(f"Could not open {merged_vcf}: {str(exc)}.")
+
+    if reader is None:
+        handle_critical_error(f"Could not open {merged_vcf}: Unknown error.")
 
 
     header = reader.header
@@ -1309,6 +1239,16 @@ def validate_merged_vcf(merged_vcf, verbose=False):
         log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
         print(f"Validation completed successfully for merged VCF: {merged_vcf}")
 
+    try:
+        reader.close()
+    except Exception:
+        pass
+    if gz_stream is not None:
+        try:
+            gz_stream.close()
+        except Exception:
+            pass
+
 
 def main():
     args = parse_arguments()
@@ -1378,7 +1318,7 @@ def main():
 
     print("----------------------------------------")
     print("Script Execution Summary:")
-    print("Merged VCF File: " + merged_vcf)
+    print("Merged VCF File (compressed): " + merged_vcf)
     print("Log File: " + LOG_FILE)
     print("For detailed logs, refer to " + LOG_FILE)
     print("----------------------------------------")

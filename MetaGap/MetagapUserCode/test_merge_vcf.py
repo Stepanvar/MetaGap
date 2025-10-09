@@ -22,6 +22,7 @@ import logging
 import datetime
 import re
 import copy
+import tempfile
 import shutil
 import subprocess
 import gzip
@@ -932,7 +933,8 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
+    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")   # plain VCF
+    filled_vcf = base_vcf + ".filled.vcf"                                 # after +fill-tags
     gz_vcf   = base_vcf + ".gz"
 
     file_count = len(valid_files)
@@ -941,7 +943,7 @@ def merge_vcfs(
     temp_files, preprocessed_files = [], []
     for file_path in valid_files:
         try:
-            pre = preprocess_vcf(file_path)
+            pre = preprocess_vcf(file_path)   # your helper prepares bgzipped+indexed or plain inputs
         except Exception as exc:
             handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
         preprocessed_files.append(pre)
@@ -950,6 +952,7 @@ def merge_vcfs(
 
     log_message("Merging VCF files with bcftools...", verbose)
     try:
+        # Write UNCOMPRESSED VCF so vcfpy can adjust the header easily
         result = subprocess.run(
             ["bcftools", "merge", "-m", "all", "-Ov", "-o", base_vcf, *preprocessed_files],
             capture_output=True, text=True,
@@ -964,6 +967,7 @@ def merge_vcfs(
     if result.returncode != 0:
         handle_critical_error((result.stderr or "bcftools merge failed").strip())
 
+    # Open merged VCF, apply metadata/header edits, rewrite
     try:
         reader = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
@@ -985,7 +989,7 @@ def merge_vcfs(
 
     tmp_out = base_vcf + ".tmp"
     try:
-        writer = vcfpy.Writer.from_path(tmp_out, header)
+        writer = vcfpy.Writer.from_path(tmp_out, header)  # writes full header immediately
     except Exception as exc:
         reader.close()
         handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
@@ -1000,6 +1004,17 @@ def merge_vcfs(
 
     shutil.move(tmp_out, base_vcf)
 
+    # Recalculate AC/AN/AF using bcftools +fill-tags
+    log_message("Recomputing AC, AN, AF with bcftools +fill-tags...", verbose)
+    res2 = subprocess.run(
+        ["bcftools", "+fill-tags", base_vcf, "-Ov", "-o", filled_vcf, "--", "-t", "AC,AN,AF"],
+        capture_output=True, text=True,
+    )
+    if res2.returncode != 0:
+        handle_critical_error((res2.stderr or "bcftools +fill-tags failed").strip())
+    shutil.move(filled_vcf, base_vcf)
+
+    # Compress (BGZF) and index (tabix)
     log_message("Compressing and indexing the final VCF...", verbose)
     try:
         subprocess.run(["bgzip", "-f", base_vcf], check=True)
@@ -1009,6 +1024,7 @@ def merge_vcfs(
 
     log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
     return gz_vcf
+
 def _parse_simple_metadata_line(line):
     stripped = line.strip()
     if not stripped.startswith("##") or "=" not in stripped:
@@ -1089,10 +1105,13 @@ def _info_field_requires_value(number):
 
 
 def _has_null_value(value):
-    """Return True if *value* or any nested value is ``None``."""
+    """Return True if *value* or any nested value is considered missing."""
 
     if value is None:
         return True
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped == "" or stripped == "."
     if isinstance(value, (list, tuple)):
         return any(_has_null_value(v) for v in value)
     return False
@@ -1293,6 +1312,7 @@ def main():
         sample_header_line=sample_header_line,
         simple_header_lines=simple_header_lines,
     )
+    recalculate_cohort_info_tags(merged_vcf, verbose)
     append_metadata_to_merged_vcf(merged_vcf, verbose)
     validate_merged_vcf(merged_vcf, verbose)
 

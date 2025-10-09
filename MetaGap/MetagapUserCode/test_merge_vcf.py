@@ -34,9 +34,22 @@ import gzip
 from collections import OrderedDict
 
 try:
-    import vcfpy
-except ImportError:
-    sys.exit("Error: vcfpy package is required. Please install it with 'pip install vcfpy'.")
+    import vcfpy  # type: ignore
+    VCFPY_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised when dependency is missing
+    VCFPY_AVAILABLE = False
+
+    class _MissingVcfpyModule:
+        """Placeholder that raises a helpful error when vcfpy is unavailable."""
+
+        __slots__ = ()
+
+        def __getattr__(self, name):  # pragma: no cover - defensive, attribute driven
+            raise ModuleNotFoundError(
+                "Error: vcfpy package is required. Please install it with 'pip install vcfpy'."
+            )
+
+    vcfpy = _MissingVcfpyModule()  # type: ignore
 
 # Configure logging
 LOG_FILE = "script_execution.log"
@@ -1207,7 +1220,6 @@ def _pad_record_samples(record, header, sample_order):
 
 
 import os, shutil, subprocess, datetime
-import vcfpy
 
 def merge_vcfs(
     valid_files,
@@ -1402,10 +1414,154 @@ def _has_null_value(value):
     return False
 
 
+def _parse_header_info_definition(line):
+    """Return (id, metadata) parsed from a ##INFO header line."""
+
+    lower = line.lower()
+    if not lower.startswith("##info"):
+        return None, {}
+    start = line.find("<")
+    end = line.rfind(">")
+    if start == -1 or end == -1 or end <= start + 1:
+        return None, {}
+
+    payload = line[start + 1 : end]
+    entries = {}
+    for part in payload.split(","):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        entries[key.strip().upper()] = value.strip()
+
+    info_id = entries.get("ID")
+    if not info_id:
+        return None, {}
+    return info_id, entries
+
+
+def _read_vcf_without_vcfpy(file_path):
+    """Yield header metadata and record lines for a VCF file without vcfpy."""
+
+    opener = gzip.open if str(file_path).endswith(".gz") else open
+    try:
+        with opener(file_path, "rt", encoding="utf-8") as handle:
+            header_lines = []
+            column_header_seen = False
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if not line:
+                    continue
+                if line.startswith("##"):
+                    header_lines.append(line)
+                    continue
+                if line.startswith("#CHROM"):
+                    column_header_seen = True
+                    break
+
+            records = []
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if line.strip():
+                    records.append(line)
+    except OSError as exc:
+        handle_critical_error(f"Could not open {file_path}: {exc}.")
+
+    if not column_header_seen:
+        handle_critical_error(
+            f"Could not open {file_path}: Missing #CHROM header line."
+        )
+
+    return header_lines, records
+
+
+def _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=False):
+    """Fallback validator that performs minimal checks without vcfpy."""
+
+    header_lines, records = _read_vcf_without_vcfpy(merged_vcf)
+
+    normalized_headers = [line.lower() for line in header_lines]
+    if not any(line.startswith("##fileformat=") for line in normalized_headers):
+        handle_critical_error(
+            f"Missing required meta-information: ##fileformat in {merged_vcf} header."
+        )
+    if not any(line.startswith("##reference=") for line in normalized_headers):
+        handle_critical_error(
+            f"Missing required meta-information: ##reference in {merged_vcf} header."
+        )
+
+    info_definitions = {}
+    for line in header_lines:
+        info_id, entries = _parse_header_info_definition(line)
+        if not info_id:
+            continue
+        info_definitions[info_id] = entries
+
+    required_info_ids = {
+        info_id
+        for info_id, entries in info_definitions.items()
+        if _info_field_requires_value(entries.get("NUMBER"))
+    }
+
+    for record_line in records:
+        if record_line.startswith("#"):
+            continue
+        fields = record_line.split("\t")
+        if len(fields) < 8:
+            continue
+        chrom, pos = fields[0], fields[1]
+        record_label = f"{chrom}:{pos}"
+        info_field = fields[7].strip()
+        if info_field in {"", "."}:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
+            )
+            continue
+
+        info_map = {}
+        for entry in info_field.split(";"):
+            if not entry:
+                continue
+            if "=" in entry:
+                key, value = entry.split("=", 1)
+                info_map[key] = value
+            else:
+                info_map[entry] = ""
+
+        undefined_keys = sorted(
+            key for key in info_map.keys() if key not in info_definitions
+        )
+        if undefined_keys:
+            logger.warning(
+                "Record %s in %s has INFO fields not present in header definitions: %s.",
+                record_label,
+                merged_vcf,
+                ", ".join(undefined_keys),
+            )
+
+        missing_keys = sorted(required_info_ids.difference(info_map.keys()))
+        if missing_keys:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
+            )
+
+        null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
+        if null_keys:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
+            )
+
+    log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+    print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+
+
 def validate_merged_vcf(merged_vcf, verbose=False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
         handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
+
+    if not VCFPY_AVAILABLE:
+        _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=verbose)
+        return
 
     reader = None
     gz_stream = None

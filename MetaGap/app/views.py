@@ -153,7 +153,6 @@ class SearchResultsView(SingleTableMixin, FilterView):
                 "sample_group__ont_seq",
                 "sample_group__pacbio_seq",
                 "sample_group__iontorrent_seq",
-                "sample_group__platform_independent",
                 "sample_group__bioinfo_alignment",
                 "sample_group__bioinfo_variant_calling",
                 "sample_group__bioinfo_post_proc",
@@ -743,6 +742,9 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "BIOINFO_POST_PROC": "bioinfo_post_proc",
         "BIOINFO_POST_PROCESSING": "bioinfo_post_proc",
         "INPUT_QUALITY": "input_quality",
+        "PLATFORM_INDEPENDENT": "platform_independent",
+        "PLATFORM-INDEPENDENT": "platform_independent",
+        "PLATFORMINDEPENDENT": "platform_independent",
     }
 
     METADATA_MODEL_MAP = {
@@ -1536,46 +1538,48 @@ class ImportDataView(LoginRequiredMixin, FormView):
             collected[normalized_key] = normalized_value
         return collected
 
-    def _process_metadata_section(
-        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
-    ) -> None:
-        alias_lookup: Dict[str, str] = {}
-        for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
-            normalized_field = self._normalize_metadata_key(field_name)
-            alias_lookup[normalized_field] = field_name
-            for alias in aliases:
-                alias_lookup[self._normalize_metadata_key(alias)] = field_name
+   def _process_metadata_section(self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]) -> None:
+    def normalize_alias_key(candidate: str) -> str:
+        stripped = candidate.rstrip("?!.,;:")
+        return stripped or candidate
 
-        recognized: Dict[str, Any] = {}
-        leftovers: Dict[str, Any] = {}
+    # alias lookup including punctuation-stripped variants
+    alias_lookup: Dict[str, str] = {}
+    for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
+        canonical = field_name.lower()
+        for candidate in [canonical, *aliases]:
+            norm = str(candidate).lower()
+            alias_lookup[norm] = field_name
+            stripped = normalize_alias_key(norm)
+            if stripped != norm:
+                alias_lookup[stripped] = field_name
 
-        for raw_key, value in items.items():
-            normalized_key = self._normalize_metadata_key(raw_key)
-            canonical = alias_lookup.get(normalized_key)
-            if canonical:
-                recognized[canonical] = value
-                if section == "sample_group" and normalized_key:
-                    metadata[normalized_key] = value
-            else:
-                leftovers[normalized_key] = value
+    recognized: Dict[str, Tuple[Any, str]] = {}
+    leftovers: Dict[str, Any] = {}
 
-        for field_name, value in recognized.items():
-            metadata_key = f"{section}_{field_name}"
-            metadata[metadata_key] = value
-            if section == "sample_group":
-                if field_name == "name" and value is not None:
-                    metadata.setdefault("name", value)
-                elif field_name == "comments" and value is not None:
-                    metadata.setdefault("comments", value)
+    for raw_key, value in items.items():
+        nk = str(raw_key).lower()
+        sk = normalize_alias_key(nk)
+        field = alias_lookup.get(nk) or alias_lookup.get(sk)
+        if field:
+            # keep original alias key for sample_group to preserve flat keys
+            recognized[field] = (value, sk)
+        else:
+            leftovers[sk] = value
 
-        for raw_key, value in leftovers.items():
-            if not raw_key:
-                continue
-            metadata_key = f"{section}_{raw_key}"
-            metadata[metadata_key] = value
-            logger.warning(
-                "Unhandled metadata key '%s' in section '%s'", raw_key, section
-            )
+    for field_name, (value, alias_key) in recognized.items():
+        metadata_key = alias_key if section == "sample_group" else f"{section}_{field_name}"
+        metadata[metadata_key] = value
+        if section == "sample_group":
+            if field_name == "name" and value is not None:
+                metadata.setdefault("name", value)
+            elif field_name == "comments" and value is not None:
+                metadata.setdefault("comments", value)
+
+    for raw_key, value in leftovers.items():
+        if raw_key:
+            metadata[f"{section}_{raw_key}"] = value
+            logger.warning("Unhandled metadata key '%s' in section '%s'", raw_key, section)
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)

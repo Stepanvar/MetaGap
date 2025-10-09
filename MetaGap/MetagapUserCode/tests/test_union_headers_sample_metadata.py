@@ -1,0 +1,51 @@
+import importlib.util
+from pathlib import Path
+
+
+MODULE_PATH = (
+    Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
+)
+
+
+def load_user_module():
+    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_vcf(path, sample_line):
+    content = """##fileformat=VCFv4.2
+##reference=GRCh38
+{sample}
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1
+1\t1000\trs1\tA\tC\t.\tPASS\t.\tGT\t0/1
+""".format(sample=sample_line)
+    path.write_text(content)
+
+
+def test_union_headers_merges_sample_metadata(tmp_path):
+    module = load_user_module()
+
+    sample_one = (
+        '##SAMPLE=<ID=S1,Description="Primary sample",Meta="{\\"foo\\": \\"bar,baz\\"}">'
+    )
+    sample_two = '##SAMPLE=<ID=S1,Extra=42>'
+
+    vcf_one = tmp_path / "one.vcf"
+    vcf_two = tmp_path / "two.vcf"
+    _write_vcf(vcf_one, sample_one)
+    _write_vcf(vcf_two, sample_two)
+
+    header = module.union_headers([str(vcf_one), str(vcf_two)])
+
+    sample_lines = [
+        line for line in header.lines if getattr(line, "key", None) == "SAMPLE"
+    ]
+    assert len(sample_lines) == 1
+
+    mapping = sample_lines[0].mapping
+    assert mapping["ID"] == "S1"
+    assert mapping["Description"] == "Primary sample"
+    assert mapping["Meta"] == '{"foo": "bar,baz"}'
+    assert mapping["Extra"] == "42"

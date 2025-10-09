@@ -31,7 +31,22 @@ class ImportDataViewIntegrationTests(TestCase):
 ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
-##SAMPLE=<ID=GroupB,Description=Detailed group,Source_Lab=MetaLab,Contact_Email=lab@example.com,Total_Samples=5,Inclusion=Adults,Exclusion=Under18,Reference_Genome_Build_Build_Name=GRCh38,Reference_Genome_Build_Build_Version=v1,Reference_Genome_Build_Additional_Info={\"notes\":\"GRCh\"},Genome_Complexity_Size=3.2Gb,Genome_Complexity_Ploidy=Diploid,Genome_Complexity_GC_Content=41%,Sample_Origin_Tissue=Blood,Sample_Origin_Collection_Method=Venipuncture,Sample_Origin_Storage_Conditions=-80C,Material_Type_Material_Type=DNA,Material_Type_Integrity_Number=9.5,Input_Quality_A260_A280=1.8,Input_Quality_A260_A230=2.1,Input_Quality_DNA_Concentration=15.2,Input_Quality_Additional_Metrics={\"rna_integrity\":7.4},Input_Quality_Metric_RNA_Integrity=7.4,Platform_Independent_Q30=92.5,Bioinfo_Alignment_Software=BWA,Bioinfo_Alignment_Params=-M,Bioinfo_Variant_Calling_Tool=GATK,Bioinfo_Variant_Calling_Version=4.2,Bioinfo_PostProc_Normalization=Global>
+##SAMPLE=<ID=GroupB,Description=Detailed group>
+##SAMPLE_GROUP=<Source_Lab=MetaLab,Contact_Email=lab@example.com,Contact_Phone=+123456789,Total_Samples=5,Inclusion=Adults,Exclusion=Under18>
+##REFERENCE_GENOME_BUILD=<Build_Name=GRCh38,Build_Version=v1,Additional_Info={\"notes\":\"GRCh\"}>
+##GENOME_COMPLEXITY=<Size=3.2Gb,Ploidy=Diploid,GC_Content=41%>
+##SAMPLE_ORIGIN=<Tissue=Blood,Collection_Method=Venipuncture,Storage_Conditions=-80C,Time_Stored=6m>
+##MATERIAL_TYPE=<Material_Type=DNA,Integrity_Number=9.5>
+##LIBRARY_CONSTRUCTION=<Kit=HyperPrep,Fragmentation=Enzymatic,Adapter_Ligation_Efficiency=0.9,PCR_Cycles=8>
+##SEQUENCING_PLATFORM=<Platform=Illumina NovaSeq,Instrument=NovaSeq 6000,Flow_Cell=FC123,Channel_Method=Two-Channel,Cluster_Density=1200k,QC_Software=Control,ReadLength=150>
+##ONT_SEQ=<Instrument=PromethION,Flow_Cell=FLO-MIN106,Flow_Cell_Version=v1,Pore_Type=R9.4,Bias_Voltage=180mV>
+##PACBIO_SEQ=<Instrument=Sequel II,Flow_Cell=SMRT Cell 8M,SMRT_Cell_Type=1M,ZMW_Density=High>
+##IONTORRENT_SEQ=<Instrument=Ion S5,Flow_Cell=IonChip,Chip_Type=540,PH_Calibration=Auto,Flow_Order=TACG,Ion_Sphere_Metrics=Good>
+##PLATFORM_INDEPENDENT=<Pooling=BatchA,Sequencing_Kit=KitX,Base_Calling_Alg=BaseCaller,Q30=92.5,Normalized_Coverage=120X,Run_Specific_Calibration=Manual>
+##BIOINFO_ALIGNMENT=<Software=BWA,Params=-M,Ref_Genome_Version=GRCh38,Recalibration=GATK>
+##BIOINFO_VARIANT_CALLING=<Tool=GATK,Version=4.2,Filtering_Thresholds=\"DP>10\",Duplicate_Handling=Marked>
+##BIOINFO_POSTPROC=<Normalization=Global,Harmonization=Batch>
+##INPUT_QUALITY=<A260_A280=1.8,A260_A230=2.1,DNA_Concentration=15.2,RNA_Concentration=7.1,Notes=\"High quality\",Additional_Metrics=\"{\\\"rna_integrity\\\":7.4,\\\"metrics\\\":{\\\"inner\\\":1}}\">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t5678\trsMeta\tC\tG\t88\tPASS\tAF=0.25\tGT:GQ\t0/1:80
 """
@@ -140,6 +155,11 @@ class ImportDataViewIntegrationTests(TestCase):
             "genome_complexity",
             "sample_origin",
             "material_type",
+            "library_construction",
+            "illumina_seq",
+            "ont_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
             "platform_independent",
             "bioinfo_alignment",
             "bioinfo_variant_calling",
@@ -150,6 +170,7 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(sample_group.comments, "Detailed group")
         self.assertEqual(sample_group.source_lab, "MetaLab")
         self.assertEqual(sample_group.contact_email, "lab@example.com")
+        self.assertEqual(sample_group.contact_phone, "+123456789")
         self.assertEqual(sample_group.total_samples, 5)
         self.assertEqual(sample_group.inclusion_criteria, "Adults")
         self.assertEqual(sample_group.exclusion_criteria, "Under18")
@@ -176,32 +197,119 @@ class ImportDataViewIntegrationTests(TestCase):
             sample_group.sample_origin.storage_conditions,
             "-80C",
         )
+        self.assertEqual(sample_group.sample_origin.time_stored, "6m")
 
         self.assertIsNotNone(sample_group.material_type)
         self.assertEqual(sample_group.material_type.material_type, "DNA")
         self.assertEqual(sample_group.material_type.integrity_number, "9.5")
 
+        self.assertIsNotNone(sample_group.library_construction)
+        self.assertEqual(sample_group.library_construction.kit, "HyperPrep")
+        self.assertEqual(
+            sample_group.library_construction.fragmentation,
+            "Enzymatic",
+        )
+        self.assertEqual(
+            sample_group.library_construction.adapter_ligation_efficiency,
+            "0.9",
+        )
+        self.assertEqual(sample_group.library_construction.pcr_cycles, 8)
+
+        self.assertIsNotNone(sample_group.illumina_seq)
+        self.assertEqual(sample_group.illumina_seq.instrument, "NovaSeq 6000")
+        self.assertEqual(sample_group.illumina_seq.flow_cell, "FC123")
+        self.assertEqual(
+            sample_group.illumina_seq.channel_method,
+            "Two-Channel",
+        )
+        self.assertEqual(sample_group.illumina_seq.cluster_density, "1200k")
+        self.assertEqual(sample_group.illumina_seq.qc_software, "Control")
+        self.assertEqual(
+            sample_group.illumina_seq.additional_info,
+            {"platform": "Illumina NovaSeq", "readlength": 150},
+        )
+
+        self.assertIsNotNone(sample_group.ont_seq)
+        self.assertEqual(sample_group.ont_seq.instrument, "PromethION")
+        self.assertEqual(sample_group.ont_seq.flow_cell, "FLO-MIN106")
+        self.assertEqual(sample_group.ont_seq.flow_cell_version, "v1")
+        self.assertEqual(sample_group.ont_seq.pore_type, "R9.4")
+        self.assertEqual(sample_group.ont_seq.bias_voltage, "180mV")
+
+        self.assertIsNotNone(sample_group.pacbio_seq)
+        self.assertEqual(sample_group.pacbio_seq.instrument, "Sequel II")
+        self.assertEqual(sample_group.pacbio_seq.flow_cell, "SMRT Cell 8M")
+        self.assertEqual(sample_group.pacbio_seq.smrt_cell_type, "1M")
+        self.assertEqual(sample_group.pacbio_seq.zmw_density, "High")
+
+        self.assertIsNotNone(sample_group.iontorrent_seq)
+        self.assertEqual(sample_group.iontorrent_seq.instrument, "Ion S5")
+        self.assertEqual(sample_group.iontorrent_seq.flow_cell, "IonChip")
+        self.assertEqual(sample_group.iontorrent_seq.chip_type, "540")
+        self.assertEqual(sample_group.iontorrent_seq.ph_calibration, "Auto")
+        self.assertEqual(sample_group.iontorrent_seq.flow_order, "TACG")
+        self.assertEqual(
+            sample_group.iontorrent_seq.ion_sphere_metrics,
+            "Good",
+        )
+
         self.assertIsNotNone(sample_group.platform_independent)
+        self.assertEqual(sample_group.platform_independent.pooling, "BatchA")
+        self.assertEqual(
+            sample_group.platform_independent.sequencing_kit,
+            "KitX",
+        )
+        self.assertEqual(
+            sample_group.platform_independent.base_calling_alg,
+            "BaseCaller",
+        )
         self.assertEqual(sample_group.platform_independent.q30, "92.5")
+        self.assertEqual(
+            sample_group.platform_independent.normalized_coverage,
+            "120X",
+        )
+        self.assertEqual(
+            sample_group.platform_independent.run_specific_calibration,
+            "Manual",
+        )
 
         self.assertIsNotNone(sample_group.bioinfo_alignment)
         self.assertEqual(sample_group.bioinfo_alignment.tool, "BWA")
         self.assertEqual(sample_group.bioinfo_alignment.params, "-M")
+        self.assertEqual(
+            sample_group.bioinfo_alignment.ref_genome_version,
+            "GRCh38",
+        )
+        self.assertEqual(
+            sample_group.bioinfo_alignment.recalibration_settings,
+            "GATK",
+        )
 
         self.assertIsNotNone(sample_group.bioinfo_variant_calling)
         self.assertEqual(sample_group.bioinfo_variant_calling.tool, "GATK")
         self.assertEqual(sample_group.bioinfo_variant_calling.version, "4.2")
+        self.assertEqual(
+            sample_group.bioinfo_variant_calling.filtering_thresholds,
+            "DP>10",
+        )
+        self.assertEqual(
+            sample_group.bioinfo_variant_calling.duplicate_handling,
+            "Marked",
+        )
 
         self.assertIsNotNone(sample_group.bioinfo_post_proc)
         self.assertEqual(sample_group.bioinfo_post_proc.normalization, "Global")
+        self.assertEqual(sample_group.bioinfo_post_proc.harmonization, "Batch")
 
         self.assertIsNotNone(sample_group.input_quality)
         self.assertAlmostEqual(sample_group.input_quality.a260_a280, 1.8)
         self.assertAlmostEqual(sample_group.input_quality.a260_a230, 2.1)
         self.assertAlmostEqual(sample_group.input_quality.dna_concentration, 15.2)
+        self.assertAlmostEqual(sample_group.input_quality.rna_concentration, 7.1)
+        self.assertEqual(sample_group.input_quality.notes, "High quality")
         self.assertEqual(
             sample_group.input_quality.additional_metrics,
-            {"rna_integrity": 7.4, "metric_rna_integrity": 7.4},
+            {"rna_integrity": 7.4, "metrics": {"inner": 1}},
         )
 
     @mock.patch("app.views.pysam.VariantFile", side_effect=OSError("boom"))

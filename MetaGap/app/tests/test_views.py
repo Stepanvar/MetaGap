@@ -163,6 +163,25 @@ class HomePageViewTests(TestCase):
         self.assertIsInstance(response.context["form"], SearchForm)
 
 
+class StaticPageViewTests(TestCase):
+    """Verify the informational static pages render their expected content."""
+
+    def test_contact_page_renders_expected_information(self) -> None:
+        response = self.client.get(reverse("contact"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "contact.html")
+        self.assertContains(response, "Support@example.com")
+        self.assertContains(response, "Marketing@example.com")
+
+    def test_about_page_renders_expected_information(self) -> None:
+        response = self.client.get(reverse("about"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "about.html")
+        self.assertContains(response, "Use this area to provide additional information.")
+
+
 class ProfileViewTests(TestCase):
     """Exercise the profile dashboard and its supporting context."""
 

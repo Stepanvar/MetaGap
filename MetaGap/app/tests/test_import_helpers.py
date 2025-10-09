@@ -26,6 +26,9 @@ class ImportHelpersTests(TestCase):
         info_payload = {
             "AC": 5,
             "DP": [10, 11],
+            "QD": 12.34,
+            "FS": "5.6",
+            "SOR": 1.2,
             "Custom": "value",
         }
 
@@ -33,8 +36,11 @@ class ImportHelpersTests(TestCase):
 
         self.assertIsNotNone(info_instance)
         self.assertEqual(Info.objects.count(), 1)
-        self.assertEqual(info_instance.ac, 5)
-        self.assertEqual(info_instance.dp, 10)
+        self.assertEqual(info_instance.ac, "5")
+        self.assertEqual(info_instance.dp, "10,11")
+        self.assertEqual(info_instance.qd, "12.34")
+        self.assertEqual(info_instance.fs, "5.6")
+        self.assertEqual(info_instance.sor, "1.2")
         self.assertEqual(info_instance.additional, {"custom": "value"})
 
     def test_create_format_instance_uses_field_map(self):

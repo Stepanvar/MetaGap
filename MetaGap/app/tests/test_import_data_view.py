@@ -66,6 +66,16 @@ class ImportDataViewIntegrationTests(TestCase):
         "1\t111\trsJson\tA\tG\t50\tPASS\tAF=0.2\tGT:GQ\t0/1:70\n"
     )
 
+    VCF_WITH_COMMON_INFO_FIELDS = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##INFO=<ID=QD,Number=1,Type=Float,Description="Quality by Depth">
+##INFO=<ID=FS,Number=1,Type=Float,Description="Fisher Strand">
+##INFO=<ID=SOR,Number=1,Type=Float,Description="Strand Odds Ratio">
+##INFO=<ID=CUSTOM,Number=1,Type=String,Description="Custom field">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t2000\t.\tA\tG\t.\tPASS\tQD=12.5;FS=7.1;SOR=1.8;CUSTOM=note\tGT:GQ\t0/1:77
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -109,6 +119,28 @@ class ImportDataViewIntegrationTests(TestCase):
             alleles,
         )
         self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+
+    def test_import_routes_common_info_fields_to_columns(self) -> None:
+        """Common INFO keys map to dedicated columns instead of JSON."""
+
+        self.client.login(username="vcf_user", password="import-pass")
+
+        upload = SimpleUploadedFile(
+            "info_fields.vcf",
+            self.VCF_WITH_COMMON_INFO_FIELDS.encode("utf-8"),
+            content_type="text/vcf",
+        )
+
+        response = self.client.post(reverse("import_data"), {"data_file": upload})
+
+        self.assertRedirects(response, reverse("profile"))
+
+        allele = AlleleFrequency.objects.latest("id")
+
+        self.assertAlmostEqual(float(allele.info.qd), 12.5, places=1)
+        self.assertAlmostEqual(float(allele.info.fs), 7.1, places=1)
+        self.assertAlmostEqual(float(allele.info.sor), 1.8, places=1)
+        self.assertEqual(allele.info.additional, {"custom": "note"})
 
     def test_import_preserves_custom_sample_metadata(self) -> None:
         """Custom SAMPLE header keys are stored and exposed in the detail view."""

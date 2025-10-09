@@ -896,22 +896,22 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
     INFO_FIELD_MAP = {
         "aa": ("aa", INFO_FIELD_STRING),
-        "ac": ("ac", INFO_FIELD_INT),
-        "af": ("af", INFO_FIELD_FLOAT),
-        "an": ("an", INFO_FIELD_INT),
+        "ac": ("ac", INFO_FIELD_STRING),
+        "af": ("af", INFO_FIELD_STRING),
+        "an": ("an", INFO_FIELD_STRING),
         "bq": ("bq", INFO_FIELD_STRING),
         "cigar": ("cigar", INFO_FIELD_STRING),
         "db": ("db", INFO_FIELD_STRING),
-        "dp": ("dp", INFO_FIELD_INT),
+        "dp": ("dp", INFO_FIELD_STRING),
         "end": ("end", INFO_FIELD_STRING),
         "h2": ("h2", INFO_FIELD_STRING),
         "h3": ("h3", INFO_FIELD_STRING),
-        "mq": ("mq", INFO_FIELD_FLOAT),
+        "mq": ("mq", INFO_FIELD_STRING),
         "mq0": ("mq0", INFO_FIELD_STRING),
         "ns": ("ns", INFO_FIELD_STRING),
-        "qd": ("qd", INFO_FIELD_FLOAT),
-        "fs": ("fs", INFO_FIELD_FLOAT),
-        "sor": ("sor", INFO_FIELD_FLOAT),
+        "qd": ("qd", INFO_FIELD_STRING),
+        "fs": ("fs", INFO_FIELD_STRING),
+        "sor": ("sor", INFO_FIELD_STRING),
         "sb": ("sb", INFO_FIELD_STRING),
     }
 
@@ -1334,6 +1334,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 pass
         return stripped
 
+    @staticmethod
+    def _normalize_metadata_key(key: Any) -> str:
+        normalized = re.sub(r"[^0-9a-z]+", "", str(key).lower())
+        return normalized
+
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -1536,18 +1541,21 @@ class ImportDataView(LoginRequiredMixin, FormView):
     ) -> None:
         alias_lookup: Dict[str, str] = {}
         for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
-            alias_lookup[field_name.lower()] = field_name
+            normalized_field = self._normalize_metadata_key(field_name)
+            alias_lookup[normalized_field] = field_name
             for alias in aliases:
-                alias_lookup[alias.lower()] = field_name
+                alias_lookup[self._normalize_metadata_key(alias)] = field_name
 
         recognized: Dict[str, Any] = {}
         leftovers: Dict[str, Any] = {}
 
         for raw_key, value in items.items():
-            normalized_key = raw_key.lower()
+            normalized_key = self._normalize_metadata_key(raw_key)
             canonical = alias_lookup.get(normalized_key)
             if canonical:
                 recognized[canonical] = value
+                if section == "sample_group" and normalized_key:
+                    metadata[normalized_key] = value
             else:
                 leftovers[normalized_key] = value
 
@@ -1561,6 +1569,8 @@ class ImportDataView(LoginRequiredMixin, FormView):
                     metadata.setdefault("comments", value)
 
         for raw_key, value in leftovers.items():
+            if not raw_key:
+                continue
             metadata_key = f"{section}_{raw_key}"
             metadata[metadata_key] = value
             logger.warning(
@@ -1627,32 +1637,27 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
     @classmethod
     def _coerce_info_value(cls, value: Any, field_type: str) -> Any:
-        if field_type == cls.INFO_FIELD_STRING:
-            return cls._stringify(value)
-
         normalized = cls._normalize_info_scalar(value)
-        if field_type == cls.INFO_FIELD_INT:
-            return cls._coerce_int(normalized)
-        if field_type == cls.INFO_FIELD_FLOAT:
-            return cls._coerce_float(normalized)
-        return cls._stringify(value)
+        return cls._stringify(normalized)
 
     @classmethod
     def _normalize_info_scalar(cls, value: Any) -> Any:
         if value is None:
             return None
         if isinstance(value, (list, tuple)):
-            if not value:
+            normalized_items = [
+                cls._normalize_info_scalar(item)
+                for item in value
+                if item not in (None, "")
+            ]
+            flattened = [item for item in normalized_items if item not in (None, "")]
+            if not flattened:
                 return None
-            return cls._normalize_info_scalar(value[0])
+            return flattened
         if isinstance(value, str):
             stripped = value.strip()
             if not stripped:
                 return None
-            if "," in stripped:
-                first_segment = stripped.split(",", 1)[0].strip()
-                if first_segment:
-                    stripped = first_segment
             return stripped
         return value
 

@@ -81,7 +81,12 @@ def main():
         sample_metadata_entries,
         sanitized_header_lines,
         serialized_sample_line,
-    ) = parse_metadata_arguments(args, verbose)
+    ) = parse_metadata_arguments(
+        args,
+        verbose,
+        log_message=log_message,
+        handle_critical_error=handle_critical_error,
+    )
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -167,6 +172,7 @@ def main():
         f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
         verbose,
     )
+    return summary_path
 
 __all__ = [
     "VCFPY_AVAILABLE",
@@ -202,6 +208,49 @@ __all__ = [
     "summarize_produced_vcfs",
     "main",
 ]
+
+def _load_cli_module():
+    current_module = sys.modules.get(__name__)
+    if current_module is not None:
+        for alias in ("MetagapUserCode.test_merge_vcf", "test_merge_vcf"):
+            sys.modules.setdefault(alias, current_module)
+
+    for name in ("MetagapUserCode.cli", "cli"):
+        module = sys.modules.get(name)
+        if module is not None:
+            return module
+
+    for name in ("MetagapUserCode.cli", "cli"):
+        try:
+            return importlib.import_module(name)
+        except ModuleNotFoundError:
+            continue
+
+    cli_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli.py")
+    spec = importlib.util.spec_from_file_location("cli", cli_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("Unable to locate CLI module")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules.setdefault("cli", module)
+    return module
+
+
+def parse_arguments():
+    cli_module = _load_cli_module()
+    return cli_module.parse_arguments()
+
+
+def main():
+    cli_module = _load_cli_module()
+    args = parse_arguments()
+    workflow_module = sys.modules.get(__name__)
+    if workflow_module is None:
+        workflow_module = types.SimpleNamespace(
+            run_workflow=run_workflow,
+            parse_arguments=parse_arguments,
+        )
+    return cli_module.main(args, workflow_module=workflow_module)
 
 
 if __name__ == "__main__":

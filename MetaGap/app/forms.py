@@ -1,8 +1,25 @@
 from django import forms
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.utils.html import format_html, format_html_join
 
-from .models import OrganizationProfile, SampleGroup, SampleOrigin
+from .models import (
+    BioinfoAlignment,
+    BioinfoPostProc,
+    BioinfoVariantCalling,
+    GenomeComplexity,
+    IlluminaSeq,
+    IonTorrentSeq,
+    LibraryConstruction,
+    MaterialType,
+    OntSeq,
+    OrganizationProfile,
+    PacBioSeq,
+    ReferenceGenomeBuild,
+    SampleGroup,
+    SampleOrigin,
+)
 
 
 class BootstrapFormMixin:
@@ -163,6 +180,56 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
 class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
     """ModelForm that assigns ``created_by`` using the authenticated user."""
 
+    class DatalistTextInput(forms.TextInput):
+        """Text input that renders an associated ``<datalist>`` element."""
+
+        def __init__(self, *args, datalist=None, datalist_id=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.datalist = [] if datalist is None else list(dict.fromkeys(filter(None, datalist)))
+            self.datalist_id = datalist_id
+
+        def render(self, name, value, attrs=None, renderer=None):
+            attrs = attrs or {}
+            datalist_id = self.datalist_id or attrs.get("list") or f"{attrs.get('id', name)}_options"
+            attrs["list"] = datalist_id
+            input_html = super().render(name, value, attrs, renderer)
+            options_html = format_html_join(
+                "",
+                "<option value=\"{}\"></option>",
+                ((option,) for option in self.datalist),
+            )
+            datalist_html = format_html("<datalist id=\"{}\">{}</datalist>", datalist_id, options_html)
+            return format_html("{}{}", input_html, datalist_html)
+
+    class CreatableModelChoiceField(forms.ModelChoiceField):
+        """ModelChoiceField that creates related objects when no match exists."""
+
+        def __init__(self, *args, create_field: str, **kwargs):
+            self.create_field = create_field
+            kwargs.setdefault("to_field_name", create_field)
+            super().__init__(*args, **kwargs)
+
+        def prepare_value(self, value):
+            if isinstance(value, self.queryset.model):
+                return getattr(value, self.create_field, super().prepare_value(value))
+            return super().prepare_value(value)
+
+        def clean(self, value):
+            if isinstance(value, str):
+                value = value.strip()
+
+            try:
+                return super().clean(value)
+            except ValidationError:
+                if not value:
+                    raise
+                if isinstance(value, str):
+                    existing = self.queryset.filter(**{self.create_field: value}).first()
+                    if existing is not None:
+                        return existing
+                    return self.queryset.model.objects.create(**{self.create_field: value})
+                raise
+
     sample_origin_tissue = forms.CharField(
         required=False,
         label="Tissue",
@@ -188,6 +255,8 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
 
+        self._enhance_creatable_metadata_fields()
+
         origin = getattr(self.instance, "sample_origin", None)
         if origin is not None:
             self.fields["sample_origin_tissue"].initial = origin.tissue
@@ -198,6 +267,8 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
                 origin.storage_conditions
             )
             self.fields["sample_origin_time_stored"].initial = origin.time_stored
+
+        self._apply_bootstrap_metadata()
 
     class Meta:
         model = SampleGroup
@@ -270,6 +341,67 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             stripped = value.strip()
             return stripped or None
         return value
+
+    CREATABLE_METADATA_FIELDS = {
+        "reference_genome_build": (ReferenceGenomeBuild, "build_name"),
+        "genome_complexity": (GenomeComplexity, "size"),
+        "material_type": (MaterialType, "material_type"),
+        "library_construction": (LibraryConstruction, "kit"),
+        "illumina_seq": (IlluminaSeq, "instrument"),
+        "ont_seq": (OntSeq, "instrument"),
+        "pacbio_seq": (PacBioSeq, "instrument"),
+        "iontorrent_seq": (IonTorrentSeq, "instrument"),
+        "bioinfo_alignment": (BioinfoAlignment, "tool"),
+        "bioinfo_variant_calling": (BioinfoVariantCalling, "tool"),
+        "bioinfo_post_proc": (BioinfoPostProc, "normalization"),
+    }
+
+    def _enhance_creatable_metadata_fields(self) -> None:
+        for field_name, (model, lookup_field) in self.CREATABLE_METADATA_FIELDS.items():
+            if field_name not in self.fields:
+                continue
+
+            original_field = self.fields[field_name]
+            queryset = getattr(original_field, "queryset", model.objects.all())
+            datalist_options = self._build_metadata_datalist(field_name, queryset, lookup_field)
+            widget = self.DatalistTextInput(
+                datalist=datalist_options,
+                attrs={"class": self.bootstrap_input_class, "placeholder": "Enter or select a value"},
+            )
+
+            help_text = original_field.help_text or ""
+            helper_suffix = "Start typing to select an existing value or enter a new one."
+            help_text = f"{help_text} {helper_suffix}".strip()
+
+            self.fields[field_name] = self.CreatableModelChoiceField(
+                queryset=queryset,
+                create_field=lookup_field,
+                required=original_field.required,
+                empty_label=getattr(original_field, "empty_label", None),
+                label=original_field.label,
+                widget=widget,
+                help_text=help_text,
+            )
+
+            if self.instance.pk:
+                related = getattr(self.instance, field_name, None)
+                if related is not None:
+                    initial_value = getattr(related, lookup_field, None)
+                    if initial_value is not None:
+                        self.fields[field_name].initial = initial_value
+
+    def _build_metadata_datalist(self, field_name, queryset, lookup_field):
+        values = []
+        for obj in queryset:
+            value = getattr(obj, lookup_field, None)
+            if value:
+                values.append(value)
+
+        if field_name == "material_type":
+            values.extend(choice for choice, _ in getattr(MaterialType, "MATERIAL_CHOICES", []))
+
+        seen = {}
+        return [seen.setdefault(val, val) for val in values if val and val not in seen]
 
 class ImportDataForm(BootstrapFormMixin, forms.Form):
     data_file = forms.FileField(

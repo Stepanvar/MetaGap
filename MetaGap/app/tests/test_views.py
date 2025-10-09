@@ -12,7 +12,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import NoReverseMatch, reverse
 
 from ..filters import AlleleFrequencySearchFilter
-from ..forms import ImportDataForm, SearchForm
+from ..forms import CustomUserCreationForm, ImportDataForm, SearchForm
 from ..models import (
     AlleleFrequency,
     BioinfoAlignment,
@@ -163,6 +163,17 @@ class HomePageViewTests(TestCase):
         self.assertIsInstance(response.context["form"], SearchForm)
 
 
+class UserRegistrationViewTests(TestCase):
+    """Validate the sign-up view renders the registration form template."""
+
+    def test_signup_view_renders_template_with_form(self) -> None:
+        response = self.client.get(reverse("signup"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "signup.html")
+        self.assertIn("form", response.context)
+        self.assertIsInstance(response.context["form"], CustomUserCreationForm)
+        self.assertContains(response, "<h2>Sign Up</h2>", html=True)
 class StaticPageViewTests(TestCase):
     """Verify the informational static pages render their expected content."""
 

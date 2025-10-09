@@ -81,7 +81,12 @@ def main():
         sample_metadata_entries,
         sanitized_header_lines,
         serialized_sample_line,
-    ) = parse_metadata_arguments(args, verbose)
+    ) = parse_metadata_arguments(
+        args,
+        verbose,
+        log_message=log_message,
+        handle_critical_error=handle_critical_error,
+    )
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -157,15 +162,26 @@ def main():
 
     validate_merged_vcf(final_vcf, verbose)
 
-    summary_dir, sample_filename, produced_count = summarize_produced_vcfs(
-        output_dir, final_vcf
-    )
-    summary_path = os.path.join(summary_dir, sample_filename)
-    print(f"Wrote: {summary_path} x {produced_count}")
-    log_message(
-        "Script execution completed successfully. "
-        f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
-        verbose,
+# Ensure the repository root is on ``sys.path`` so the ``merge_vcf`` package
+# can be imported when this file is executed directly.
+_THIS_FILE = Path(__file__).resolve()
+_REPO_ROOT = _THIS_FILE.parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from merge_vcf.main import *  # noqa: F401,F403 - re-export legacy symbols
+from merge_vcf import main as _main
+
+
+configure_merging_callbacks(
+    MergeCallbacks(
+        preprocess_vcf=preprocess_vcf,
+        log_message=log_message,
+        handle_critical_error=handle_critical_error,
+        build_sample_metadata_line=build_sample_metadata_line,
+        parse_sample_metadata_line=_parse_sample_metadata_line,
+        apply_metadata_to_header=apply_metadata_to_header,
+        vcfpy=vcfpy,
     )
 
 __all__ = [

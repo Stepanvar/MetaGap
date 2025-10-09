@@ -140,7 +140,6 @@ class ImportDataViewIntegrationTests(TestCase):
             "genome_complexity",
             "sample_origin",
             "material_type",
-            "platform_independent",
             "bioinfo_alignment",
             "bioinfo_variant_calling",
             "bioinfo_post_proc",
@@ -181,9 +180,6 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(sample_group.material_type.material_type, "DNA")
         self.assertEqual(sample_group.material_type.integrity_number, "9.5")
 
-        self.assertIsNotNone(sample_group.platform_independent)
-        self.assertEqual(sample_group.platform_independent.q30, "92.5")
-
         self.assertIsNotNone(sample_group.bioinfo_alignment)
         self.assertEqual(sample_group.bioinfo_alignment.tool, "BWA")
         self.assertEqual(sample_group.bioinfo_alignment.params, "-M")
@@ -202,6 +198,13 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(
             sample_group.input_quality.additional_metrics,
             {"rna_integrity": 7.4, "metric_rna_integrity": 7.4},
+        )
+
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertIn("platform_independent_q30", additional_metadata)
+        self.assertAlmostEqual(
+            float(additional_metadata["platform_independent_q30"]),
+            92.5,
         )
 
     @mock.patch("app.views.pysam.VariantFile", side_effect=OSError("boom"))

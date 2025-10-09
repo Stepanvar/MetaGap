@@ -22,6 +22,9 @@ import logging
 import datetime
 import re
 import copy
+import shutil
+import subprocess
+import gzip
 from collections import OrderedDict
 
 try:
@@ -917,6 +920,9 @@ def _pad_record_samples(record, header, sample_order):
     record.update_calls(updated_calls)
 
 
+import os, shutil, subprocess, datetime
+import vcfpy
+
 def merge_vcfs(
     valid_files,
     output_dir,
@@ -926,52 +932,83 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
-    log_message("Merging VCF files...", verbose)
+    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
+    gz_vcf   = base_vcf + ".gz"
+
+    file_count = len(valid_files)
+    log_message(f"Found {file_count} VCF files. Merging them into a combined VCF...", verbose)
+
+    temp_files, preprocessed_files = [], []
+    for file_path in valid_files:
+        try:
+            pre = preprocess_vcf(file_path)
+        except Exception as exc:
+            handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
+        preprocessed_files.append(pre)
+        if pre != file_path:
+            temp_files.append(pre)
+
+    log_message("Merging VCF files with bcftools...", verbose)
     try:
-        header = union_headers(valid_files, sample_order=sample_order)
+        result = subprocess.run(
+            ["bcftools", "merge", "-m", "all", "-Ov", "-o", base_vcf, *preprocessed_files],
+            capture_output=True, text=True,
+        )
+    finally:
+        for tmp in temp_files:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+    if result.returncode != 0:
+        handle_critical_error((result.stderr or "bcftools merge failed").strip())
+
+    try:
+        reader = vcfpy.Reader.from_path(base_vcf)
+    except Exception as exc:
+        handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
+
+    try:
         header = apply_metadata_to_header(
-            header,
+            reader.header,
             sample_header_line=sample_header_line,
             simple_header_lines=simple_header_lines,
             verbose=verbose,
         )
     except SystemExit:
+        reader.close()
         raise
     except Exception as exc:
-        handle_critical_error(f"Failed to construct merged header: {exc}")
+        reader.close()
+        handle_critical_error(f"Failed to apply metadata to merged VCF: {exc}")
 
-    writer = vcfpy.Writer.from_path(merged_filename, header)
-    log_message(
-        "Genotype FORMAT columns have been removed from the merged VCF output to match the sample-less contract.",
-        verbose,
-    )
-    for file_path in valid_files:
-        log_message(f"Processing file: {file_path}", verbose)
-        preprocessed_file = preprocess_vcf(file_path)
-        try:
-            reader = vcfpy.Reader.from_path(preprocessed_file)
-            for record in reader:
-                record.FORMAT = None
-                try:
-                    record.update_calls([])
-                except AttributeError:
-                    record.calls = []
-                    if hasattr(record, "call_for_sample"):
-                        try:
-                            record.call_for_sample = {}
-                        except AttributeError:
-                            pass
-                writer.write_record(record)
-        except Exception as e:
-            handle_non_critical_error(f"Error processing {file_path}: {str(e)}. Skipping remaining records.")
-        if preprocessed_file != file_path:
-            os.remove(preprocessed_file)
+    tmp_out = base_vcf + ".tmp"
+    try:
+        writer = vcfpy.Writer.from_path(tmp_out, header)
+    except Exception as exc:
+        reader.close()
+        handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
 
-    writer.close()
-    log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
-    return merged_filename
+    try:
+        for record in reader:
+            # optional: _pad_record_samples(record, header, sample_order)
+            writer.write_record(record)
+    finally:
+        reader.close()
+        writer.close()
 
+    shutil.move(tmp_out, base_vcf)
+
+    log_message("Compressing and indexing the final VCF...", verbose)
+    try:
+        subprocess.run(["bgzip", "-f", base_vcf], check=True)
+        subprocess.run(["tabix", "-p", "vcf", "-f", gz_vcf], check=True)
+    except subprocess.CalledProcessError as exc:
+        handle_critical_error(f"Failed to compress or index merged VCF ({base_vcf}): {exc}")
+
+    log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
+    return gz_vcf
 def _parse_simple_metadata_line(line):
     stripped = line.strip()
     if not stripped.startswith("##") or "=" not in stripped:
@@ -1065,11 +1102,27 @@ def validate_merged_vcf(merged_vcf, verbose=False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
         handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
-        
+
+    reader = None
+    gz_stream = None
     try:
         reader = vcfpy.Reader.from_path(merged_vcf)
-    except Exception as e:
-        handle_critical_error(f"Could not open {merged_vcf}: {str(e)}.")
+    except Exception as exc:
+        if merged_vcf.endswith(".gz"):
+            try:
+                gz_stream = gzip.open(merged_vcf, "rt")
+                reader = vcfpy.Reader.from_stream(gz_stream, merged_vcf)
+            except Exception as gzip_exc:
+                if gz_stream is not None:
+                    gz_stream.close()
+                handle_critical_error(
+                    f"Could not open {merged_vcf}: {str(gzip_exc)}."
+                )
+        else:
+            handle_critical_error(f"Could not open {merged_vcf}: {str(exc)}.")
+
+    if reader is None:
+        handle_critical_error(f"Could not open {merged_vcf}: Unknown error.")
 
 
     header = reader.header
@@ -1167,6 +1220,16 @@ def validate_merged_vcf(merged_vcf, verbose=False):
         log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
         print(f"Validation completed successfully for merged VCF: {merged_vcf}")
 
+    try:
+        reader.close()
+    except Exception:
+        pass
+    if gz_stream is not None:
+        try:
+            gz_stream.close()
+        except Exception:
+            pass
+
 
 def main():
     args = parse_arguments()
@@ -1235,7 +1298,7 @@ def main():
 
     print("----------------------------------------")
     print("Script Execution Summary:")
-    print("Merged VCF File: " + merged_vcf)
+    print("Merged VCF File (compressed): " + merged_vcf)
     print("Log File: " + LOG_FILE)
     print("For detailed logs, refer to " + LOG_FILE)
     print("----------------------------------------")

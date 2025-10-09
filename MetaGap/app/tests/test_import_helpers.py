@@ -2,10 +2,12 @@
 
 import os
 import tempfile
+from types import SimpleNamespace
 
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 
-from app.models import Format, GenomeComplexity, Info
+from app.models import Format, GenomeComplexity, Info, SampleGroup
 from app.views import ImportDataView
 
 
@@ -118,3 +120,54 @@ class ImportHelpersTests(TestCase):
         self.assertEqual(section_data["size"], "3.1Gb")
         self.assertIn("genome_complexity", consumed)
         self.assertIsNone(additional)
+
+    def test_create_sample_group_recognizes_normalized_sample_headers(self):
+        """Sample group creation handles punctuation and camel-case header keys."""
+
+        class MockSampleRecord:
+            def __init__(self, data):
+                self.key = "SAMPLE"
+                self._data = data
+
+            def get(self, key):
+                return self._data.get(key)
+
+            def items(self):
+                return self._data.items()
+
+        mock_record = MockSampleRecord(
+            {
+                "ID": "GenomeCohort",
+                "Center": "Genome Center",
+                "Email?": "contact@example.com",
+                "Phone?": "555-0100",
+                "N": "8",
+                "Inclusion?": "Adults",
+            }
+        )
+        mock_vcf = SimpleNamespace(header=SimpleNamespace(records=[mock_record]))
+
+        metadata = self.view.extract_sample_group_metadata(mock_vcf)
+
+        self.assertIn("center", metadata)
+        self.assertIn("email", metadata)
+        self.assertIn("phone", metadata)
+        self.assertIn("n", metadata)
+        self.assertIn("inclusion", metadata)
+        self.assertNotIn("email?", metadata)
+
+        user_model = get_user_model()
+        user = user_model.objects.create_user("importer", password="test-pass")
+        profile = user.organization_profile
+
+        sample_group = self.view._create_sample_group(
+            metadata, "mock_file.vcf", profile
+        )
+
+        self.assertEqual(SampleGroup.objects.count(), 1)
+        self.assertEqual(sample_group.name, "GenomeCohort")
+        self.assertEqual(sample_group.source_lab, "Genome Center")
+        self.assertEqual(sample_group.contact_email, "contact@example.com")
+        self.assertEqual(sample_group.contact_phone, "555-0100")
+        self.assertEqual(sample_group.total_samples, 8)
+        self.assertEqual(sample_group.inclusion_criteria, "Adults")

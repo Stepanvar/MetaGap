@@ -16,7 +16,6 @@ from .models import (
     OntSeq,
     OrganizationProfile,
     PacBioSeq,
-    PlatformIndependent,
     ReferenceGenomeBuild,
     SampleGroup,
     SampleOrigin,
@@ -32,7 +31,6 @@ admin.site.register(IlluminaSeq)
 admin.site.register(OntSeq)
 admin.site.register(PacBioSeq)
 admin.site.register(IonTorrentSeq)
-admin.site.register(PlatformIndependent)
 admin.site.register(BioinfoAlignment)
 admin.site.register(BioinfoVariantCalling)
 admin.site.register(BioinfoPostProc)

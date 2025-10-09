@@ -2,6 +2,7 @@ asgiref==3.8.1
 beautifulsoup4==4.12.3
 certifi==2024.8.30
 charset-normalizer==3.3.2
+dj-database-url==2.2.0
 Django==5.1.1
 django-allauth==65.0.1
 django-bootstrap5==24.3
@@ -11,11 +12,12 @@ docutils==0.21.2
 gunicorn==23.0.0
 idna==3.10
 packaging==24.1
-dj-database-url==2.2.0
 pysam==0.22.1
+python-dotenv==1.1.1
 requests==2.32.3
 soupsieve==2.6
 sqlparse==0.5.1
 typing_extensions==4.12.2
 tzdata==2024.2
 urllib3==2.2.3
+whitenoise==6.11.0

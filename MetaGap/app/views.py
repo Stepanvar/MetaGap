@@ -3,6 +3,7 @@
 import csv
 import json
 import os
+import re
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pysam
@@ -738,10 +739,17 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "sample_group": {
             "name": ["group", "group_name", "dataset", "id"],
             "doi": ["dataset_doi", "group_doi"],
-            "source_lab": ["lab", "lab_name", "source"],
+            "source_lab": ["lab", "lab_name", "source", "center"],
             "contact_email": ["email", "lab_email", "contact"],
             "contact_phone": ["phone", "lab_phone"],
-            "total_samples": ["samples", "sample_count", "n_samples"],
+            "total_samples": [
+                "samples",
+                "sample_count",
+                "n_samples",
+                "n",
+                "num_samples",
+                "number_of_samples",
+            ],
             "inclusion_criteria": ["inclusion", "inclusioncriteria"],
             "exclusion_criteria": ["exclusion", "exclusioncriteria"],
             "comments": ["description", "notes"],
@@ -1435,8 +1443,24 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 for key, value in record.items():
                     if key == "ID":
                         continue
-                    metadata[key.lower()] = value
+                    normalized_key = self._normalize_metadata_key(key)
+                    metadata[normalized_key] = value
         return metadata
+
+    @staticmethod
+    def _normalize_metadata_key(key: str) -> str:
+        if not isinstance(key, str):
+            return key
+
+        normalized = key.strip()
+        if not normalized:
+            return normalized
+
+        normalized = re.sub(r"[^\w]+", "_", normalized)
+        normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", normalized)
+        normalized = re.sub(r"_+", "_", normalized)
+        normalized = normalized.strip("_")
+        return normalized.lower()
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)

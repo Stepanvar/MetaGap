@@ -879,6 +879,9 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "h3": "h3",
         "mq": "mq",
         "mq0": "mq0",
+        "qd": "qd",
+        "fs": "fs",
+        "sor": "sor",
         "ns": "ns",
         "sb": "sb",
     }

@@ -200,6 +200,105 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
+def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
+    """Return an ordered mapping extracted from a serialized ``##SAMPLE`` line."""
+
+    if not isinstance(serialized, str):
+        raise TypeError("Serialized sample metadata must be provided as a string.")
+
+    text = serialized.strip()
+    prefix = "##SAMPLE=<"
+    suffix = ">"
+    if not text.startswith(prefix) or not text.endswith(suffix):
+        raise ValueError("Serialized sample metadata must be in '##SAMPLE=<...>' format.")
+
+    body = text[len(prefix) : -len(suffix)]
+    entries = OrderedDict()
+
+    token = []
+    stack = []
+    in_quotes = False
+    escape = False
+
+    def flush_token():
+        raw = "".join(token).strip()
+        token.clear()
+        if not raw:
+            return
+        if "=" not in raw:
+            raise ValueError(f"Invalid SAMPLE metadata entry: '{raw}'")
+        key, value = raw.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            raise ValueError("SAMPLE metadata keys cannot be empty.")
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            inner = value[1:-1]
+            unescaped = []
+            i = 0
+            while i < len(inner):
+                ch = inner[i]
+                if ch == "\\" and i + 1 < len(inner):
+                    next_ch = inner[i + 1]
+                    if next_ch in {'\\', '"'}:
+                        unescaped.append(next_ch)
+                        i += 2
+                        continue
+                unescaped.append(ch)
+                i += 1
+            value_to_store = "".join(unescaped)
+        else:
+            value_to_store = value
+        entries[key] = value_to_store
+
+    for ch in body:
+        if escape:
+            token.append(ch)
+            escape = False
+            continue
+
+        if ch == "\\":
+            token.append(ch)
+            escape = True
+            continue
+
+        if in_quotes:
+            if ch == '"':
+                in_quotes = False
+            token.append(ch)
+            continue
+
+        if ch == '"':
+            in_quotes = True
+            token.append(ch)
+            continue
+
+        if ch in "{[":
+            stack.append(ch)
+            token.append(ch)
+            continue
+
+        if ch in "}]":
+            if stack:
+                opener = stack[-1]
+                if (opener == "{" and ch == "}") or (opener == "[" and ch == "]"):
+                    stack.pop()
+            token.append(ch)
+            continue
+
+        if ch == "," and not stack:
+            flush_token()
+            continue
+
+        token.append(ch)
+
+    flush_token()
+
+    if "ID" in entries and isinstance(entries["ID"], str):
+        entries["ID"] = entries["ID"].strip()
+    return entries
+
+
 def parse_metadata_arguments(args, verbose=False):
     """Return header metadata derived from CLI arguments."""
 

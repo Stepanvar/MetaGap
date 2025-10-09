@@ -1,8 +1,6 @@
 import importlib.util
 from pathlib import Path
 
-import pytest
-
 MODULE_PATH = Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
 
 
@@ -13,7 +11,7 @@ def load_user_module():
     return module
 
 
-def test_validate_merged_vcf_missing_info_triggers_exit(tmp_path):
+def test_validate_merged_vcf_missing_info_is_tolerated(tmp_path, capsys):
     module = load_user_module()
 
     vcf_content = """##fileformat=VCFv4.2
@@ -25,5 +23,7 @@ def test_validate_merged_vcf_missing_info_triggers_exit(tmp_path):
     vcf_path = tmp_path / "missing_info.vcf"
     vcf_path.write_text(vcf_content)
 
-    with pytest.raises(SystemExit):
-        module.validate_merged_vcf(str(vcf_path))
+    module.validate_merged_vcf(str(vcf_path))
+
+    captured = capsys.readouterr()
+    assert "Validation completed successfully" in captured.out

@@ -2,7 +2,10 @@
 
 import csv
 import json
+import logging
 import os
+import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pysam
@@ -54,12 +57,14 @@ from .models import (
     MaterialType,
     OntSeq,
     PacBioSeq,
-    PlatformIndependent,
     ReferenceGenomeBuild,
     SampleGroup,
     SampleOrigin,
 )
 from .tables import create_dynamic_table
+
+
+logger = logging.getLogger(__name__)
 
 class SampleGroupTableView(ListView):
     """Display a django-tables2 listing of sample groups."""
@@ -85,7 +90,6 @@ class SampleGroupTableView(ListView):
                 "ont_seq",
                 "pacbio_seq",
                 "iontorrent_seq",
-                "platform_independent",
                 "bioinfo_alignment",
                 "bioinfo_variant_calling",
                 "bioinfo_post_proc",
@@ -524,7 +528,6 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
                 "ont_seq",
                 "pacbio_seq",
                 "iontorrent_seq",
-                "platform_independent",
                 "bioinfo_alignment",
                 "bioinfo_variant_calling",
                 "bioinfo_post_proc",
@@ -648,7 +651,6 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
                     ("Oxford Nanopore", sample_group.ont_seq, None),
                     ("PacBio", sample_group.pacbio_seq, None),
                     ("Ion Torrent", sample_group.iontorrent_seq, None),
-                    ("Platform-independent", sample_group.platform_independent, None),
                     ("Alignment", sample_group.bioinfo_alignment, None),
                     ("Variant calling", sample_group.bioinfo_variant_calling, None),
                     ("Post-processing", sample_group.bioinfo_post_proc, None),
@@ -715,6 +717,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "SAMPLE_GROUP": "sample_group",
         "SAMPLEGROUP": "sample_group",
         "GROUP": "sample_group",
+        "SAMPLE": "sample_group",
         "REFERENCE_GENOME_BUILD": "reference_genome_build",
         "REFERENCE_GENOME": "reference_genome_build",
         "REFERENCE": "reference_genome_build",
@@ -729,7 +732,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "PACBIO_SEQ": "pacbio_seq",
         "IONTORRENT_SEQ": "iontorrent_seq",
         "ION_TORRENT_SEQ": "iontorrent_seq",
-        "PLATFORM_INDEPENDENT": "platform_independent",
         "BIOINFO_ALIGNMENT": "bioinfo_alignment",
         "ALIGNMENT": "bioinfo_alignment",
         "BIOINFO_VARIANT_CALLING": "bioinfo_variant_calling",
@@ -750,7 +752,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "ont_seq": OntSeq,
         "pacbio_seq": PacBioSeq,
         "iontorrent_seq": IonTorrentSeq,
-        "platform_independent": PlatformIndependent,
         "bioinfo_alignment": BioinfoAlignment,
         "bioinfo_variant_calling": BioinfoVariantCalling,
         "bioinfo_post_proc": BioinfoPostProc,
@@ -761,10 +762,17 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "sample_group": {
             "name": ["group", "group_name", "dataset", "id"],
             "doi": ["dataset_doi", "group_doi"],
-            "source_lab": ["lab", "lab_name", "source"],
+            "source_lab": ["lab", "lab_name", "source", "center"],
             "contact_email": ["email", "lab_email", "contact"],
             "contact_phone": ["phone", "lab_phone"],
-            "total_samples": ["samples", "sample_count", "n_samples"],
+            "total_samples": [
+                "samples",
+                "sample_count",
+                "n_samples",
+                "n",
+                "num_samples",
+                "number_of_samples",
+            ],
             "inclusion_criteria": ["inclusion", "inclusioncriteria"],
             "exclusion_criteria": ["exclusion", "exclusioncriteria"],
             "comments": ["description", "notes"],
@@ -845,14 +853,6 @@ class ImportDataView(LoginRequiredMixin, FormView):
             "flow_order": ["floworder"],
             "ion_sphere_metrics": ["ionsphere", "sphere_metrics"],
         },
-        "platform_independent": {
-            "pooling": ["pool"],
-            "sequencing_kit": ["seq_kit", "kit"],
-            "base_calling_alg": ["basecalling", "base_calling"],
-            "q30": ["q30_rate"],
-            "normalized_coverage": ["coverage"],
-            "run_specific_calibration": ["calibration"],
-        },
         "bioinfo_alignment": {
             "tool": ["aligner", "software", "tool"],
             "params": ["parameters", "params"],
@@ -882,28 +882,34 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "ont_seq": "instrument",
         "pacbio_seq": "instrument",
         "iontorrent_seq": "instrument",
-        "platform_independent": "instrument",
         "bioinfo_alignment": "tool",
         "bioinfo_variant_calling": "tool",
         "bioinfo_post_proc": "normalization",
     }
 
+    INFO_FIELD_STRING = "string"
+    INFO_FIELD_INT = "int"
+    INFO_FIELD_FLOAT = "float"
+
     INFO_FIELD_MAP = {
-        "aa": "aa",
-        "ac": "ac",
-        "af": "af",
-        "an": "an",
-        "bq": "bq",
-        "cigar": "cigar",
-        "db": "db",
-        "dp": "dp",
-        "end": "end",
-        "h2": "h2",
-        "h3": "h3",
-        "mq": "mq",
-        "mq0": "mq0",
-        "ns": "ns",
-        "sb": "sb",
+        "aa": ("aa", INFO_FIELD_STRING),
+        "ac": ("ac", INFO_FIELD_INT),
+        "af": ("af", INFO_FIELD_FLOAT),
+        "an": ("an", INFO_FIELD_INT),
+        "bq": ("bq", INFO_FIELD_STRING),
+        "cigar": ("cigar", INFO_FIELD_STRING),
+        "db": ("db", INFO_FIELD_STRING),
+        "dp": ("dp", INFO_FIELD_INT),
+        "end": ("end", INFO_FIELD_STRING),
+        "h2": ("h2", INFO_FIELD_STRING),
+        "h3": ("h3", INFO_FIELD_STRING),
+        "mq": ("mq", INFO_FIELD_FLOAT),
+        "mq0": ("mq0", INFO_FIELD_STRING),
+        "ns": ("ns", INFO_FIELD_STRING),
+        "qd": ("qd", INFO_FIELD_FLOAT),
+        "fs": ("fs", INFO_FIELD_FLOAT),
+        "sor": ("sor", INFO_FIELD_FLOAT),
+        "sb": ("sb", INFO_FIELD_STRING),
     }
 
     FORMAT_FIELD_MAP = {
@@ -1317,7 +1323,12 @@ class ImportDataView(LoginRequiredMixin, FormView):
     def _normalize_metadata_value(value: str) -> str:
         stripped = value.strip()
         if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
-            return stripped[1:-1]
+            stripped = stripped[1:-1]
+        if "\\" in stripped:
+            try:
+                stripped = bytes(stripped, "utf-8").decode("unicode_escape")
+            except UnicodeDecodeError:  # pragma: no cover - defensive decoding
+                pass
         return stripped
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
@@ -1453,13 +1464,105 @@ class ImportDataView(LoginRequiredMixin, FormView):
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         for record in vcf_in.header.records:
-            if record.key == "SAMPLE":
-                metadata.setdefault("name", record.get("ID"))
-                for key, value in record.items():
-                    if key == "ID":
-                        continue
-                    metadata[key.lower()] = value
+            key = (record.key or "").upper()
+            if key == "SEQUENCING_PLATFORM":
+                self._ingest_sequencing_platform_record(metadata, record)
+                continue
+
+            section = self.METADATA_SECTION_MAP.get(key)
+            if not section:
+                continue
+
+            items = self._collect_record_items(record)
+            self._process_metadata_section(metadata, section, items)
+
+        if "name" not in metadata and "sample_group_name" in metadata:
+            metadata["name"] = metadata["sample_group_name"]
         return metadata
+
+    def _ingest_sequencing_platform_record(
+        self, metadata: Dict[str, Any], record: pysam.libcbcf.VariantHeaderRecord
+    ) -> None:
+        items = self._collect_record_items(record)
+        platform_value = None
+        for candidate in ("platform", "Platform"):
+            if candidate in items:
+                platform_value = items[candidate]
+                break
+
+        section = self._determine_platform_section(platform_value)
+        if not section:
+            logger.warning(
+                "Unsupported sequencing platform %r; storing raw metadata only.",
+                platform_value,
+            )
+            section = "platform_independent"
+
+        self._process_metadata_section(metadata, section, items)
+
+    def _determine_platform_section(self, platform_value: Any) -> Optional[str]:
+        if not platform_value:
+            return None
+
+        normalized = str(platform_value).strip().lower()
+        if "illumina" in normalized:
+            return "illumina_seq"
+        if "nanopore" in normalized or "ont" in normalized or "oxford" in normalized:
+            return "ont_seq"
+        if "pacbio" in normalized or "sequel" in normalized or "revio" in normalized:
+            return "pacbio_seq"
+        if "ion" in normalized:
+            return "iontorrent_seq"
+        return None
+
+    def _collect_record_items(
+        self, record: pysam.libcbcf.VariantHeaderRecord
+    ) -> Dict[str, Any]:
+        collected: Dict[str, Any] = {}
+        for key, value in record.items():
+            normalized_key = str(key)
+            if isinstance(value, str):
+                normalized_value = self._normalize_metadata_value(value)
+            else:
+                normalized_value = value
+            collected[normalized_key] = normalized_value
+        return collected
+
+    def _process_metadata_section(
+        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
+    ) -> None:
+        alias_lookup: Dict[str, str] = {}
+        for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
+            alias_lookup[field_name.lower()] = field_name
+            for alias in aliases:
+                alias_lookup[alias.lower()] = field_name
+
+        recognized: Dict[str, Any] = {}
+        leftovers: Dict[str, Any] = {}
+
+        for raw_key, value in items.items():
+            normalized_key = raw_key.lower()
+            canonical = alias_lookup.get(normalized_key)
+            if canonical:
+                recognized[canonical] = value
+            else:
+                leftovers[normalized_key] = value
+
+        for field_name, value in recognized.items():
+            metadata_key = f"{section}_{field_name}"
+            metadata[metadata_key] = value
+            if section == "sample_group":
+                if field_name == "name" and value is not None:
+                    metadata.setdefault("name", value)
+                elif field_name == "comments" and value is not None:
+                    metadata.setdefault("comments", value)
+
+        for raw_key, value in leftovers.items():
+            metadata_key = f"{section}_{raw_key}"
+            metadata[metadata_key] = value
+            logger.warning(
+                "Unhandled metadata key '%s' in section '%s'", raw_key, section
+            )
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)
@@ -1470,13 +1573,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
             normalized = key.lower()
             mapped_field = self.INFO_FIELD_MAP.get(normalized)
             if mapped_field:
-                structured[mapped_field] = self._stringify(value)
+                field_name, field_type = mapped_field
+                structured[field_name] = self._coerce_info_value(value, field_type)
             else:
-                additional[normalized] = self._stringify(value)
-            target = (
-                structured if normalized in self.INFO_FIELD_MAP else additional
-            )
-            target[normalized] = self._stringify(value)
+                additional_value = self._normalize_additional_info_value(value)
+                additional[normalized] = additional_value
 
         if not structured and not additional:
             return None
@@ -1520,6 +1621,83 @@ class ImportDataView(LoginRequiredMixin, FormView):
             payload=payload,
         )
         return format_instance, sample_name
+
+    @classmethod
+    def _coerce_info_value(cls, value: Any, field_type: str) -> Any:
+        if field_type == cls.INFO_FIELD_STRING:
+            return cls._stringify(value)
+
+        normalized = cls._normalize_info_scalar(value)
+        if field_type == cls.INFO_FIELD_INT:
+            return cls._coerce_int(normalized)
+        if field_type == cls.INFO_FIELD_FLOAT:
+            return cls._coerce_float(normalized)
+        return cls._stringify(value)
+
+    @classmethod
+    def _normalize_info_scalar(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            if not value:
+                return None
+            return cls._normalize_info_scalar(value[0])
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            if "," in stripped:
+                first_segment = stripped.split(",", 1)[0].strip()
+                if first_segment:
+                    stripped = first_segment
+            return stripped
+        return value
+
+    @staticmethod
+    def _coerce_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return int(value)
+        try:
+            decimal_value = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        try:
+            integral_value = decimal_value.to_integral_value()
+        except InvalidOperation:
+            return None
+
+        if integral_value != decimal_value:
+            return None
+        return int(integral_value)
+
+    @staticmethod
+    def _coerce_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return float(value)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _normalize_additional_info_value(cls, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            normalized_list = [
+                cls._normalize_additional_info_value(item)
+                for item in value
+                if item not in (None, "")
+            ]
+            return normalized_list or None
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float, bool)):
+            return value
+        return str(value)
 
     @staticmethod
     def _serialize_alt(alts: Optional[Iterable[str]]) -> str:

@@ -22,6 +22,8 @@ import logging
 import datetime
 import re
 import copy
+import shutil
+import subprocess
 from collections import OrderedDict
 
 try:
@@ -903,7 +905,8 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
+    staging_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
+    merged_filename = staging_filename + ".gz"
     log_message("Merging VCF files...", verbose)
     try:
         header = union_headers(valid_files, sample_order=sample_order)
@@ -918,7 +921,7 @@ def merge_vcfs(
     except Exception as exc:
         handle_critical_error(f"Failed to construct merged header: {exc}")
 
-    writer = vcfpy.Writer.from_path(merged_filename, header)
+    writer = vcfpy.Writer.from_path(staging_filename, header)
     for file_path in valid_files:
         log_message(f"Processing file: {file_path}", verbose)
         preprocessed_file = preprocess_vcf(file_path)
@@ -933,6 +936,62 @@ def merge_vcfs(
             os.remove(preprocessed_file)
 
     writer.close()
+
+    log_message(
+        f"VCF merge stage complete. Compressing staged file: {staging_filename}",
+        verbose,
+    )
+
+    bgzip_path = shutil.which("bgzip")
+    bcftools_path = shutil.which("bcftools")
+
+    try:
+        if bgzip_path:
+            with open(merged_filename, "wb") as compressed_out:
+                subprocess.run(
+                    [bgzip_path, "-c", staging_filename],
+                    check=True,
+                    stdout=compressed_out,
+                )
+        elif bcftools_path:
+            subprocess.run(
+                [bcftools_path, "view", "-Oz", "-o", merged_filename, staging_filename],
+                check=True,
+            )
+        else:
+            handle_critical_error(
+                "Neither bgzip nor bcftools is available to compress the merged VCF."
+            )
+    except subprocess.CalledProcessError as exc:
+        handle_critical_error(
+            f"Compression of {staging_filename} failed with exit code {exc.returncode}."
+        )
+
+    log_message(f"Compressed merged VCF created: {merged_filename}", verbose)
+
+    tabix_path = shutil.which("tabix")
+
+    try:
+        if tabix_path:
+            subprocess.run([tabix_path, "-p", "vcf", merged_filename], check=True)
+        elif bcftools_path:
+            subprocess.run([bcftools_path, "index", "-t", merged_filename], check=True)
+        else:
+            handle_critical_error(
+                "Neither tabix nor bcftools is available to index the merged VCF."
+            )
+    except subprocess.CalledProcessError as exc:
+        handle_critical_error(
+            f"Indexing of {merged_filename} failed with exit code {exc.returncode}."
+        )
+
+    index_path = merged_filename + ".tbi"
+    if os.path.exists(index_path):
+        log_message(f"Index created for merged VCF: {index_path}", verbose)
+
+    if os.path.exists(staging_filename):
+        os.remove(staging_filename)
+
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
 

@@ -12,7 +12,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import NoReverseMatch, reverse
 
 from ..filters import AlleleFrequencySearchFilter
-from ..forms import ImportDataForm, SearchForm
+from ..forms import CustomUserCreationForm, ImportDataForm, SearchForm
 from ..models import (
     AlleleFrequency,
     BioinfoAlignment,
@@ -161,6 +161,36 @@ class HomePageViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("form", response.context)
         self.assertIsInstance(response.context["form"], SearchForm)
+
+
+class UserRegistrationViewTests(TestCase):
+    """Validate the sign-up view renders the registration form template."""
+
+    def test_signup_view_renders_template_with_form(self) -> None:
+        response = self.client.get(reverse("signup"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "signup.html")
+        self.assertIn("form", response.context)
+        self.assertIsInstance(response.context["form"], CustomUserCreationForm)
+        self.assertContains(response, "<h2>Sign Up</h2>", html=True)
+class StaticPageViewTests(TestCase):
+    """Verify the informational static pages render their expected content."""
+
+    def test_contact_page_renders_expected_information(self) -> None:
+        response = self.client.get(reverse("contact"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "contact.html")
+        self.assertContains(response, "Support@example.com")
+        self.assertContains(response, "Marketing@example.com")
+
+    def test_about_page_renders_expected_information(self) -> None:
+        response = self.client.get(reverse("about"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "about.html")
+        self.assertContains(response, "Use this area to provide additional information.")
 
 
 class ProfileViewTests(TestCase):

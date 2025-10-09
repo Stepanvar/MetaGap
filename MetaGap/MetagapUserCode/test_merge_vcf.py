@@ -420,6 +420,28 @@ def append_metadata_to_merged_vcf(
     header_temp = f"{merged_vcf}.header.temp"
     body_temp = f"{merged_vcf}.body.temp"
 
+    expects_gzip = merged_vcf.endswith(".gz")
+    final_plain_vcf = None
+    final_vcf = None
+
+    if merged_vcf.endswith(".vcf.gz"):
+        base_path = merged_vcf[: -len(".vcf.gz")]
+        final_plain_vcf = f"{base_path}.anonymized.vcf"
+        final_vcf = f"{final_plain_vcf}.gz"
+    elif merged_vcf.endswith(".vcf"):
+        base_path = merged_vcf[: -len(".vcf")]
+        final_plain_vcf = f"{base_path}.anonymized.vcf"
+        final_vcf = final_plain_vcf
+    else:
+        base_path, ext = os.path.splitext(merged_vcf)
+        if ext == ".gz":
+            base_path = base_path or merged_vcf[:-3]
+            final_plain_vcf = f"{base_path}.anonymized"
+            final_vcf = f"{final_plain_vcf}.gz"
+        else:
+            final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
+            final_vcf = final_plain_vcf
+
     def _cleanup_temp_files():
         for path in [joint_temp, filtered_temp, header_temp, body_temp]:
             try:
@@ -570,21 +592,49 @@ def append_metadata_to_merged_vcf(
             for line in body_handle:
                 body_lines.append(line.rstrip("\n"))
 
-        base, ext = os.path.splitext(merged_vcf)
-        if not ext:
-            ext = ".vcf"
-        final_vcf = f"{base}.anonymized{ext}"
-
-        with open(final_vcf, "w", encoding="utf-8") as output_handle:
+        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
             for line in final_header_lines:
                 output_handle.write(line + "\n")
             for line in body_lines:
                 output_handle.write(line + "\n")
     except Exception as exc:
         _cleanup_temp_files()
+        if final_plain_vcf and os.path.exists(final_plain_vcf):
+            try:
+                os.remove(final_plain_vcf)
+            except Exception:
+                pass
         handle_critical_error(
             f"Failed to assemble final anonymized VCF contents: {exc}"
         )
+
+    if expects_gzip:
+        try:
+            subprocess.run(["bgzip", "-f", final_plain_vcf], check=True)
+            subprocess.run(["tabix", "-p", "vcf", "-f", final_vcf], check=True)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            _cleanup_temp_files()
+            if os.path.exists(final_plain_vcf):
+                try:
+                    os.remove(final_plain_vcf)
+                except Exception:
+                    pass
+            if os.path.exists(final_vcf):
+                try:
+                    os.remove(final_vcf)
+                except Exception:
+                    pass
+            handle_critical_error(
+                f"Failed to finalize anonymized VCF compression/indexing: {exc}"
+            )
+        finally:
+            if os.path.exists(final_plain_vcf):
+                try:
+                    os.remove(final_plain_vcf)
+                except Exception:
+                    pass
+    else:
+        final_vcf = final_plain_vcf
 
     _cleanup_temp_files()
 

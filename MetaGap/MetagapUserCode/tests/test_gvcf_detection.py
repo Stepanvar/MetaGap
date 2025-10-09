@@ -10,6 +10,11 @@ test_merge_vcf = importlib.util.module_from_spec(_SPEC)
 assert _SPEC.loader is not None  # for mypy/type checkers
 _SPEC.loader.exec_module(test_merge_vcf)
 
+pytestmark = pytest.mark.skipif(
+    not getattr(test_merge_vcf, "VCFPY_AVAILABLE", True),
+    reason="vcfpy dependency is required for gVCF detection tests",
+)
+
 
 @pytest.fixture
 def gvcf_path(tmp_path):

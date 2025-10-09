@@ -3,6 +3,7 @@
 import csv
 import json
 import os
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pysam
@@ -849,22 +850,29 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "bioinfo_post_proc": "normalization",
     }
 
+    INFO_FIELD_STRING = "string"
+    INFO_FIELD_INT = "int"
+    INFO_FIELD_FLOAT = "float"
+
     INFO_FIELD_MAP = {
-        "aa": "aa",
-        "ac": "ac",
-        "af": "af",
-        "an": "an",
-        "bq": "bq",
-        "cigar": "cigar",
-        "db": "db",
-        "dp": "dp",
-        "end": "end",
-        "h2": "h2",
-        "h3": "h3",
-        "mq": "mq",
-        "mq0": "mq0",
-        "ns": "ns",
-        "sb": "sb",
+        "aa": ("aa", INFO_FIELD_STRING),
+        "ac": ("ac", INFO_FIELD_INT),
+        "af": ("af", INFO_FIELD_FLOAT),
+        "an": ("an", INFO_FIELD_INT),
+        "bq": ("bq", INFO_FIELD_STRING),
+        "cigar": ("cigar", INFO_FIELD_STRING),
+        "db": ("db", INFO_FIELD_STRING),
+        "dp": ("dp", INFO_FIELD_INT),
+        "end": ("end", INFO_FIELD_STRING),
+        "h2": ("h2", INFO_FIELD_STRING),
+        "h3": ("h3", INFO_FIELD_STRING),
+        "mq": ("mq", INFO_FIELD_FLOAT),
+        "mq0": ("mq0", INFO_FIELD_STRING),
+        "ns": ("ns", INFO_FIELD_STRING),
+        "qd": ("qd", INFO_FIELD_FLOAT),
+        "fs": ("fs", INFO_FIELD_FLOAT),
+        "sor": ("sor", INFO_FIELD_FLOAT),
+        "sb": ("sb", INFO_FIELD_STRING),
     }
 
     FORMAT_FIELD_MAP = {
@@ -1431,13 +1439,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
             normalized = key.lower()
             mapped_field = self.INFO_FIELD_MAP.get(normalized)
             if mapped_field:
-                structured[mapped_field] = self._stringify(value)
+                field_name, field_type = mapped_field
+                structured[field_name] = self._coerce_info_value(value, field_type)
             else:
-                additional[normalized] = self._stringify(value)
-            target = (
-                structured if normalized in self.INFO_FIELD_MAP else additional
-            )
-            target[normalized] = self._stringify(value)
+                additional_value = self._normalize_additional_info_value(value)
+                additional[normalized] = additional_value
 
         if not structured and not additional:
             return None
@@ -1481,6 +1487,83 @@ class ImportDataView(LoginRequiredMixin, FormView):
             payload=payload,
         )
         return format_instance, sample_name
+
+    @classmethod
+    def _coerce_info_value(cls, value: Any, field_type: str) -> Any:
+        if field_type == cls.INFO_FIELD_STRING:
+            return cls._stringify(value)
+
+        normalized = cls._normalize_info_scalar(value)
+        if field_type == cls.INFO_FIELD_INT:
+            return cls._coerce_int(normalized)
+        if field_type == cls.INFO_FIELD_FLOAT:
+            return cls._coerce_float(normalized)
+        return cls._stringify(value)
+
+    @classmethod
+    def _normalize_info_scalar(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            if not value:
+                return None
+            return cls._normalize_info_scalar(value[0])
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            if "," in stripped:
+                first_segment = stripped.split(",", 1)[0].strip()
+                if first_segment:
+                    stripped = first_segment
+            return stripped
+        return value
+
+    @staticmethod
+    def _coerce_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return int(value)
+        try:
+            decimal_value = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        try:
+            integral_value = decimal_value.to_integral_value()
+        except InvalidOperation:
+            return None
+
+        if integral_value != decimal_value:
+            return None
+        return int(integral_value)
+
+    @staticmethod
+    def _coerce_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return float(value)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _normalize_additional_info_value(cls, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            normalized_list = [
+                cls._normalize_additional_info_value(item)
+                for item in value
+                if item not in (None, "")
+            ]
+            return normalized_list or None
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float, bool)):
+            return value
+        return str(value)
 
     @staticmethod
     def _serialize_alt(alts: Optional[Iterable[str]]) -> str:

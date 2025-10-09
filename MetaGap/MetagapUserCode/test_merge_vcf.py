@@ -23,7 +23,6 @@ import sys
 import glob
 import argparse
 import csv
-import logging
 import datetime
 import re
 import copy
@@ -51,34 +50,13 @@ except ImportError:  # pragma: no cover - exercised when dependency is missing
 
     vcfpy = _MissingVcfpyModule()  # type: ignore
 
-# Configure logging
-LOG_FILE = "script_execution.log"
-logger = logging.getLogger("vcf_merger")
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s : %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-fh = logging.FileHandler(LOG_FILE)
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-ch = logging.StreamHandler()
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
-
-def log_message(message, verbose=False):
-    logger.info(message)
-    if verbose:
-        print(message)
-
-
-def handle_critical_error(message):
-    log_message("CRITICAL ERROR: " + message)
-    print("A critical error occurred. Check {} for details.".format(LOG_FILE))
-    sys.exit(1)
-
-
-def handle_non_critical_error(message):
-    log_message("WARNING: " + message)
-    print("Warning: " + message)
+from logging_utils import (
+    LOG_FILE,
+    handle_critical_error,
+    handle_non_critical_error,
+    log_message,
+    logger,
+)
 
 
 def is_gvcf_header(header_lines):

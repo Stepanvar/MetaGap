@@ -141,21 +141,6 @@ class IonTorrentSeq(SequencingInstrument):
         return f"Ion Torrent - {self.instrument}, Chip Type: {self.chip_type}"
 
 
-class PlatformIndependent(models.Model):
-    """Platform-independent sequencing details."""
-
-    instrument = models.CharField(max_length=100, blank=True, null=True)
-    pooling = models.CharField(max_length=100, blank=True, null=True)
-    sequencing_kit = models.CharField(max_length=100, blank=True, null=True)
-    base_calling_alg = models.CharField(max_length=100, blank=True, null=True)
-    q30 = models.CharField(max_length=50, blank=True, null=True)
-    normalized_coverage = models.CharField(max_length=100, blank=True, null=True)
-    run_specific_calibration = models.CharField(max_length=100, blank=True, null=True)
-
-    def __str__(self) -> str:
-        return f"Pooling: {self.pooling}, Sequencing Kit: {self.sequencing_kit}"
-
-
 class BioinfoAlignment(models.Model):
     """Bioinformatics alignment settings."""
 
@@ -329,12 +314,6 @@ class SampleGroup(models.Model):
         null=True,
         blank=True,
     )
-    platform_independent = models.ForeignKey(
-        PlatformIndependent,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
     bioinfo_alignment = models.ForeignKey(
         BioinfoAlignment,
         on_delete=models.SET_NULL,
@@ -370,7 +349,6 @@ class SampleGroup(models.Model):
             "ont_seq",
             "pacbio_seq",
             "iontorrent_seq",
-            "platform_independent",
             "bioinfo_alignment",
             "bioinfo_variant_calling",
             "bioinfo_post_proc",

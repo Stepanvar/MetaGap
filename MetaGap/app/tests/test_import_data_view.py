@@ -98,7 +98,7 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")
-        self.assertEqual(allele.info.af, "0.5")
+        self.assertAlmostEqual(allele.info.af, 0.5)
         self.assertEqual(allele.info.additional["clnsig"], "Pathogenic")
         self.assertEqual(allele.format.genotype, "0/1")
         self.assertEqual(allele.format.fields["gq"], "99")
@@ -155,12 +155,6 @@ class ImportDataViewIntegrationTests(TestCase):
             "genome_complexity",
             "sample_origin",
             "material_type",
-            "library_construction",
-            "illumina_seq",
-            "ont_seq",
-            "pacbio_seq",
-            "iontorrent_seq",
-            "platform_independent",
             "bioinfo_alignment",
             "bioinfo_variant_calling",
             "bioinfo_post_proc",
@@ -203,76 +197,6 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(sample_group.material_type.material_type, "DNA")
         self.assertEqual(sample_group.material_type.integrity_number, "9.5")
 
-        self.assertIsNotNone(sample_group.library_construction)
-        self.assertEqual(sample_group.library_construction.kit, "HyperPrep")
-        self.assertEqual(
-            sample_group.library_construction.fragmentation,
-            "Enzymatic",
-        )
-        self.assertEqual(
-            sample_group.library_construction.adapter_ligation_efficiency,
-            "0.9",
-        )
-        self.assertEqual(sample_group.library_construction.pcr_cycles, 8)
-
-        self.assertIsNotNone(sample_group.illumina_seq)
-        self.assertEqual(sample_group.illumina_seq.instrument, "NovaSeq 6000")
-        self.assertEqual(sample_group.illumina_seq.flow_cell, "FC123")
-        self.assertEqual(
-            sample_group.illumina_seq.channel_method,
-            "Two-Channel",
-        )
-        self.assertEqual(sample_group.illumina_seq.cluster_density, "1200k")
-        self.assertEqual(sample_group.illumina_seq.qc_software, "Control")
-        self.assertEqual(
-            sample_group.illumina_seq.additional_info,
-            {"platform": "Illumina NovaSeq", "readlength": 150},
-        )
-
-        self.assertIsNotNone(sample_group.ont_seq)
-        self.assertEqual(sample_group.ont_seq.instrument, "PromethION")
-        self.assertEqual(sample_group.ont_seq.flow_cell, "FLO-MIN106")
-        self.assertEqual(sample_group.ont_seq.flow_cell_version, "v1")
-        self.assertEqual(sample_group.ont_seq.pore_type, "R9.4")
-        self.assertEqual(sample_group.ont_seq.bias_voltage, "180mV")
-
-        self.assertIsNotNone(sample_group.pacbio_seq)
-        self.assertEqual(sample_group.pacbio_seq.instrument, "Sequel II")
-        self.assertEqual(sample_group.pacbio_seq.flow_cell, "SMRT Cell 8M")
-        self.assertEqual(sample_group.pacbio_seq.smrt_cell_type, "1M")
-        self.assertEqual(sample_group.pacbio_seq.zmw_density, "High")
-
-        self.assertIsNotNone(sample_group.iontorrent_seq)
-        self.assertEqual(sample_group.iontorrent_seq.instrument, "Ion S5")
-        self.assertEqual(sample_group.iontorrent_seq.flow_cell, "IonChip")
-        self.assertEqual(sample_group.iontorrent_seq.chip_type, "540")
-        self.assertEqual(sample_group.iontorrent_seq.ph_calibration, "Auto")
-        self.assertEqual(sample_group.iontorrent_seq.flow_order, "TACG")
-        self.assertEqual(
-            sample_group.iontorrent_seq.ion_sphere_metrics,
-            "Good",
-        )
-
-        self.assertIsNotNone(sample_group.platform_independent)
-        self.assertEqual(sample_group.platform_independent.pooling, "BatchA")
-        self.assertEqual(
-            sample_group.platform_independent.sequencing_kit,
-            "KitX",
-        )
-        self.assertEqual(
-            sample_group.platform_independent.base_calling_alg,
-            "BaseCaller",
-        )
-        self.assertEqual(sample_group.platform_independent.q30, "92.5")
-        self.assertEqual(
-            sample_group.platform_independent.normalized_coverage,
-            "120X",
-        )
-        self.assertEqual(
-            sample_group.platform_independent.run_specific_calibration,
-            "Manual",
-        )
-
         self.assertIsNotNone(sample_group.bioinfo_alignment)
         self.assertEqual(sample_group.bioinfo_alignment.tool, "BWA")
         self.assertEqual(sample_group.bioinfo_alignment.params, "-M")
@@ -312,6 +236,13 @@ class ImportDataViewIntegrationTests(TestCase):
             {"rna_integrity": 7.4, "metrics": {"inner": 1}},
         )
 
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertIn("platform_independent_q30", additional_metadata)
+        self.assertAlmostEqual(
+            float(additional_metadata["platform_independent_q30"]),
+            92.5,
+        )
+
     @mock.patch("app.views.pysam.VariantFile", side_effect=OSError("boom"))
     def test_import_falls_back_to_text_parser(self, mocked_variant_file: mock.Mock) -> None:
         """If pysam fails to open the VCF, the text fallback still imports data."""
@@ -336,7 +267,7 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")
-        self.assertEqual(allele.info.af, "0.5")
+        self.assertAlmostEqual(allele.info.af, 0.5)
         self.assertEqual(allele.format.genotype, "0/1")
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")
 

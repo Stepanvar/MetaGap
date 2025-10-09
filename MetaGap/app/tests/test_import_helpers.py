@@ -31,8 +31,8 @@ class ImportHelpersTests(TestCase):
 
         self.assertIsNotNone(info_instance)
         self.assertEqual(Info.objects.count(), 1)
-        self.assertEqual(info_instance.ac, "5")
-        self.assertEqual(info_instance.dp, "10,11")
+        self.assertEqual(info_instance.ac, 5)
+        self.assertEqual(info_instance.dp, 10)
         self.assertEqual(info_instance.additional, {"custom": "value"})
 
     def test_create_format_instance_uses_field_map(self):

@@ -1,144 +1,16 @@
-#!/usr/bin/env python3
-"""Public CLI surface for the MetaGap VCF merging workflow."""
+"""Metadata helpers for augmenting merged VCF files."""
 
-At completion the script prints a compact summary in the form
-``Wrote: <DIR>/<SAMPLE_XXXX>.vcf[.gz] x N`` where the directory, a
-representative sample filename, and the number of produced cohort VCF
-shards are derived from the output directory contents.
+from __future__ import annotations
 
-Requirements:
-pip install vcfpy
-"""
-
-import os
-import sys
-import glob
-import csv
-import logging
-import datetime
-import os
-import subprocess
 import gzip
-import importlib
-import importlib.util
-import types
+import os
+import shutil
+import subprocess
 from collections import OrderedDict
+from typing import List, Optional, Tuple
 
-try:
-    import vcfpy  # type: ignore
-    VCFPY_AVAILABLE = True
-except ImportError:  # pragma: no cover - exercised when dependency is missing
-    VCFPY_AVAILABLE = False
-
-    class _MissingVcfpyModule:
-        """Placeholder that raises a helpful error when vcfpy is unavailable."""
-
-        __slots__ = ()
-
-        def __getattr__(self, name):  # pragma: no cover - defensive, attribute driven
-            raise ModuleNotFoundError(
-                "Error: vcfpy package is required. Please install it with 'pip install vcfpy'."
-            )
-
-    vcfpy = _MissingVcfpyModule()  # type: ignore
-
-
-
-# Configure logging
-LOG_FILE = "script_execution.log"
-logger = logging.getLogger("vcf_merger")
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s : %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-fh = logging.FileHandler(LOG_FILE)
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-ch = logging.StreamHandler()
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
-
-def log_message(message, verbose=False):
-    logger.info(message)
-    if verbose:
-        print(message)
-
-
-def handle_critical_error(message):
-    log_message("CRITICAL ERROR: " + message)
-    print("A critical error occurred. Check {} for details.".format(LOG_FILE))
-    sys.exit(1)
-
-
-def handle_non_critical_error(message):
-    log_message("WARNING: " + message)
-    print("Warning: " + message)
-
-
-def is_gvcf_header(header_lines):
-    """Return True if the provided header metadata indicates a gVCF file."""
-
-    for raw_line in header_lines:
-        line_text = None
-        if hasattr(raw_line, "to_line"):
-            try:
-                line_text = raw_line.to_line()
-            except Exception:
-                line_text = None
-        if line_text is None and isinstance(raw_line, str):
-            line_text = raw_line
-
-        if line_text:
-            stripped = line_text.strip()
-            if stripped.startswith("##"):
-                normalized = stripped.upper().replace(" ", "")
-                if normalized.startswith("##GVCF"):
-                    return True
-                if normalized.startswith("##ALT=") and (
-                    "ID=<NON_REF>" in normalized or "ID=NON_REF" in normalized
-                ):
-                    return True
-
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
-
-from merge_vcf import VCFPY_AVAILABLE, vcfpy
-from merge_vcf import metadata as _metadata
-from merge_vcf import cli as _cli
-from merge_vcf.logging_utils import (
-    LOG_FILE,
-    handle_critical_error,
-    handle_non_critical_error,
-    log_message,
-    logger,
-)
-from merge_vcf.metadata import (
-    _format_sample_metadata_value,
-    _parse_sample_metadata_line,
-    _parse_simple_metadata_line,
-    _validate_anonymized_vcf_header as _metadata_validate_anonymized_vcf_header,
-    append_metadata_to_merged_vcf,
-    apply_metadata_to_header,
-    build_sample_metadata_line,
-    parse_metadata_arguments,
-    recalculate_cohort_info_tags,
-)
-from merge_vcf.merging import (
-    _create_missing_call_factory,
-    _pad_record_samples,
-    _remove_format_and_sample_definitions,
-    merge_vcfs,
-    preprocess_vcf,
-    union_headers,
-)
-from merge_vcf.validation import (
-    find_first_vcf_with_header,
-    is_gvcf_header,
-    normalize_vcf_version,
-    validate_all_vcfs,
-    validate_merged_vcf,
-    validate_vcf,
-)
+from . import VCFPY_AVAILABLE, vcfpy
+from .logging_utils import handle_critical_error, log_message
 
 
 def _format_sample_metadata_value(value: str) -> str:
@@ -154,7 +26,7 @@ def _format_sample_metadata_value(value: str) -> str:
 
 
 def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
-    """Serialize an ordered mapping into a single ##SAMPLE metadata line."""
+    """Serialize an ordered mapping into a single ``##SAMPLE`` metadata line."""
 
     id_value = entries.get("ID", "").strip()
     if not id_value:
@@ -188,12 +60,12 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
     body = text[len(prefix) : -len(suffix)]
     entries = OrderedDict()
 
-    token = []
-    stack = []
+    token: List[str] = []
+    stack: List[str] = []
     in_quotes = False
     escape = False
 
-    def flush_token():
+    def flush_token() -> None:
         raw = "".join(token).strip()
         token.clear()
         if not raw:
@@ -207,7 +79,7 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
             raise ValueError("SAMPLE metadata keys cannot be empty.")
         if len(value) >= 2 and value[0] == value[-1] == '"':
             inner = value[1:-1]
-            unescaped = []
+            unescaped: List[str] = []
             i = 0
             while i < len(inner):
                 ch = inner[i]
@@ -272,13 +144,25 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
     return entries
 
 
-def parse_metadata_arguments(args, verbose=False):
+def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
+    stripped = line.strip()
+    if not stripped.startswith("##") or "=" not in stripped:
+        return None
+    key, value = stripped[2:].split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        return None
+    return key, value
+
+
+def parse_metadata_arguments(args, verbose: bool = False):
     """Return header metadata derived from CLI arguments."""
 
     sample_entries = getattr(args, "sample_metadata_entries", None) or []
     additional_lines = getattr(args, "header_metadata_lines", None) or []
 
-    sample_mapping = OrderedDict()
+    sample_mapping: "OrderedDict[str, str]" = OrderedDict()
     for raw_entry in sample_entries:
         entry = raw_entry.strip()
         if not entry:
@@ -306,7 +190,7 @@ def parse_metadata_arguments(args, verbose=False):
         sample_header_line = vcfpy.SampleHeaderLine.from_mapping(sample_mapping)
 
     simple_header_lines = []
-    sanitized_header_lines = []
+    sanitized_header_lines: List[str] = []
     for raw_line in additional_lines:
         normalized = raw_line.strip()
         if not normalized:
@@ -341,7 +225,10 @@ def parse_metadata_arguments(args, verbose=False):
 
 
 def apply_metadata_to_header(
-    header, sample_header_line=None, simple_header_lines=None, verbose=False
+    header,
+    sample_header_line=None,
+    simple_header_lines=None,
+    verbose: bool = False,
 ):
     """Return ``header`` with CLI metadata applied."""
 
@@ -373,7 +260,7 @@ def apply_metadata_to_header(
     return header
 
 
-def _validate_anonymized_vcf_header(final_vcf_path, ensure_for_uncompressed=False):
+def _validate_anonymized_vcf_header(final_vcf_path: str, ensure_for_uncompressed: bool = False):
     """Use ``bcftools`` to confirm that ``final_vcf_path`` has a readable header."""
 
     if not final_vcf_path:
@@ -397,11 +284,11 @@ def _validate_anonymized_vcf_header(final_vcf_path, ensure_for_uncompressed=Fals
 
 
 def append_metadata_to_merged_vcf(
-    merged_vcf,
+    merged_vcf: str,
     sample_metadata_entries=None,
     header_metadata_lines=None,
     serialized_sample_line=None,
-    verbose=False,
+    verbose: bool = False,
 ):
     """Finalize the merged VCF by applying bcftools processing and metadata."""
 
@@ -613,7 +500,7 @@ def append_metadata_to_merged_vcf(
             f"Failed to assemble final anonymized VCF contents: {exc}"
         )
 
-    if expects_gzip:
+    if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
         try:
             subprocess.run(["bgzip", "-f", final_plain_vcf], check=True)
             subprocess.run(["tabix", "-p", "vcf", "-f", final_vcf], check=True)
@@ -630,7 +517,7 @@ def append_metadata_to_merged_vcf(
                 except Exception:
                     pass
             handle_critical_error(
-                f"Failed to finalize anonymized VCF compression/indexing: {exc}"
+                f"Failed to compress or index anonymized VCF: {exc}"
             )
         finally:
             if os.path.exists(final_plain_vcf):
@@ -638,7 +525,7 @@ def append_metadata_to_merged_vcf(
                     os.remove(final_plain_vcf)
                 except Exception:
                     pass
-    else:
+    elif not expects_gzip:
         final_vcf = final_plain_vcf
 
     _cleanup_temp_files()
@@ -649,270 +536,219 @@ def append_metadata_to_merged_vcf(
     return final_vcf
 
 
-def normalize_vcf_version(version_value):
-    """Extract the numeric portion of the VCF version if present."""
-    if not version_value:
-        return version_value
-    match = re.search(r"(\d+\.\d+)", version_value)
-    if match:
-        return match.group(1)
-    return version_value.strip()
+def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
+    """Recompute AC, AN, and AF INFO tags in-place for ``vcf_path``."""
 
+    log_message(
+        "Recalculating AC, AN, AF tags across the merged cohort...",
+        verbose,
+    )
 
-def find_first_vcf_with_header(input_dir, verbose=False):
-    """Locate the first readable VCF file and return its header metadata."""
-    candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
-    for file_path in candidates:
+    if VCFPY_AVAILABLE:
         try:
-            reader = vcfpy.Reader.from_path(file_path)
-        except Exception as e:
-            handle_non_critical_error(
-                f"Unable to open {file_path} for auto-detection: {str(e)}. Trying next file.",
+            reader = vcfpy.Reader.from_path(vcf_path)
+        except Exception as exc:
+            handle_critical_error(
+                f"Failed to open {vcf_path} for AC/AN/AF recalculation: {exc}"
             )
-            continue
 
+        records = []
         header = reader.header
-        fileformat = None
-        reference = None
-        for line in header.lines:
-            if line.key == "fileformat" and fileformat is None:
-                fileformat = line.value
-            elif line.key == "reference" and reference is None:
-                reference = line.value
-            if fileformat and reference:
-                break
 
-        if fileformat and reference:
-            log_message(
-                f"Auto-detection using {file_path}: fileformat={fileformat}, reference={reference}",
-                verbose,
-            )
-            return file_path, fileformat, reference
+        for record in reader:
+            info = dict(getattr(record, "INFO", {}) or {})
+            alt_alleles = list(getattr(record, "ALT", []) or [])
+            alt_counts = [0] * len(alt_alleles)
+            allele_number = 0
 
-        handle_non_critical_error(
-            f"Required metadata missing in {file_path} during auto-detection. Trying next file.",
-        )
+            for call in getattr(record, "calls", []) or []:
+                data = getattr(call, "data", {}) or {}
+                genotype = data.get("GT")
+                if not genotype:
+                    continue
+                tokens = genotype.replace("|", "/").split("/")
+                for token in tokens:
+                    token = token.strip()
+                    if not token or token == ".":
+                        continue
+                    try:
+                        allele_index = int(token)
+                    except ValueError:
+                        continue
+                    if allele_index < 0:
+                        continue
+                    allele_number += 1
+                    if allele_index == 0:
+                        continue
+                    normalized_index = allele_index - 1
+                    if 0 <= normalized_index < len(alt_counts):
+                        alt_counts[normalized_index] += 1
 
-    return None, None, None
+            info["AN"] = allele_number
+            if alt_counts:
+                info["AC"] = alt_counts
+                if allele_number > 0:
+                    info["AF"] = [count / allele_number for count in alt_counts]
+                else:
+                    info["AF"] = [0.0 for _ in alt_counts]
+            else:
+                info["AC"] = []
+                info["AF"] = []
 
+            record.INFO = info
+            records.append(record)
 
-def validate_vcf(file_path, ref_genome, vcf_version, verbose=False, allow_gvcf=False):
-    log_message(f"Validating file: {file_path}", verbose)
-    if not os.path.isfile(file_path):
-        handle_non_critical_error(f"File {file_path} does not exist. Skipping.")
-        return False
-
-    preprocessed_file = preprocess_vcf(file_path)
-    try:
-        reader = vcfpy.Reader.from_path(preprocessed_file)
-    except Exception as e:
-        handle_non_critical_error(f"Could not open {file_path}: {str(e)}. Skipping.")
-        return False
-    if preprocessed_file != file_path:
-        os.remove(preprocessed_file)
-
-
-    header = reader.header
-
-    if is_gvcf_header(header.lines) and not allow_gvcf:
-        handle_non_critical_error(
-            f"{file_path} appears to be a gVCF based on header metadata. Use --allow-gvcf to include gVCFs. Skipping."
-        )
-        return False
-
-    fileformat = None
-    for line in header.lines:
-        if line.key == "fileformat":
-            fileformat = line.value
-            break
-
-    expected_version = normalize_vcf_version(vcf_version)
-    actual_version = normalize_vcf_version(fileformat)
-
-    if fileformat is None or expected_version != actual_version:
-        handle_non_critical_error(
-            f"VCF version mismatch in {file_path}. Expected: {vcf_version}, Found: {fileformat}. Skipping.",
-        )
-        return False
-
-    ref = None
-    for line in header.lines:
-        if line.key == "reference":
-            ref = line.value
-            break
-    if ref is None or ref != ref_genome:
-        handle_non_critical_error(f"Reference genome mismatch in {file_path}. Expected: {ref_genome}, Found: {ref}. Skipping.")
-        return False
-
-
-    try:
-        from itertools import islice
-
-    return _cli.parse_arguments()
-
-
-def summarize_produced_vcfs(output_dir, fallback_vcf):
-    return _cli.summarize_produced_vcfs(output_dir, fallback_vcf)
-
-
-def _validate_anonymized_vcf_header(
-    final_vcf_path, ensure_for_uncompressed: bool = False
-):
-    original = _metadata.handle_critical_error
-    _metadata.handle_critical_error = handle_critical_error
-    try:
-        return _metadata_validate_anonymized_vcf_header(
-            final_vcf_path, ensure_for_uncompressed=ensure_for_uncompressed
-        )
-    finally:
-        _metadata.handle_critical_error = original
-
-
-def run_workflow(args):
-    verbose = args.verbose
-    (
-        sample_header_line,
-        simple_header_lines,
-        sample_metadata_entries,
-        sanitized_header_lines,
-        serialized_sample_line,
-    ) = parse_metadata_arguments(
-        args,
-        verbose,
-        log_message=log_message,
-        handle_critical_error=handle_critical_error,
-    )
-
-    log_message(
-        "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        verbose,
-    )
-
-    input_dir = os.path.abspath(args.input_dir)
-    if not os.path.isdir(input_dir):
-        handle_critical_error(f"Input directory does not exist: {input_dir}")
-    log_message("Input directory: " + input_dir, verbose)
-
-    output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-    log_message("Output directory: " + output_dir, verbose)
-
-    ref_genome = args.ref.strip() if args.ref else None
-    vcf_version = normalize_vcf_version(args.vcf_version) if args.vcf_version else None
-
-    detection_needed = not ref_genome or not vcf_version
-    detected_file = detected_fileformat = detected_reference = None
-    if detection_needed:
-        detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(
-            input_dir, verbose
-        )
-        if not ref_genome and detected_reference:
-            ref_genome = detected_reference
-        if not vcf_version and detected_fileformat:
-            vcf_version = normalize_vcf_version(detected_fileformat)
-
-    if not ref_genome:
-        handle_critical_error(
-            "Reference genome build must be provided via --ref or auto-detectable from input files."
-        )
-    if not vcf_version:
-        handle_critical_error(
-            "VCF version must be provided via --vcf-version or auto-detectable from input files."
-        )
-
-    if detection_needed and detected_file:
-        log_message(
-            f"Auto-detected metadata from {detected_file} -> reference={detected_reference or 'unknown'}, "
-            f"version={detected_fileformat or 'unknown'}",
-            verbose,
-        )
-
-    log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
-
-    valid_files, sample_order = validate_all_vcfs(
-        input_dir,
-        ref_genome,
-        vcf_version,
-        verbose,
-        allow_gvcf=getattr(args, "allow_gvcf", False),
-    )
-
-    merged_vcf = merge_vcfs(
-        valid_files,
-        output_dir,
-        verbose,
-        sample_order=sample_order,
-        sample_header_line=sample_header_line,
-        simple_header_lines=simple_header_lines,
-    )
-
-    final_vcf = append_metadata_to_merged_vcf(
-        merged_vcf,
-        sample_metadata_entries=sample_metadata_entries,
-        header_metadata_lines=sanitized_header_lines,
-        serialized_sample_line=serialized_sample_line,
-        verbose=verbose,
-    )
-
-    validate_merged_vcf(final_vcf, verbose)
-
-    summary_dir, sample_filename, produced_count = summarize_produced_vcfs(
-        output_dir, final_vcf
-    )
-    summary_path = os.path.join(summary_dir, sample_filename)
-    print(f"Wrote: {summary_path} x {produced_count}")
-    log_message(
-        "Script execution completed successfully. "
-        f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
-        verbose,
-    )
-    return summary_path
-
-
-def _load_cli_module():
-    current_module = sys.modules.get(__name__)
-    if current_module is not None:
-        for alias in ("MetagapUserCode.test_merge_vcf", "test_merge_vcf"):
-            sys.modules.setdefault(alias, current_module)
-
-    for name in ("MetagapUserCode.cli", "cli"):
-        module = sys.modules.get(name)
-        if module is not None:
-            return module
-
-    for name in ("MetagapUserCode.cli", "cli"):
         try:
-            return importlib.import_module(name)
-        except ModuleNotFoundError:
+            reader.close()
+        except Exception:
+            pass
+
+        try:
+            writer = vcfpy.Writer.from_path(vcf_path, header)
+        except Exception as exc:
+            handle_critical_error(f"Failed to reopen {vcf_path} for writing: {exc}")
+
+        try:
+            for record in records:
+                writer.write_record(record)
+        finally:
+            writer.close()
+        return
+
+    _recalculate_cohort_info_tags_without_vcfpy(vcf_path)
+
+
+def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
+    opener = gzip.open if vcf_path.endswith(".gz") else open
+    try:
+        with opener(vcf_path, "rt", encoding="utf-8") as handle:
+            lines = [line.rstrip("\n") for line in handle]
+    except OSError as exc:
+        handle_critical_error(f"Failed to open {vcf_path}: {exc}")
+
+    header_lines = []
+    records = []
+    column_header = None
+    for line in lines:
+        if line.startswith("##"):
+            header_lines.append(line)
+            continue
+        if line.startswith("#CHROM"):
+            column_header = line
+            header_lines.append(line)
+            continue
+        if not line:
+            continue
+        records.append(line)
+
+    if column_header is None:
+        handle_critical_error(
+            f"Failed to parse {vcf_path}: Missing #CHROM header line."
+        )
+
+    updated_records = []
+    for record_line in records:
+        fields = record_line.split("\t")
+        if len(fields) < 8:
+            updated_records.append(record_line)
             continue
 
-    cli_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli.py")
-    spec = importlib.util.spec_from_file_location("cli", cli_path)
-    if spec is None or spec.loader is None:
-        raise ImportError("Unable to locate CLI module")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    sys.modules.setdefault("cli", module)
-    return module
+        alt_alleles = [allele for allele in fields[4].split(",") if allele]
+        alt_counts = [0] * len(alt_alleles)
+        allele_number = 0
+
+        if len(fields) >= 10:
+            format_keys = fields[8].split(":") if fields[8] else []
+            try:
+                gt_index = format_keys.index("GT")
+            except ValueError:
+                gt_index = None
+
+            if gt_index is not None:
+                for sample_entry in fields[9:]:
+                    parts = sample_entry.split(":")
+                    if gt_index >= len(parts):
+                        continue
+                    genotype = parts[gt_index]
+                    if not genotype:
+                        continue
+                    tokens = genotype.replace("|", "/").split("/")
+                    for token in tokens:
+                        token = token.strip()
+                        if not token or token == ".":
+                            continue
+                        try:
+                            allele_index = int(token)
+                        except ValueError:
+                            continue
+                        if allele_index < 0:
+                            continue
+                        allele_number += 1
+                        if allele_index == 0:
+                            continue
+                        normalized_index = allele_index - 1
+                        if 0 <= normalized_index < len(alt_counts):
+                            alt_counts[normalized_index] += 1
+
+        info_field = fields[7]
+        info_map = {}
+        order = []
+        for entry in info_field.split(";"):
+            if not entry:
+                continue
+            if "=" in entry:
+                key, value = entry.split("=", 1)
+            else:
+                key, value = entry, ""
+            if key not in info_map:
+                order.append(key)
+            info_map[key] = value
+
+        info_map["AN"] = str(allele_number)
+        if alt_counts:
+            info_map["AC"] = ",".join(str(count) for count in alt_counts)
+            if allele_number > 0:
+                info_map["AF"] = ",".join(
+                    f"{count / allele_number:.6g}" for count in alt_counts
+                )
+            else:
+                info_map["AF"] = ",".join("0" for _ in alt_counts)
+        else:
+            info_map["AC"] = "."
+            info_map["AF"] = "."
+
+        for key in ("AC", "AN", "AF"):
+            if key not in order:
+                order.append(key)
+
+        new_entries = []
+        for key in order:
+            value = info_map.get(key, "")
+            if value == "":
+                new_entries.append(f"{key}=")
+            else:
+                new_entries.append(f"{key}={value}")
+        fields[7] = ";".join(new_entries)
+        updated_records.append("\t".join(fields))
+
+    try:
+        with opener(vcf_path, "wt", encoding="utf-8") as handle:
+            for line in header_lines:
+                handle.write(line + "\n")
+            for line in updated_records:
+                handle.write(line + "\n")
+    except OSError as exc:
+        handle_critical_error(f"Failed to rewrite {vcf_path}: {exc}")
 
 
-def parse_arguments():
-    cli_module = _load_cli_module()
-    return cli_module.parse_arguments()
-
-
-def main():
-    cli_module = _load_cli_module()
-    args = parse_arguments()
-    workflow_module = sys.modules.get(__name__)
-    if workflow_module is None:
-        workflow_module = types.SimpleNamespace(
-            run_workflow=run_workflow,
-            parse_arguments=parse_arguments,
-        )
-    return cli_module.main(args, workflow_module=workflow_module)
-
-
-if __name__ == "__main__":
-    main()
+__all__ = [
+    "_format_sample_metadata_value",
+    "build_sample_metadata_line",
+    "_parse_sample_metadata_line",
+    "_parse_simple_metadata_line",
+    "parse_metadata_arguments",
+    "apply_metadata_to_header",
+    "_validate_anonymized_vcf_header",
+    "append_metadata_to_merged_vcf",
+    "recalculate_cohort_info_tags",
+]

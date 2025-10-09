@@ -905,34 +905,78 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
-    log_message("Merging VCF files...", verbose)
+    merged_filename = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf.gz")
+    file_count = len(valid_files)
+    log_message(
+        f"Found {file_count} VCF files. Merging them into a combined VCF...",
+        verbose,
+    )
+
+    temp_files = []
+    preprocessed_files = []
+    for file_path in valid_files:
+        try:
+            preprocessed = preprocess_vcf(file_path)
+        except Exception as exc:
+            handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
+        preprocessed_files.append(preprocessed)
+        if preprocessed != file_path:
+            temp_files.append(preprocessed)
+
+    log_message("Merging VCF files with bcftools...", verbose)
+    result = None
     try:
-        header = union_headers(valid_files, sample_order=sample_order)
+        result = subprocess.run(
+            ["bcftools", "merge", "-m", "all", "-Oz", "-o", merged_filename, *preprocessed_files],
+            capture_output=True,
+            text=True,
+        )
+    except Exception as exc:
+        handle_critical_error(f"Failed to execute bcftools merge: {exc}")
+    finally:
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except OSError:
+                pass
+
+    if result is not None and result.returncode != 0:
+        error_output = (result.stderr or "bcftools merge failed with no error output.").strip()
+        handle_critical_error(error_output)
+
+    try:
+        reader = vcfpy.Reader.from_path(merged_filename)
+    except Exception as exc:
+        handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
+
+    try:
         header = apply_metadata_to_header(
-            header,
+            reader.header,
             sample_header_line=sample_header_line,
             simple_header_lines=simple_header_lines,
             verbose=verbose,
         )
     except SystemExit:
+        reader.close()
         raise
     except Exception as exc:
-        handle_critical_error(f"Failed to construct merged header: {exc}")
+        reader.close()
+        handle_critical_error(f"Failed to apply metadata to merged VCF: {exc}")
 
-    writer = vcfpy.Writer.from_path(merged_filename, header)
-    for file_path in valid_files:
-        log_message(f"Processing file: {file_path}", verbose)
-        preprocessed_file = preprocess_vcf(file_path)
-        try:
-            reader = vcfpy.Reader.from_path(preprocessed_file)
-            for record in reader:
-                _pad_record_samples(record, header, sample_order)
-                writer.write_record(record)
-        except Exception as e:
-            handle_non_critical_error(f"Error processing {file_path}: {str(e)}. Skipping remaining records.")
-        if preprocessed_file != file_path:
-            os.remove(preprocessed_file)
+    temp_output = merged_filename + ".tmp"
+    try:
+        writer = vcfpy.Writer.from_path(temp_output, header)
+    except Exception as exc:
+        reader.close()
+        handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
+
+    try:
+        for record in reader:
+            writer.write_record(record)
+    finally:
+        reader.close()
+        writer.close()
 
     writer.close()
     log_message("Compressing and indexing the final VCF...", verbose)

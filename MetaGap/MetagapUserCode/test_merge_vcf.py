@@ -2,11 +2,10 @@
 """Public CLI surface for the MetaGap VCF merging workflow."""
 
 import datetime
+import importlib
 import os
 import subprocess
 import sys
-import importlib
-import importlib.util
 import types
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -75,8 +74,9 @@ def _validate_anonymized_vcf_header(
         _metadata.handle_critical_error = original
 
 
-def main():
-    args = parse_arguments()
+def run_workflow(args=None):
+    if args is None:
+        args = parse_arguments()
     verbose = args.verbose
     (
         sample_header_line,
@@ -209,7 +209,7 @@ __all__ = [
     "_parse_simple_metadata_line",
     "validate_merged_vcf",
     "summarize_produced_vcfs",
-    "main",
+    "run_workflow",
 ]
 
 def _load_cli_module():
@@ -248,9 +248,14 @@ def main():
     cli_module = _load_cli_module()
     args = parse_arguments()
     workflow_module = sys.modules.get(__name__)
+    run_workflow_attr = (
+        getattr(workflow_module, "run_workflow", run_workflow)
+        if workflow_module is not None
+        else run_workflow
+    )
     if workflow_module is None:
         workflow_module = types.SimpleNamespace(
-            run_workflow=run_workflow,
+            run_workflow=run_workflow_attr,
             parse_arguments=parse_arguments,
         )
     return cli_module.main(args, workflow_module=workflow_module)

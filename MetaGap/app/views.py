@@ -1538,48 +1538,53 @@ class ImportDataView(LoginRequiredMixin, FormView):
             collected[normalized_key] = normalized_value
         return collected
 
-   def _process_metadata_section(self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]) -> None:
-    def normalize_alias_key(candidate: str) -> str:
-        stripped = candidate.rstrip("?!.,;:")
-        return stripped or candidate
+    def _process_metadata_section(
+        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
+    ) -> None:
+        def normalize_alias_key(candidate: str) -> str:
+            stripped = candidate.rstrip("?!.,;:")
+            return stripped or candidate
 
-    # alias lookup including punctuation-stripped variants
-    alias_lookup: Dict[str, str] = {}
-    for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
-        canonical = field_name.lower()
-        for candidate in [canonical, *aliases]:
-            norm = str(candidate).lower()
-            alias_lookup[norm] = field_name
-            stripped = normalize_alias_key(norm)
-            if stripped != norm:
-                alias_lookup[stripped] = field_name
+        # alias lookup including punctuation-stripped variants
+        alias_lookup: Dict[str, str] = {}
+        for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
+            canonical = field_name.lower()
+            for candidate in [canonical, *aliases]:
+                norm = str(candidate).lower()
+                alias_lookup[norm] = field_name
+                stripped = normalize_alias_key(norm)
+                if stripped != norm:
+                    alias_lookup[stripped] = field_name
 
-    recognized: Dict[str, Tuple[Any, str]] = {}
-    leftovers: Dict[str, Any] = {}
+        recognized: Dict[str, Any] = {}
+        leftovers: Dict[str, Any] = {}
 
-    for raw_key, value in items.items():
-        nk = str(raw_key).lower()
-        sk = normalize_alias_key(nk)
-        field = alias_lookup.get(nk) or alias_lookup.get(sk)
-        if field:
-            # keep original alias key for sample_group to preserve flat keys
-            recognized[field] = (value, sk)
-        else:
-            leftovers[sk] = value
+        for raw_key, value in items.items():
+            nk = str(raw_key).lower()
+            sk = normalize_alias_key(nk)
+            field = alias_lookup.get(nk) or alias_lookup.get(sk)
+            if field:
+                recognized[field] = value
+            else:
+                leftovers[sk] = value
 
-    for field_name, (value, alias_key) in recognized.items():
-        metadata_key = alias_key if section == "sample_group" else f"{section}_{field_name}"
-        metadata[metadata_key] = value
-        if section == "sample_group":
-            if field_name == "name" and value is not None:
-                metadata.setdefault("name", value)
-            elif field_name == "comments" and value is not None:
-                metadata.setdefault("comments", value)
+        for field_name, value in recognized.items():
+            if section == "sample_group":
+                metadata[field_name] = value
+                if field_name == "name" and value is not None:
+                    metadata.setdefault("name", value)
+                elif field_name == "comments" and value is not None:
+                    metadata.setdefault("comments", value)
+            else:
+                metadata_key = f"{section}_{field_name}"
+                metadata[metadata_key] = value
 
-    for raw_key, value in leftovers.items():
-        if raw_key:
-            metadata[f"{section}_{raw_key}"] = value
-            logger.warning("Unhandled metadata key '%s' in section '%s'", raw_key, section)
+        for raw_key, value in leftovers.items():
+            if raw_key:
+                metadata[f"{section}_{raw_key}"] = value
+                logger.warning(
+                    "Unhandled metadata key '%s' in section '%s'", raw_key, section
+                )
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)

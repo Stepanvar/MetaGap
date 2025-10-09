@@ -108,7 +108,7 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")
-        self.assertAlmostEqual(allele.info.af, 0.5)
+        self.assertAlmostEqual(float(allele.info.af), 0.5)
         self.assertEqual(allele.info.additional["clnsig"], "Pathogenic")
         self.assertEqual(allele.format.genotype, "0/1")
         self.assertEqual(allele.format.fields["gq"], "99")
@@ -299,7 +299,7 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")
-        self.assertAlmostEqual(allele.info.af, 0.5)
+        self.assertAlmostEqual(float(allele.info.af), 0.5)
         self.assertEqual(allele.format.genotype, "0/1")
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")
 

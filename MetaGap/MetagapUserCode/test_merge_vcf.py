@@ -22,6 +22,7 @@ import logging
 import datetime
 import re
 import copy
+import tempfile
 from collections import OrderedDict
 
 try:
@@ -936,6 +937,180 @@ def merge_vcfs(
     log_message(f"Merged VCF file created successfully: {merged_filename}", verbose)
     return merged_filename
 
+
+def _format_record_label(record):
+    chrom = getattr(record, "CHROM", "?")
+    pos = getattr(record, "POS", "?")
+    return f"{chrom}:{pos}"
+
+
+def _extract_called_allele_indices(genotype_value):
+    if genotype_value is None:
+        return []
+
+    if hasattr(genotype_value, "values"):
+        tokens = genotype_value.values
+    elif isinstance(genotype_value, (list, tuple)):
+        tokens = genotype_value
+    else:
+        text = str(genotype_value)
+        if not text:
+            return []
+        normalized = text.replace("|", "/")
+        tokens = normalized.split("/")
+
+    allele_indices = []
+    for token in tokens:
+        if token is None:
+            continue
+        token_str = str(token).strip()
+        if not token_str or token_str == ".":
+            continue
+        try:
+            allele_indices.append(int(token_str))
+        except ValueError:
+            continue
+    return allele_indices
+
+
+def _ensure_ac_an_af_info_definitions(header):
+    definitions = {
+        "AC": OrderedDict(
+            [
+                ("ID", "AC"),
+                ("Number", "A"),
+                ("Type", "Integer"),
+                ("Description", "Allele count in genotypes, for each ALT allele"),
+            ]
+        ),
+        "AN": OrderedDict(
+            [
+                ("ID", "AN"),
+                ("Number", 1),
+                ("Type", "Integer"),
+                ("Description", "Total number of alleles in called genotypes"),
+            ]
+        ),
+        "AF": OrderedDict(
+            [
+                ("ID", "AF"),
+                ("Number", "A"),
+                ("Type", "Float"),
+                ("Description", "Allele frequency for each ALT allele"),
+            ]
+        ),
+    }
+
+    for info_id, mapping in definitions.items():
+        if not header.has_header_line("INFO", info_id):
+            header.add_info_line(vcfpy.InfoHeaderLine("INFO", info_id, mapping))
+
+
+def _recalculate_record_info_fields(record):
+    alt_alleles = getattr(record, "ALT", []) or []
+    alt_count = len(alt_alleles)
+    allele_counts = [0] * alt_count
+    total_alleles = 0
+
+    if alt_count == 0:
+        record.INFO.pop("AC", None)
+        record.INFO.pop("AF", None)
+        record.INFO["AN"] = 0
+        return
+
+    for call in getattr(record, "calls", []) or []:
+        genotype_indices = _extract_called_allele_indices(call.data.get("GT"))
+        for allele_index in genotype_indices:
+            if allele_index is None or allele_index < 0:
+                continue
+            if allele_index == 0:
+                total_alleles += 1
+                continue
+            adjusted_index = allele_index - 1
+            if 0 <= adjusted_index < alt_count:
+                allele_counts[adjusted_index] += 1
+                total_alleles += 1
+            else:
+                handle_non_critical_error(
+                    "Record {} has genotype allele index {} exceeding available ALT alleles. Ignoring it for AC/AN/AF recalculation.".format(
+                        _format_record_label(record), allele_index
+                    )
+                )
+
+    record.INFO["AC"] = allele_counts
+    record.INFO["AN"] = total_alleles
+    if total_alleles > 0:
+        record.INFO["AF"] = [count / total_alleles for count in allele_counts]
+    else:
+        record.INFO["AF"] = [0.0] * alt_count
+
+
+def recalculate_cohort_info_tags(merged_vcf, verbose=False):
+    if not merged_vcf:
+        handle_critical_error("Merged VCF path is required for INFO recalculation.")
+
+    if not os.path.exists(merged_vcf):
+        handle_critical_error(
+            f"Merged VCF does not exist for INFO recalculation: {merged_vcf}"
+        )
+
+    log_message(
+        "Recalculating INFO fields (AC, AN, AF) across the merged cohort...",
+        verbose,
+    )
+
+    try:
+        reader = vcfpy.Reader.from_path(merged_vcf)
+    except Exception as exc:
+        handle_critical_error(
+            f"Unable to open merged VCF for INFO recalculation: {exc}"
+        )
+
+    header = reader.header.copy()
+    _ensure_ac_an_af_info_definitions(header)
+
+    tmp_dir = os.path.dirname(os.path.abspath(merged_vcf))
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".vcf", dir=tmp_dir
+        ) as tmp_handle:
+            temp_path = tmp_handle.name
+    except Exception as exc:
+        reader.close()
+        handle_critical_error(
+            f"Unable to create a temporary VCF for INFO recalculation: {exc}"
+        )
+
+    writer = vcfpy.Writer.from_path(temp_path, header)
+
+    try:
+        for record in reader:
+            _recalculate_record_info_fields(record)
+            writer.write_record(record)
+    except Exception as exc:
+        reader.close()
+        writer.close()
+        os.remove(temp_path)
+        handle_critical_error(
+            f"Failed while recalculating INFO fields for {merged_vcf}: {exc}"
+        )
+
+    reader.close()
+    writer.close()
+
+    try:
+        os.replace(temp_path, merged_vcf)
+    except Exception as exc:
+        os.remove(temp_path)
+        handle_critical_error(
+            f"Unable to write recalculated INFO fields back to {merged_vcf}: {exc}"
+        )
+
+    log_message(
+        f"INFO field recalculation completed successfully for {merged_vcf}",
+        verbose,
+    )
+
 def _parse_simple_metadata_line(line):
     stripped = line.strip()
     if not stripped.startswith("##") or "=" not in stripped:
@@ -1016,10 +1191,13 @@ def _info_field_requires_value(number):
 
 
 def _has_null_value(value):
-    """Return True if *value* or any nested value is ``None``."""
+    """Return True if *value* or any nested value is considered missing."""
 
     if value is None:
         return True
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped == "" or stripped == "."
     if isinstance(value, (list, tuple)):
         return any(_has_null_value(v) for v in value)
     return False
@@ -1194,6 +1372,7 @@ def main():
         sample_header_line=sample_header_line,
         simple_header_lines=simple_header_lines,
     )
+    recalculate_cohort_info_tags(merged_vcf, verbose)
     append_metadata_to_merged_vcf(merged_vcf, verbose)
     validate_merged_vcf(merged_vcf, verbose)
 

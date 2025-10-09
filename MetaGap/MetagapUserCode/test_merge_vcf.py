@@ -9,6 +9,11 @@ It replicates the bash script functionality:
   - Performs a final validation of the merged VCF.
   - Logs execution details to a log file.
 
+At completion the script prints a compact summary in the form
+``Wrote: <DIR>/<SAMPLE_XXXX>.vcf[.gz] x N`` where the directory, a
+representative sample filename, and the number of produced cohort VCF
+shards are derived from the output directory contents.
+
 Requirements:
 pip install vcfpy
 """
@@ -417,6 +422,29 @@ def apply_metadata_to_header(
     return header
 
 
+def _validate_anonymized_vcf_header(final_vcf_path, ensure_for_uncompressed=False):
+    """Use ``bcftools`` to confirm that ``final_vcf_path`` has a readable header."""
+
+    if not final_vcf_path:
+        return
+
+    requires_validation = ensure_for_uncompressed or final_vcf_path.endswith(".vcf.gz")
+    if not requires_validation:
+        return
+
+    try:
+        subprocess.run(
+            ["bcftools", "view", "-h", final_vcf_path],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        handle_critical_error(
+            f"Failed to read header from anonymized VCF using bcftools: {exc}"
+        )
+
+
 def append_metadata_to_merged_vcf(
     merged_vcf,
     sample_metadata_entries=None,
@@ -605,7 +633,20 @@ def append_metadata_to_merged_vcf(
             for line in body_handle:
                 body_lines.append(line.rstrip("\n"))
 
-        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
+        is_gzipped_output = False
+        if merged_vcf.endswith(".vcf.gz"):
+            base = merged_vcf[: -len(".vcf.gz")]
+            final_vcf = f"{base}.anonymized.vcf.gz"
+            is_gzipped_output = True
+        else:
+            base, ext = os.path.splitext(merged_vcf)
+            if not ext:
+                ext = ".vcf"
+            final_vcf = f"{base}.anonymized{ext}"
+
+        writer = gzip.open if is_gzipped_output else open
+        open_kwargs = {"mode": "wt", "encoding": "utf-8"} if is_gzipped_output else {"mode": "w", "encoding": "utf-8"}
+        with writer(final_vcf, **open_kwargs) as output_handle:
             for line in final_header_lines:
                 output_handle.write(line + "\n")
             for line in body_lines:
@@ -650,6 +691,8 @@ def append_metadata_to_merged_vcf(
         final_vcf = final_plain_vcf
 
     _cleanup_temp_files()
+
+    _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
 
     log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
     return final_vcf
@@ -1648,169 +1691,36 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             pass
 
 
-def _split_genotype_tokens(genotype):
-    """Return individual allele tokens from a genotype string."""
+def summarize_produced_vcfs(output_dir, fallback_vcf):
+    """Return a directory, representative filename, and count for output VCFs."""
 
-    if genotype is None:
-        return []
-    genotype = str(genotype).strip()
-    if not genotype or genotype == ".":
-        return []
-    normalized = genotype.replace("|", "/")
-    tokens = [token.strip() for token in normalized.split("/")]
-    return [token for token in tokens if token]
+    discovered = []
+    output_dir = os.path.abspath(output_dir) if output_dir else None
+    if output_dir and os.path.isdir(output_dir):
+        for pattern in ("SAMPLE_*.vcf.gz", "SAMPLE_*.vcf"):
+            discovered.extend(
+                sorted(
+                    glob.glob(os.path.join(output_dir, pattern)),
+                    key=lambda path: os.path.basename(path),
+                )
+            )
 
-
-def _parse_info_items(info_field):
-    """Parse an INFO string into an ordered list of (key, value) pairs."""
-
-    items = []
-    index = {}
-    if not info_field or info_field == ".":
-        return items, index
-    for entry in info_field.split(";"):
-        if entry == "":
-            continue
-        if "=" in entry:
-            key, value = entry.split("=", 1)
-        else:
-            key, value = entry, None
-        index.setdefault(key, len(items))
-        items.append([key, value])
-    return items, index
-
-
-def _set_info_value(items, index, key, value):
-    """Update or append an INFO field value while preserving order."""
-
-    if key in index:
-        items[index[key]][1] = value
-    else:
-        index[key] = len(items)
-        items.append([key, value])
-
-
-def _serialize_info_items(items):
-    if not items:
-        return "."
-    serialized = []
-    for key, value in items:
-        if value is None:
-            serialized.append(key)
-        else:
-            serialized.append(f"{key}={value}")
-    return ";".join(serialized)
-
-
-def _format_af_values(alt_counts, total_called):
-    if total_called <= 0:
-        return "."
-    values = []
-    for count in alt_counts:
-        ratio = count / total_called if total_called else 0.0
-        text = f"{ratio:.6f}".rstrip("0").rstrip(".")
-        values.append(text or "0")
-    return ",".join(values)
-
-
-def _recalculate_info_for_record(line):
-    fields = line.rstrip("\n").split("\t")
-    if len(fields) <= 8:
-        return line.rstrip("\n")
-
-    format_keys = fields[8].split(":") if fields[8] else []
-    alt_alleles = [alt.strip() for alt in fields[4].split(",") if alt.strip()]
-    alt_counts = [0 for _ in alt_alleles]
-    total_called = 0
-
-    for sample_entry in fields[9:]:
-        if not format_keys:
-            break
-        sample_values = sample_entry.split(":")
-        if len(sample_values) < len(format_keys):
-            sample_values.extend([""] * (len(format_keys) - len(sample_values)))
-        sample_map = {
-            key: sample_values[idx]
-            for idx, key in enumerate(format_keys)
-        }
-        genotype = sample_map.get("GT")
-        alleles = _split_genotype_tokens(genotype)
-        called = [allele for allele in alleles if allele not in {".", ""}]
-        if not called:
-            continue
-        total_called += len(called)
-        for allele in called:
-            try:
-                allele_index = int(allele)
-            except ValueError:
-                continue
-            if allele_index <= 0:
-                continue
-            alt_index = allele_index - 1
-            if 0 <= alt_index < len(alt_counts):
-                alt_counts[alt_index] += 1
-
-    info_items, info_index = _parse_info_items(fields[7])
-    if alt_counts:
-        ac_value = ",".join(str(count) for count in alt_counts)
-    else:
-        ac_value = "."
-    an_value = str(total_called) if total_called > 0 else "0"
-    af_value = _format_af_values(alt_counts, total_called)
-
-    _set_info_value(info_items, info_index, "AC", ac_value)
-    _set_info_value(info_items, info_index, "AN", an_value)
-    _set_info_value(info_items, info_index, "AF", af_value)
-
-    fields[7] = _serialize_info_items(info_items)
-    return "\t".join(fields)
-
-
-def recalculate_cohort_info_tags(vcf_path, verbose=False):
-    """Recalculate AC/AN/AF INFO values without relying on external tools."""
-
-    log_message(
-        "Recalculating AC, AN, AF tags across the merged cohort...",
-        verbose,
-    )
-
-    opener = gzip.open if str(vcf_path).endswith(".gz") else open
-    try:
-        with opener(vcf_path, "rt", encoding="utf-8") as handle:
-            lines = handle.readlines()
-    except OSError as exc:
-        handle_critical_error(f"Failed to open {vcf_path} for reading: {exc}")
-
-    header_index = None
-    for idx, line in enumerate(lines):
-        if line.startswith("#CHROM"):
-            header_index = idx
-            break
-
-    if header_index is None:
-        handle_critical_error(
-            f"Failed to recalculate cohort INFO tags: {vcf_path} is missing a #CHROM header line."
+    if discovered:
+        # Prefer gzipped outputs when both compressed and uncompressed variants exist.
+        discovered.sort(
+            key=lambda path: (
+                0 if path.endswith(".vcf.gz") else 1,
+                os.path.basename(path),
+            )
         )
+        representative_path = discovered[0]
+        directory = os.path.dirname(os.path.abspath(representative_path))
+        filename = os.path.basename(representative_path)
+        count = len(discovered)
+        return directory, filename, count
 
-    new_lines = list(lines)
-    for idx in range(header_index + 1, len(lines)):
-        line = lines[idx]
-        if not line.strip() or line.startswith("#"):
-            continue
-        newline = "\n" if line.endswith("\n") else ""
-        updated = _recalculate_info_for_record(line.rstrip("\n"))
-        new_lines[idx] = updated + newline
-
-    try:
-        with opener(vcf_path, "wt", encoding="utf-8") as handle:
-            handle.writelines(new_lines)
-    except OSError as exc:
-        handle_critical_error(f"Failed to write updated INFO tags to {vcf_path}: {exc}")
-
-    log_message(
-        f"Successfully recalculated cohort INFO tags for {vcf_path}",
-        verbose,
-    )
+    fallback_abs = os.path.abspath(fallback_vcf)
+    return os.path.dirname(fallback_abs), os.path.basename(fallback_abs), 1
 
 
 def main():
@@ -1886,13 +1796,16 @@ def main():
 
     validate_merged_vcf(final_vcf, verbose)
 
-    print("----------------------------------------")
-    print("Script Execution Summary:")
-    print("Merged VCF File: " + final_vcf)
-    print("Log File: " + LOG_FILE)
-    print("For detailed logs, refer to " + LOG_FILE)
-    print("----------------------------------------")
-    log_message("Script execution completed successfully.", verbose)
+    summary_dir, sample_filename, produced_count = summarize_produced_vcfs(
+        output_dir, final_vcf
+    )
+    summary_path = os.path.join(summary_dir, sample_filename)
+    print(f"Wrote: {summary_path} x {produced_count}")
+    log_message(
+        "Script execution completed successfully. "
+        f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
+        verbose,
+    )
 
 
 

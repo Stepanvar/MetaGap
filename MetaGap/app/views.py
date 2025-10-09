@@ -1533,25 +1533,43 @@ class ImportDataView(LoginRequiredMixin, FormView):
     def _process_metadata_section(
         self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
     ) -> None:
+        def normalize_alias_key(candidate: str) -> str:
+            stripped = candidate.rstrip("?!.,;:")
+            return stripped or candidate
+
         alias_lookup: Dict[str, str] = {}
         for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
-            alias_lookup[field_name.lower()] = field_name
-            for alias in aliases:
-                alias_lookup[alias.lower()] = field_name
+            canonical_key = field_name.lower()
+            for candidate in [canonical_key, *aliases]:
+                normalized_candidate = str(candidate).lower()
+                alias_lookup[normalized_candidate] = field_name
+                stripped_candidate = normalize_alias_key(normalized_candidate)
+                if stripped_candidate != normalized_candidate:
+                    alias_lookup[stripped_candidate] = field_name
 
-        recognized: Dict[str, Any] = {}
+        recognized: Dict[str, Tuple[Any, str]] = {}
         leftovers: Dict[str, Any] = {}
 
         for raw_key, value in items.items():
-            normalized_key = raw_key.lower()
-            canonical = alias_lookup.get(normalized_key)
-            if canonical:
-                recognized[canonical] = value
-            else:
-                leftovers[normalized_key] = value
+            normalized_key = str(raw_key).lower()
+            stripped_key = normalize_alias_key(normalized_key)
 
-        for field_name, value in recognized.items():
-            metadata_key = f"{section}_{field_name}"
+            canonical = alias_lookup.get(normalized_key)
+            alias_key = normalized_key
+            if not canonical:
+                canonical = alias_lookup.get(stripped_key)
+                alias_key = stripped_key
+
+            if canonical:
+                recognized[canonical] = (value, alias_key)
+            else:
+                leftovers[stripped_key] = value
+
+        for field_name, (value, alias_key) in recognized.items():
+            if section == "sample_group":
+                metadata_key = alias_key
+            else:
+                metadata_key = f"{section}_{field_name}"
             metadata[metadata_key] = value
             if section == "sample_group":
                 if field_name == "name" and value is not None:

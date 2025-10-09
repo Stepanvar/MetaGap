@@ -706,7 +706,6 @@ def union_headers(valid_files, sample_order=None):
 
     combined_header = None
     info_ids = set()
-    format_ids = set()
     filter_ids = set()
     contig_ids = set()
     computed_sample_order = []
@@ -724,8 +723,6 @@ def union_headers(valid_files, sample_order=None):
                 for line in combined_header.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
                         info_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        format_ids.add(line.id)
                     elif isinstance(line, vcfpy.header.FilterHeaderLine):
                         filter_ids.add(line.id)
                     elif isinstance(line, vcfpy.header.ContigHeaderLine):
@@ -735,6 +732,7 @@ def union_headers(valid_files, sample_order=None):
                         if mapping.get("ID"):
                             merged_sample_metadata = OrderedDict(mapping)
 
+                _remove_format_and_sample_definitions(combined_header)
                 if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
                     computed_sample_order = list(combined_header.samples.names)
                 else:
@@ -751,10 +749,6 @@ def union_headers(valid_files, sample_order=None):
                     if line.id not in info_ids:
                         combined_header.add_line(copy.deepcopy(line))
                         info_ids.add(line.id)
-                elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                    if line.id not in format_ids:
-                        combined_header.add_line(copy.deepcopy(line))
-                        format_ids.add(line.id)
                 elif isinstance(line, vcfpy.header.FilterHeaderLine):
                     if line.id not in filter_ids:
                         combined_header.add_line(copy.deepcopy(line))
@@ -791,6 +785,8 @@ def union_headers(valid_files, sample_order=None):
     target_sample_order = sample_order if sample_order is not None else computed_sample_order
     if target_sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
         combined_header.samples.names = list(target_sample_order)
+
+    _remove_format_and_sample_definitions(combined_header)
 
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)
@@ -858,6 +854,33 @@ def _create_missing_call_factory(format_keys, header):
     return factory
 
 
+def _remove_format_and_sample_definitions(header):
+    """Strip FORMAT definitions and sample columns from a VCF header."""
+
+    if header is None:
+        return
+
+    if hasattr(header, "lines"):
+        filtered_lines = []
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.FormatHeaderLine):
+                continue
+            key = getattr(line, "key", None)
+            if isinstance(key, str) and key.upper() == "FORMAT":
+                continue
+            filtered_lines.append(line)
+        header.lines = filtered_lines
+
+    if hasattr(header, "formats"):
+        try:
+            header.formats.clear()
+        except AttributeError:
+            header.formats = OrderedDict()
+
+    if hasattr(header, "samples") and hasattr(header.samples, "names"):
+        header.samples.names = []
+
+
 def _pad_record_samples(record, header, sample_order):
     if not sample_order or not hasattr(record, "call_for_sample"):
         return
@@ -919,13 +942,26 @@ def merge_vcfs(
         handle_critical_error(f"Failed to construct merged header: {exc}")
 
     writer = vcfpy.Writer.from_path(merged_filename, header)
+    log_message(
+        "Genotype FORMAT columns have been removed from the merged VCF output to match the sample-less contract.",
+        verbose,
+    )
     for file_path in valid_files:
         log_message(f"Processing file: {file_path}", verbose)
         preprocessed_file = preprocess_vcf(file_path)
         try:
             reader = vcfpy.Reader.from_path(preprocessed_file)
             for record in reader:
-                _pad_record_samples(record, header, sample_order)
+                record.FORMAT = None
+                try:
+                    record.update_calls([])
+                except AttributeError:
+                    record.calls = []
+                    if hasattr(record, "call_for_sample"):
+                        try:
+                            record.call_for_sample = {}
+                        except AttributeError:
+                            pass
                 writer.write_record(record)
         except Exception as e:
             handle_non_critical_error(f"Error processing {file_path}: {str(e)}. Skipping remaining records.")

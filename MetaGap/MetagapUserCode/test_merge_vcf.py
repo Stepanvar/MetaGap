@@ -22,6 +22,7 @@ import logging
 import datetime
 import re
 import copy
+import subprocess
 from collections import OrderedDict
 
 try:
@@ -322,15 +323,18 @@ def parse_metadata_arguments(args, verbose=False):
         sample_mapping[key] = value
 
     sample_header_line = None
+    serialized_sample_line = None
     if sample_mapping:
         try:
             sample_line = build_sample_metadata_line(sample_mapping)
         except ValueError as exc:
             handle_critical_error(str(exc))
         log_message(f"Using CLI sample metadata: {sample_line}", verbose)
+        serialized_sample_line = sample_line
         sample_header_line = vcfpy.SampleHeaderLine.from_mapping(sample_mapping)
 
     simple_header_lines = []
+    sanitized_header_lines = []
     for raw_line in additional_lines:
         normalized = raw_line.strip()
         if not normalized:
@@ -344,6 +348,7 @@ def parse_metadata_arguments(args, verbose=False):
             )
         key, value = parsed
         simple_header_lines.append(vcfpy.SimpleHeaderLine(key, value))
+        sanitized_header_lines.append(f"##{key}={value}")
 
     if simple_header_lines:
         log_message(
@@ -352,7 +357,15 @@ def parse_metadata_arguments(args, verbose=False):
             verbose,
         )
 
-    return sample_header_line, simple_header_lines
+    sample_mapping_copy = OrderedDict(sample_mapping) if sample_mapping else None
+
+    return (
+        sample_header_line,
+        simple_header_lines,
+        sample_mapping_copy,
+        sanitized_header_lines,
+        serialized_sample_line,
+    )
 
 
 def apply_metadata_to_header(
@@ -388,12 +401,192 @@ def apply_metadata_to_header(
     return header
 
 
-def append_metadata_to_merged_vcf(merged_vcf, verbose=False):
-    """Compatibility shim to preserve CLI workflow expectations."""
+def append_metadata_to_merged_vcf(
+    merged_vcf,
+    sample_metadata_entries=None,
+    header_metadata_lines=None,
+    serialized_sample_line=None,
+    verbose=False,
+):
+    """Finalize the merged VCF by applying bcftools processing and metadata."""
+
+    header_metadata_lines = header_metadata_lines or []
+
+    joint_temp = f"{merged_vcf}.joint.temp.vcf"
+    filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
+    header_temp = f"{merged_vcf}.header.temp"
+    body_temp = f"{merged_vcf}.body.temp"
+
+    def _cleanup_temp_files():
+        for path in [joint_temp, filtered_temp, header_temp, body_temp]:
+            try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
 
     log_message(
-        f"No additional metadata updates required for merged VCF: {merged_vcf}", verbose
+        "Recalculating AC, AN, AF tags across the merged cohort...",
+        verbose,
     )
+    try:
+        subprocess.run(
+            [
+                "bcftools",
+                "+fill-tags",
+                merged_vcf,
+                "-O",
+                "v",
+                "-o",
+                joint_temp,
+                "--",
+                "-t",
+                "AC,AN,AF",
+            ],
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to recalculate INFO tags with bcftools +fill-tags: {exc}"
+        )
+
+    log_message("Applying quality filters to remove low-confidence variants...", verbose)
+    try:
+        subprocess.run(
+            [
+                "bcftools",
+                "view",
+                joint_temp,
+                "-i",
+                'QUAL>30 && INFO/AN>50 && FILTER="PASS"',
+                "-O",
+                "v",
+                "-o",
+                filtered_temp,
+            ],
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to apply bcftools filtering to merged VCF: {exc}"
+        )
+
+    log_message("Removing individual sample genotype columns (anonymizing data)...", verbose)
+    try:
+        with open(header_temp, "w", encoding="utf-8") as header_handle:
+            subprocess.run(
+                ["bcftools", "view", "-h", filtered_temp],
+                check=True,
+                stdout=header_handle,
+            )
+
+        with open(body_temp, "w", encoding="utf-8") as body_handle:
+            view_proc = subprocess.Popen(
+                ["bcftools", "view", "-H", filtered_temp],
+                stdout=subprocess.PIPE,
+            )
+            try:
+                subprocess.run(
+                    ["cut", "-f1-8"],
+                    check=True,
+                    stdin=view_proc.stdout,
+                    stdout=body_handle,
+                )
+            finally:
+                if view_proc.stdout is not None:
+                    view_proc.stdout.close()
+                return_code = view_proc.wait()
+            if return_code != 0:
+                raise subprocess.CalledProcessError(
+                    return_code, ["bcftools", "view", "-H", filtered_temp]
+                )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to anonymize merged VCF columns using bcftools: {exc}"
+        )
+
+    log_message("Combining custom metadata header with VCF header...", verbose)
+    try:
+        with open(header_temp, "r", encoding="utf-8") as header_handle:
+            header_lines = [line.rstrip("\n") for line in header_handle]
+
+        fileformat_line = None
+        remaining_header_lines = []
+        for line in header_lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#CHROM"):
+                continue
+            if stripped.startswith("##fileformat") and fileformat_line is None:
+                fileformat_line = stripped
+                continue
+            if stripped.startswith("##SAMPLE="):
+                continue
+            remaining_header_lines.append(stripped)
+
+        final_header_lines = []
+        if fileformat_line is not None:
+            final_header_lines.append(fileformat_line)
+
+        final_header_lines.extend(remaining_header_lines)
+        existing_header_lines = set(final_header_lines)
+
+        if sample_metadata_entries:
+            try:
+                serialized_line = (
+                    serialized_sample_line
+                    if serialized_sample_line is not None
+                    else build_sample_metadata_line(sample_metadata_entries)
+                )
+                if serialized_line not in existing_header_lines:
+                    final_header_lines.append(serialized_line)
+                    existing_header_lines.add(serialized_line)
+            except ValueError as exc:
+                _cleanup_temp_files()
+                handle_critical_error(str(exc))
+
+        for metadata_line in header_metadata_lines:
+            normalized = metadata_line.strip()
+            if not normalized:
+                continue
+            if not normalized.startswith("##"):
+                normalized = "##" + normalized
+            if normalized in existing_header_lines:
+                continue
+            final_header_lines.append(normalized)
+            existing_header_lines.add(normalized)
+
+        final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
+
+        body_lines = []
+        with open(body_temp, "r", encoding="utf-8") as body_handle:
+            for line in body_handle:
+                body_lines.append(line.rstrip("\n"))
+
+        base, ext = os.path.splitext(merged_vcf)
+        if not ext:
+            ext = ".vcf"
+        final_vcf = f"{base}.anonymized{ext}"
+
+        with open(final_vcf, "w", encoding="utf-8") as output_handle:
+            for line in final_header_lines:
+                output_handle.write(line + "\n")
+            for line in body_lines:
+                output_handle.write(line + "\n")
+    except Exception as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to assemble final anonymized VCF contents: {exc}"
+        )
+
+    _cleanup_temp_files()
+
+    log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
+    return final_vcf
 
 
 def normalize_vcf_version(version_value):
@@ -1135,7 +1328,13 @@ def validate_merged_vcf(merged_vcf, verbose=False):
 def main():
     args = parse_arguments()
     verbose = args.verbose
-    sample_header_line, simple_header_lines = parse_metadata_arguments(args, verbose)
+    (
+        sample_header_line,
+        simple_header_lines,
+        sample_metadata_entries,
+        sanitized_header_lines,
+        serialized_sample_line,
+    ) = parse_metadata_arguments(args, verbose)
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1194,12 +1393,18 @@ def main():
         sample_header_line=sample_header_line,
         simple_header_lines=simple_header_lines,
     )
-    append_metadata_to_merged_vcf(merged_vcf, verbose)
-    validate_merged_vcf(merged_vcf, verbose)
+    final_vcf = append_metadata_to_merged_vcf(
+        merged_vcf,
+        sample_metadata_entries=sample_metadata_entries,
+        header_metadata_lines=sanitized_header_lines,
+        serialized_sample_line=serialized_sample_line,
+        verbose=verbose,
+    )
+    validate_merged_vcf(final_vcf, verbose)
 
     print("----------------------------------------")
     print("Script Execution Summary:")
-    print("Merged VCF File: " + merged_vcf)
+    print("Merged VCF File: " + final_vcf)
     print("Log File: " + LOG_FILE)
     print("For detailed logs, refer to " + LOG_FILE)
     print("----------------------------------------")

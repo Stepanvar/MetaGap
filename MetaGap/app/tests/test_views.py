@@ -577,6 +577,19 @@ class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
             variant_table = response.context.get("table")
         self.assertIsNotNone(variant_table)
 
+        header_names = [column.name for column in variant_table.columns]
+        expected_prefix = [
+            "chrom",
+            "pos",
+            "variant_id",
+            "ref",
+            "alt",
+            "qual",
+            "filter",
+        ]
+        self.assertGreaterEqual(len(header_names), len(expected_prefix))
+        self.assertEqual(header_names[: len(expected_prefix)], expected_prefix)
+
         table_html = variant_table.as_html(response.wsgi_request)
         self.assertIn(self.allele.variant_id, table_html)
         self.assertIn(str(self.allele.pos), table_html)

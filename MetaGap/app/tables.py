@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Iterable, List, Sequence
 
 import django_tables2 as tables
 from django.db import models
@@ -30,7 +30,13 @@ def _column_attrs(is_numeric: bool) -> Dict[str, Dict[str, str]]:
         attrs["td"] = {"class": "text-end"}
     return attrs
 
-def create_dynamic_table(primary_model, table_name="DynamicTable", include_related=True):
+def create_dynamic_table(
+    primary_model,
+    table_name: str = "DynamicTable",
+    include_related: bool = True,
+    priority_fields: Sequence[str] | None = None,
+    exclude_fields: Iterable[str] | None = None,
+):
     """
     Dynamically creates a django_tables2.Table subclass for the given primary_model.
     If include_related is True, for each forward relation (ForeignKey/OneToOneField),
@@ -40,10 +46,22 @@ def create_dynamic_table(primary_model, table_name="DynamicTable", include_relat
     :param primary_model: The primary Django model class.
     :param table_name: Name of the generated table class.
     :param include_related: Whether to include fields from related models.
+    :param priority_fields: Optional iterable of column names to position at the
+        front of the table in the order provided.
+    :param exclude_fields: Optional iterable of column names to omit from the
+        generated table entirely.
     :return: A dynamically created subclass of tables.Table.
     """
-    columns = {}
-    meta_fields = []
+    columns: Dict[str, tables.Column] = {}
+    field_order: List[str] = []
+    priority_list: List[str] = list(priority_fields or [])
+    exclude_set = set(exclude_fields or [])
+
+    def register_column(name: str, column: tables.Column) -> None:
+        if name in exclude_set:
+            return
+        columns[name] = column
+        field_order.append(name)
 
     # Loop over all fields in the primary model.
     for field in primary_model._meta.get_fields():
@@ -60,24 +78,40 @@ def create_dynamic_table(primary_model, table_name="DynamicTable", include_relat
                         if not rel_field.auto_created and isinstance(rel_field, models.Field):
                             col_name = f"{field.name}__{rel_field.name}"
                             rel_is_numeric = _is_numeric_field(rel_field)
-                            columns[col_name] = tables.Column(
-                                accessor=f"{field.name}.{rel_field.name}",
-                                attrs=_column_attrs(rel_is_numeric),
+                            register_column(
+                                col_name,
+                                tables.Column(
+                                    accessor=f"{field.name}.{rel_field.name}",
+                                    attrs=_column_attrs(rel_is_numeric),
+                                ),
                             )
-                            meta_fields.append(col_name)
                 else:
                     # If not expanding related fields, add the field as-is.
-                    columns[field.name] = tables.Column(attrs=_column_attrs(is_numeric))
-                    meta_fields.append(field.name)
+                    register_column(
+                        field.name, tables.Column(attrs=_column_attrs(is_numeric))
+                    )
             else:
                 # Standard (non-relation) field.
-                columns[field.name] = tables.Column(attrs=_column_attrs(is_numeric))
-                meta_fields.append(field.name)
+                register_column(
+                    field.name, tables.Column(attrs=_column_attrs(is_numeric))
+                )
+
+    seen = set()
+    ordered_meta_fields: List[str] = []
+    for field_name in priority_list:
+        if field_name in columns and field_name not in seen:
+            ordered_meta_fields.append(field_name)
+            seen.add(field_name)
+
+    for field_name in field_order:
+        if field_name not in seen:
+            ordered_meta_fields.append(field_name)
+            seen.add(field_name)
 
     # Create a dynamic Meta class.
     Meta = type("Meta", (), {
         "model": primary_model,
-        "fields": meta_fields,
+        "fields": ordered_meta_fields,
         "attrs": {"class": "table table-hover table-sm"}
     })
 

@@ -33,7 +33,7 @@ from django_filters.views import FilterView
 from django_tables2 import RequestConfig
 from django_tables2.views import SingleTableMixin
 
-from .filters import SampleGroupFilter
+from .filters import AlleleFrequencySearchFilter, SampleGroupFilter
 from .forms import (
     CustomUserCreationForm,
     DeleteAccountForm,
@@ -111,44 +111,68 @@ class SampleGroupTableView(ListView):
 
 class SearchResultsView(SingleTableMixin, FilterView):
     template_name = "results.html"
-    model = SampleGroup
-    context_object_name = "sample_groups"
+    model = AlleleFrequency
+    context_object_name = "allele_frequencies"
     paginate_by = 10
-    filterset_class = SampleGroupFilter
-    ordering = ("name", "pk")
+    filterset_class = AlleleFrequencySearchFilter
+    ordering = ("chrom", "pos", "ref", "alt", "pk")
 
-    # Dynamically create a table class that includes all related fields.
+    # Dynamically create a table class prioritising variant descriptors first.
     table_class = create_dynamic_table(
-        SampleGroup, table_name="CombinedTable", include_related=True
+        AlleleFrequency,
+        table_name="AlleleFrequencyTable",
+        include_related=True,
+        priority_fields=(
+            "chrom",
+            "pos",
+            "ref",
+            "alt",
+            "qual",
+            "filter",
+            "info__af",
+            "info__ac",
+            "info__an",
+            "info__dp",
+            "info__mq",
+        ),
+        exclude_fields=("info__additional", "format__payload"),
     )
 
     def get_queryset(self):
-        base_queryset = SampleGroup.objects.select_related(
-            "reference_genome_build",
-            "genome_complexity",
-            "sample_origin",
-            "material_type",
-            "library_construction",
-            "illumina_seq",
-            "ont_seq",
-            "pacbio_seq",
-            "iontorrent_seq",
-            "bioinfo_alignment",
-            "bioinfo_variant_calling",
-            "bioinfo_post_proc",
-            "created_by",
-        ).prefetch_related("allele_frequencies").order_by(*self.ordering)
+        base_queryset = (
+            AlleleFrequency.objects.select_related(
+                "info",
+                "format",
+                "sample_group",
+                "sample_group__reference_genome_build",
+                "sample_group__genome_complexity",
+                "sample_group__sample_origin",
+                "sample_group__material_type",
+                "sample_group__library_construction",
+                "sample_group__illumina_seq",
+                "sample_group__ont_seq",
+                "sample_group__pacbio_seq",
+                "sample_group__iontorrent_seq",
+                "sample_group__platform_independent",
+                "sample_group__bioinfo_alignment",
+                "sample_group__bioinfo_variant_calling",
+                "sample_group__bioinfo_post_proc",
+                "sample_group__input_quality",
+                "sample_group__created_by",
+            )
+        )
 
         # Instantiate the filter set manually so that we can reuse it in the template context.
         self.filterset = self.filterset_class(
-            self.request.GET or None, queryset=base_queryset
+            self.request.GET or None, queryset=base_queryset.order_by(*self.ordering)
         )
         return self.filterset.qs.order_by(*self.ordering).distinct()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.setdefault("filter", getattr(self, "filterset", None))
-        context["form"] = SearchForm(self.request.GET or None)
+        if hasattr(self, "filterset"):
+            context["filter_form"] = self.filterset.form
         return context
 
 

@@ -621,6 +621,18 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
             ),
         ]
 
+        additional_metadata = sample_group.additional_metadata
+        if isinstance(additional_metadata, dict) and additional_metadata:
+            metadata_sections.append(
+                build_section(
+                    "Custom metadata",
+                    [
+                        (key, value, None)
+                        for key, value in additional_metadata.items()
+                    ],
+                )
+            )
+
         context["metadata_sections"] = metadata_sections
         context["allele_frequency_table"] = table
         context["variant_table"] = table
@@ -937,9 +949,14 @@ class ImportDataView(LoginRequiredMixin, FormView):
         file_path: str,
         organization_profile: Any,
     ) -> SampleGroup:
-        group_data, _, _ = self._extract_section_data(
+        group_data, group_consumed, group_additional = self._extract_section_data(
             metadata, "sample_group", SampleGroup
         )
+
+        consumed_keys = set(group_consumed)
+        additional_metadata: Dict[str, Any] = {}
+        if group_additional:
+            additional_metadata.update(group_additional)
 
         fallback_name = os.path.splitext(os.path.basename(file_path))[0]
         name = group_data.pop("name", None) or metadata.get("name") or fallback_name
@@ -962,6 +979,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 metadata, section, model_cls
             )
 
+            consumed_keys.update(section_consumed)
             if not section_data and additional is None:
                 continue
 
@@ -982,7 +1000,21 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
             instance = model_cls.objects.create(**payload)
             setattr(sample_group, section, instance)
-            update_fields.append(section)
+            if section not in update_fields:
+                update_fields.append(section)
+
+        for key, value in metadata.items():
+            if key in consumed_keys:
+                continue
+            coerced = self._coerce_additional_value(value)
+            if key not in additional_metadata:
+                additional_metadata[key] = coerced
+
+        additional_payload = additional_metadata or None
+        if additional_payload != getattr(sample_group, "additional_metadata", None):
+            sample_group.additional_metadata = additional_payload
+            if "additional_metadata" not in update_fields:
+                update_fields.append("additional_metadata")
 
         if update_fields:
             sample_group.save(update_fields=update_fields)
@@ -1023,7 +1055,10 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 )
                 consumed.add(section)
 
-        additional = self._build_additional_payload(metadata, section, consumed)
+        additional, additional_consumed = self._build_additional_payload(
+            metadata, section, consumed
+        )
+        consumed.update(additional_consumed)
         return section_data, consumed, additional
 
     @staticmethod
@@ -1126,10 +1161,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
         metadata: Dict[str, Any],
         section: str,
         consumed: Iterable[str],
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Tuple[Optional[Dict[str, Any]], set[str]]:
         consumed_set = set(consumed)
         prefixes = (f"{section}_", f"{section}.", f"{section}-")
         additional: Dict[str, Any] = {}
+        additional_consumed: set[str] = set()
 
         for key, value in metadata.items():
             if key in consumed_set:
@@ -1138,9 +1174,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 if key.startswith(prefix):
                     trimmed = key[len(prefix) :]
                     additional[trimmed] = self._coerce_additional_value(value)
+                    additional_consumed.add(key)
                     break
 
-        return additional or None
+        payload = additional or None
+        return payload, additional_consumed
 
     @staticmethod
     def _coerce_additional_value(value: Any) -> Any:

@@ -22,6 +22,7 @@ import logging
 import datetime
 import re
 import copy
+import shutil
 import subprocess
 import gzip
 from collections import OrderedDict
@@ -908,7 +909,7 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")       # plain VCF
+    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")   # plain VCF
     gz_vcf   = base_vcf + ".gz"
 
     file_count = len(valid_files)
@@ -917,7 +918,7 @@ def merge_vcfs(
     temp_files, preprocessed_files = [], []
     for file_path in valid_files:
         try:
-            pre = preprocess_vcf(file_path)          # must return bgzipped+indexed or plain; your fn decides
+            pre = preprocess_vcf(file_path)  # your helper: returns prepared path
         except Exception as exc:
             handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
         preprocessed_files.append(pre)
@@ -943,7 +944,7 @@ def merge_vcfs(
 
     # Read merged VCF, apply metadata, rewrite with vcfpy
     try:
-        reader = vcfpy.Reader.from_path(base_vcf)    # vcfpy reads/writes plain VCF. :contentReference[oaicite:2]{index=2}
+        reader = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
         handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
 
@@ -963,25 +964,25 @@ def merge_vcfs(
 
     tmp_out = base_vcf + ".tmp"
     try:
-        writer = vcfpy.Writer.from_path(tmp_out, header)  # header written immediately. :contentReference[oaicite:3]{index=3}
+        writer = vcfpy.Writer.from_path(tmp_out, header)
     except Exception as exc:
         reader.close()
         handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
 
     try:
         for record in reader:
+            # optional: _pad_record_samples(record, header, sample_order)
             writer.write_record(record)
     finally:
         reader.close()
         writer.close()
 
-    # Atomically replace base_vcf with the rewritten one
     shutil.move(tmp_out, base_vcf)
 
     log_message("Compressing and indexing the final VCF...", verbose)
     try:
-        subprocess.run(["bgzip", "-f", base_vcf], check=True)                # BGZF, not plain gzip. :contentReference[oaicite:4]{index=4}
-        subprocess.run(["tabix", "-p", "vcf", "-f", gz_vcf], check=True)     # create .tbi index
+        subprocess.run(["bgzip", "-f", base_vcf], check=True)
+        subprocess.run(["tabix", "-p", "vcf", "-f", gz_vcf], check=True)
     except subprocess.CalledProcessError as exc:
         handle_critical_error(f"Failed to compress or index merged VCF ({base_vcf}): {exc}")
 

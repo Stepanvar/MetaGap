@@ -225,6 +225,13 @@ class ProfileViewTests(TestCase):
         self.assertEqual(response.context["import_form_action"], reverse("import_data"))
         self.assertEqual(response.context["import_form_enctype"], "multipart/form-data")
 
+    def test_profile_redirects_anonymous_users_to_login(self) -> None:
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 302)
+        login_url = reverse("login")
+        self.assertTrue(response.url.startswith(login_url))
+
     def test_profile_context_includes_only_owned_sample_groups(self) -> None:
         SampleGroup.objects.create(
             name="Alpha",
@@ -620,6 +627,13 @@ class DashboardViewTests(TestCase):
                 ).order_by("-pk")[:6]
             ),
         )
+
+    def test_dashboard_redirects_anonymous_users_to_login(self) -> None:
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 302)
+        login_url = reverse("login")
+        self.assertTrue(response.url.startswith(login_url))
 
 
 class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):

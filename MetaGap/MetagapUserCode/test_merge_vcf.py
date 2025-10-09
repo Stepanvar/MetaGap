@@ -709,7 +709,6 @@ def union_headers(valid_files, sample_order=None):
 
     combined_header = None
     info_ids = set()
-    format_ids = set()
     filter_ids = set()
     contig_ids = set()
     computed_sample_order = []
@@ -727,8 +726,6 @@ def union_headers(valid_files, sample_order=None):
                 for line in combined_header.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
                         info_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        format_ids.add(line.id)
                     elif isinstance(line, vcfpy.header.FilterHeaderLine):
                         filter_ids.add(line.id)
                     elif isinstance(line, vcfpy.header.ContigHeaderLine):
@@ -738,6 +735,7 @@ def union_headers(valid_files, sample_order=None):
                         if mapping.get("ID"):
                             merged_sample_metadata = OrderedDict(mapping)
 
+                _remove_format_and_sample_definitions(combined_header)
                 if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
                     computed_sample_order = list(combined_header.samples.names)
                 else:
@@ -754,10 +752,6 @@ def union_headers(valid_files, sample_order=None):
                     if line.id not in info_ids:
                         combined_header.add_line(copy.deepcopy(line))
                         info_ids.add(line.id)
-                elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                    if line.id not in format_ids:
-                        combined_header.add_line(copy.deepcopy(line))
-                        format_ids.add(line.id)
                 elif isinstance(line, vcfpy.header.FilterHeaderLine):
                     if line.id not in filter_ids:
                         combined_header.add_line(copy.deepcopy(line))
@@ -794,6 +788,8 @@ def union_headers(valid_files, sample_order=None):
     target_sample_order = sample_order if sample_order is not None else computed_sample_order
     if target_sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
         combined_header.samples.names = list(target_sample_order)
+
+    _remove_format_and_sample_definitions(combined_header)
 
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)
@@ -861,6 +857,33 @@ def _create_missing_call_factory(format_keys, header):
     return factory
 
 
+def _remove_format_and_sample_definitions(header):
+    """Strip FORMAT definitions and sample columns from a VCF header."""
+
+    if header is None:
+        return
+
+    if hasattr(header, "lines"):
+        filtered_lines = []
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.FormatHeaderLine):
+                continue
+            key = getattr(line, "key", None)
+            if isinstance(key, str) and key.upper() == "FORMAT":
+                continue
+            filtered_lines.append(line)
+        header.lines = filtered_lines
+
+    if hasattr(header, "formats"):
+        try:
+            header.formats.clear()
+        except AttributeError:
+            header.formats = OrderedDict()
+
+    if hasattr(header, "samples") and hasattr(header.samples, "names"):
+        header.samples.names = []
+
+
 def _pad_record_samples(record, header, sample_order):
     if not sample_order or not hasattr(record, "call_for_sample"):
         return
@@ -909,7 +932,7 @@ def merge_vcfs(
     simple_header_lines=None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")   # plain VCF
+    base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     gz_vcf   = base_vcf + ".gz"
 
     file_count = len(valid_files)
@@ -918,7 +941,7 @@ def merge_vcfs(
     temp_files, preprocessed_files = [], []
     for file_path in valid_files:
         try:
-            pre = preprocess_vcf(file_path)  # your helper: returns prepared path
+            pre = preprocess_vcf(file_path)
         except Exception as exc:
             handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
         preprocessed_files.append(pre)
@@ -927,7 +950,6 @@ def merge_vcfs(
 
     log_message("Merging VCF files with bcftools...", verbose)
     try:
-        # Write UNCOMPRESSED VCF so vcfpy can rewrite header/records easily
         result = subprocess.run(
             ["bcftools", "merge", "-m", "all", "-Ov", "-o", base_vcf, *preprocessed_files],
             capture_output=True, text=True,
@@ -942,7 +964,6 @@ def merge_vcfs(
     if result.returncode != 0:
         handle_critical_error((result.stderr or "bcftools merge failed").strip())
 
-    # Read merged VCF, apply metadata, rewrite with vcfpy
     try:
         reader = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
@@ -988,7 +1009,6 @@ def merge_vcfs(
 
     log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
     return gz_vcf
-
 def _parse_simple_metadata_line(line):
     stripped = line.strip()
     if not stripped.startswith("##") or "=" not in stripped:

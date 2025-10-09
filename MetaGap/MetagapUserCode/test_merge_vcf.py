@@ -21,7 +21,6 @@ pip install vcfpy
 import os
 import sys
 import glob
-import argparse
 import csv
 import logging
 import datetime
@@ -31,6 +30,9 @@ import tempfile
 import shutil
 import subprocess
 import gzip
+import importlib
+import importlib.util
+import types
 from collections import OrderedDict
 
 try:
@@ -50,6 +52,8 @@ except ImportError:  # pragma: no cover - exercised when dependency is missing
             )
 
     vcfpy = _MissingVcfpyModule()  # type: ignore
+
+
 
 # Configure logging
 LOG_FILE = "script_execution.log"
@@ -126,69 +130,6 @@ def is_gvcf_header(header_lines):
                         return True
     return False
 
-
-def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="Consolidate multiple VCF files into a single merged VCF file."
-    )
-    parser.add_argument(
-        "--input-dir",
-        required=True,
-        help="Directory containing the VCF files to merge.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output-dir",
-        "--output",
-        dest="output_dir",
-        help="Directory for the merged VCF. Defaults to the input directory when omitted.",
-    )
-    parser.add_argument(
-        "--ref",
-        help="Expected reference genome build. When omitted the script attempts to auto-detect it.",
-    )
-    parser.add_argument(
-        "--vcf-version",
-        help="Expected VCF version (e.g., 4.2). When omitted the script attempts to auto-detect it.",
-    )
-    parser.add_argument(
-        "--meta",
-        action="append",
-        default=[],
-        metavar="KEY=VALUE",
-        help=(
-            "Sample metadata in KEY=VALUE form. Repeat for multiple keys. "
-            "An ID entry is required when metadata is provided."
-        ),
-    )
-    parser.add_argument(
-        "--allow-gvcf",
-        action="store_true",
-        help="Allow input files that contain gVCF annotations such as <NON_REF> ALT alleles.",
-    )
-    parser.add_argument(
-        "--sample-metadata",
-        dest="sample_metadata_entries",
-        action="append",
-        metavar="KEY=VALUE",
-        default=[],
-        help="Add a key/value pair to the ##SAMPLE metadata line. Provide at least ID=... to emit the line.",
-    )
-    parser.add_argument(
-        "--header-metadata",
-        dest="header_metadata_lines",
-        action="append",
-        metavar="LINE",
-        default=[],
-        help="Add an arbitrary metadata header line (##key=value). The '##' prefix is optional.",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable verbose console logging in addition to the log file.",
-    )
-    return parser.parse_args()
 
 def _format_sample_metadata_value(value: str) -> str:
     """Return a VCF-safe representation of the provided metadata value."""
@@ -1723,8 +1664,7 @@ def summarize_produced_vcfs(output_dir, fallback_vcf):
     return os.path.dirname(fallback_abs), os.path.basename(fallback_abs), 1
 
 
-def main():
-    args = parse_arguments()
+def run_workflow(args):
     verbose = args.verbose
     (
         sample_header_line,
@@ -1806,7 +1746,51 @@ def main():
         f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
         verbose,
     )
+    return summary_path
 
+
+def _load_cli_module():
+    current_module = sys.modules.get(__name__)
+    if current_module is not None:
+        for alias in ("MetagapUserCode.test_merge_vcf", "test_merge_vcf"):
+            sys.modules.setdefault(alias, current_module)
+
+    for name in ("MetagapUserCode.cli", "cli"):
+        module = sys.modules.get(name)
+        if module is not None:
+            return module
+
+    for name in ("MetagapUserCode.cli", "cli"):
+        try:
+            return importlib.import_module(name)
+        except ModuleNotFoundError:
+            continue
+
+    cli_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli.py")
+    spec = importlib.util.spec_from_file_location("cli", cli_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("Unable to locate CLI module")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules.setdefault("cli", module)
+    return module
+
+
+def parse_arguments():
+    cli_module = _load_cli_module()
+    return cli_module.parse_arguments()
+
+
+def main():
+    cli_module = _load_cli_module()
+    args = parse_arguments()
+    workflow_module = sys.modules.get(__name__)
+    if workflow_module is None:
+        workflow_module = types.SimpleNamespace(
+            run_workflow=run_workflow,
+            parse_arguments=parse_arguments,
+        )
+    return cli_module.main(args, workflow_module=workflow_module)
 
 
 if __name__ == "__main__":

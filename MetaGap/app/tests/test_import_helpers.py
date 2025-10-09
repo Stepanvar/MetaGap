@@ -97,7 +97,7 @@ class ImportHelpersTests(TestCase):
 
         self.assertEqual(section_data["gc_content"], "41%")
         self.assertIn(raw_key.lower(), consumed)
-        self.assertNotIn("genome_complexity-extra_metric", consumed)
+        self.assertIn("genome_complexity-extra_metric", consumed)
         self.assertEqual(additional, {"extra_metric": "observed"})
 
     def test_extract_section_data_falls_back_to_section_value(self):

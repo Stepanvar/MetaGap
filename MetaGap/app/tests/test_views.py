@@ -174,6 +174,23 @@ class UserRegistrationViewTests(TestCase):
         self.assertIn("form", response.context)
         self.assertIsInstance(response.context["form"], CustomUserCreationForm)
         self.assertContains(response, "<h2>Sign Up</h2>", html=True)
+class StaticPageViewTests(TestCase):
+    """Verify the informational static pages render their expected content."""
+
+    def test_contact_page_renders_expected_information(self) -> None:
+        response = self.client.get(reverse("contact"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "contact.html")
+        self.assertContains(response, "Support@example.com")
+        self.assertContains(response, "Marketing@example.com")
+
+    def test_about_page_renders_expected_information(self) -> None:
+        response = self.client.get(reverse("about"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "about.html")
+        self.assertContains(response, "Use this area to provide additional information.")
 
 
 class ProfileViewTests(TestCase):

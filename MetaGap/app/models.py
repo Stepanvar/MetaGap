@@ -273,6 +273,7 @@ class SampleGroup(models.Model):
         related_name="sample_group",
     )
     comments = models.TextField(blank=True, null=True)
+    additional_metadata = models.JSONField(blank=True, null=True)
 
     reference_genome_build = models.ForeignKey(
         ReferenceGenomeBuild,

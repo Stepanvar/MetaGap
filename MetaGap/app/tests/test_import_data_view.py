@@ -21,7 +21,7 @@ class ImportDataViewIntegrationTests(TestCase):
 ##INFO=<ID=CLNSIG,Number=1,Type=String,Description="Clinical significance">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
-##SAMPLE=<ID=GroupA,Description=Imported group>
+##SAMPLE=<ID=GroupA,Description=Imported group,CustomKey=Value>
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t1234\trsTest\tA\tT\t99\tPASS\tAF=0.5;CLNSIG=Pathogenic\tGT:GQ\t0/1:99
 """
@@ -84,6 +84,32 @@ class ImportDataViewIntegrationTests(TestCase):
             alleles,
         )
         self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+
+    def test_import_preserves_custom_sample_metadata(self) -> None:
+        """Custom SAMPLE header keys are stored and exposed in the detail view."""
+
+        self.client.login(username="vcf_user", password="import-pass")
+
+        upload = SimpleUploadedFile(
+            "custom_metadata.vcf",
+            self.VCF_CONTENT.encode("utf-8"),
+            content_type="text/vcf",
+        )
+
+        response = self.client.post(reverse("import_data"), {"data_file": upload})
+
+        self.assertRedirects(response, reverse("profile"))
+
+        sample_group = SampleGroup.objects.get(name="GroupA")
+        self.assertEqual(sample_group.additional_metadata, {"customkey": "Value"})
+
+        detail_response = self.client.get(
+            reverse("sample_group_detail", args=[sample_group.pk])
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Custom metadata")
+        self.assertContains(detail_response, "customkey")
+        self.assertContains(detail_response, "Value")
 
     def test_import_populates_related_metadata(self) -> None:
         """Detailed metadata is persisted into structured sample group relations."""

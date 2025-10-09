@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
@@ -12,6 +14,13 @@ def load_user_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+_MODULE_FOR_SKIP = load_user_module()
+pytestmark = pytest.mark.skipif(
+    not getattr(_MODULE_FOR_SKIP, "VCFPY_AVAILABLE", True),
+    reason="vcfpy dependency is required for header union tests",
+)
 
 
 def _write_vcf(path, sample_line):

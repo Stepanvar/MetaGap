@@ -569,42 +569,6 @@
     }
   },
   {
-    "model": "app.platformindependent",
-    "pk": 1,
-    "fields": {
-      "pooling": "8 samples per lane",
-      "sequencing_kit": "Illumina SP kit",
-      "base_calling_alg": "Dragen 4.3",
-      "q30": "93%",
-      "normalized_coverage": "45x",
-      "run_specific_calibration": "Standard"
-    }
-  },
-  {
-    "model": "app.platformindependent",
-    "pk": 2,
-    "fields": {
-      "pooling": "3 libraries",
-      "sequencing_kit": "ONT Ligation kit",
-      "base_calling_alg": "Guppy 6.5",
-      "q30": "85%",
-      "normalized_coverage": "35x",
-      "run_specific_calibration": "Adaptive sampling"
-    }
-  },
-  {
-    "model": "app.platformindependent",
-    "pk": 3,
-    "fields": {
-      "pooling": "24 amplicons",
-      "sequencing_kit": "Swift 16S Kit",
-      "base_calling_alg": "Qiime2 DADA2",
-      "q30": "88%",
-      "normalized_coverage": "20k reads/sample",
-      "run_specific_calibration": "Microbiome controls"
-    }
-  },
-  {
     "model": "app.referencegenomebuild",
     "pk": 1,
     "fields": {
@@ -656,7 +620,6 @@
       "ont_seq": null,
       "pacbio_seq": 1,
       "iontorrent_seq": 1,
-      "platform_independent": 1,
       "bioinfo_alignment": 1,
       "bioinfo_variant_calling": 1,
       "bioinfo_post_proc": 1
@@ -678,7 +641,6 @@
       "ont_seq": 2,
       "pacbio_seq": null,
       "iontorrent_seq": null,
-      "platform_independent": 2,
       "bioinfo_alignment": 2,
       "bioinfo_variant_calling": 2,
       "bioinfo_post_proc": 2
@@ -700,7 +662,6 @@
       "ont_seq": 3,
       "pacbio_seq": 2,
       "iontorrent_seq": 2,
-      "platform_independent": 3,
       "bioinfo_alignment": 3,
       "bioinfo_variant_calling": 3,
       "bioinfo_post_proc": 3

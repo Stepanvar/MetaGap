@@ -1,12 +1,29 @@
 #!/usr/bin/env python3
-"""Backward compatible wrapper for the :mod:`merge_vcf` package."""
+"""
+This script consolidates multiple VCF files into one merged VCF file.
+It replicates the bash script functionality:
+  - Parses command-line options for the input directory, output directory, reference genome, VCF version, and optional metadata.
+  - Validates individual VCF files for header fileformat and reference genome.
+  - Merges valid VCFs using vcfpy.
+  - Appends metadata (if provided via CLI) to the merged VCF header.
+  - Performs a final validation of the merged VCF.
+  - Logs execution details to a log file.
 
-from __future__ import annotations
+At completion the script prints a compact summary in the form
+``Wrote: <DIR>/<SAMPLE_XXXX>.vcf[.gz] x N`` where the directory, a
+representative sample filename, and the number of produced cohort VCF
+shards are derived from the output directory contents.
 
+Requirements:
+pip install vcfpy
+"""
+
+import os
 import sys
 import glob
 import argparse
 import csv
+import logging
 import datetime
 import re
 import copy
@@ -15,16 +32,6 @@ import shutil
 import subprocess
 import gzip
 from collections import OrderedDict
-
-if __package__ in {None, ""}:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    if current_dir not in sys.path:
-        sys.path.append(current_dir)
-
-try:  # pragma: no cover - import guard for script/module execution
-    from .io_utils import parse_simple_metadata_line, preprocess_vcf
-except ImportError:  # pragma: no cover - executed when running as a script
-    from io_utils import parse_simple_metadata_line, preprocess_vcf  # type: ignore
 
 try:
     import vcfpy  # type: ignore
@@ -355,7 +362,7 @@ def parse_metadata_arguments(args, verbose=False):
             continue
         if not normalized.startswith("##"):
             normalized = "##" + normalized
-        parsed = parse_simple_metadata_line(normalized)
+        parsed = _parse_simple_metadata_line(normalized)
         if not parsed:
             handle_critical_error(
                 f"Additional metadata '{raw_line}' must be in '##key=value' format."
@@ -438,6 +445,257 @@ def _validate_anonymized_vcf_header(final_vcf_path, ensure_for_uncompressed=Fals
         )
 
 
+def append_metadata_to_merged_vcf(
+    merged_vcf,
+    sample_metadata_entries=None,
+    header_metadata_lines=None,
+    serialized_sample_line=None,
+    verbose=False,
+):
+    """Finalize the merged VCF by applying bcftools processing and metadata."""
+
+    header_metadata_lines = header_metadata_lines or []
+
+    joint_temp = f"{merged_vcf}.joint.temp.vcf"
+    filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
+    header_temp = f"{merged_vcf}.header.temp"
+    body_temp = f"{merged_vcf}.body.temp"
+
+    expects_gzip = merged_vcf.endswith(".gz")
+    final_plain_vcf = None
+    final_vcf = None
+
+    if merged_vcf.endswith(".vcf.gz"):
+        base_path = merged_vcf[: -len(".vcf.gz")]
+        final_plain_vcf = f"{base_path}.anonymized.vcf"
+        final_vcf = f"{final_plain_vcf}.gz"
+    elif merged_vcf.endswith(".vcf"):
+        base_path = merged_vcf[: -len(".vcf")]
+        final_plain_vcf = f"{base_path}.anonymized.vcf"
+        final_vcf = final_plain_vcf
+    else:
+        base_path, ext = os.path.splitext(merged_vcf)
+        if ext == ".gz":
+            base_path = base_path or merged_vcf[:-3]
+            final_plain_vcf = f"{base_path}.anonymized"
+            final_vcf = f"{final_plain_vcf}.gz"
+        else:
+            final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
+            final_vcf = final_plain_vcf
+
+    def _cleanup_temp_files():
+        for path in [joint_temp, filtered_temp, header_temp, body_temp]:
+            try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+
+    log_message(
+        "Recalculating AC, AN, AF tags across the merged cohort...",
+        verbose,
+    )
+    try:
+        subprocess.run(
+            [
+                "bcftools",
+                "+fill-tags",
+                merged_vcf,
+                "-O",
+                "v",
+                "-o",
+                joint_temp,
+                "--",
+                "-t",
+                "AC,AN,AF",
+            ],
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to recalculate INFO tags with bcftools +fill-tags: {exc}"
+        )
+
+    log_message("Applying quality filters to remove low-confidence variants...", verbose)
+    try:
+        subprocess.run(
+            [
+                "bcftools",
+                "view",
+                joint_temp,
+                "-i",
+                'QUAL>30 && INFO/AN>50 && FILTER="PASS"',
+                "-O",
+                "v",
+                "-o",
+                filtered_temp,
+            ],
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to apply bcftools filtering to merged VCF: {exc}"
+        )
+
+    log_message("Removing individual sample genotype columns (anonymizing data)...", verbose)
+    try:
+        with open(header_temp, "w", encoding="utf-8") as header_handle:
+            subprocess.run(
+                ["bcftools", "view", "-h", filtered_temp],
+                check=True,
+                stdout=header_handle,
+            )
+
+        with open(body_temp, "w", encoding="utf-8") as body_handle:
+            view_proc = subprocess.Popen(
+                ["bcftools", "view", "-H", filtered_temp],
+                stdout=subprocess.PIPE,
+            )
+            try:
+                subprocess.run(
+                    ["cut", "-f1-8"],
+                    check=True,
+                    stdin=view_proc.stdout,
+                    stdout=body_handle,
+                )
+            finally:
+                if view_proc.stdout is not None:
+                    view_proc.stdout.close()
+                return_code = view_proc.wait()
+            if return_code != 0:
+                raise subprocess.CalledProcessError(
+                    return_code, ["bcftools", "view", "-H", filtered_temp]
+                )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        _cleanup_temp_files()
+        handle_critical_error(
+            f"Failed to anonymize merged VCF columns using bcftools: {exc}"
+        )
+
+    log_message("Combining custom metadata header with VCF header...", verbose)
+    try:
+        with open(header_temp, "r", encoding="utf-8") as header_handle:
+            header_lines = [line.rstrip("\n") for line in header_handle]
+
+        fileformat_line = None
+        remaining_header_lines = []
+        for line in header_lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#CHROM"):
+                continue
+            if stripped.startswith("##fileformat") and fileformat_line is None:
+                fileformat_line = stripped
+                continue
+            if stripped.startswith("##SAMPLE="):
+                continue
+            remaining_header_lines.append(stripped)
+
+        final_header_lines = []
+        if fileformat_line is not None:
+            final_header_lines.append(fileformat_line)
+
+        final_header_lines.extend(remaining_header_lines)
+        existing_header_lines = set(final_header_lines)
+
+        if sample_metadata_entries:
+            try:
+                serialized_line = (
+                    serialized_sample_line
+                    if serialized_sample_line is not None
+                    else build_sample_metadata_line(sample_metadata_entries)
+                )
+                if serialized_line not in existing_header_lines:
+                    final_header_lines.append(serialized_line)
+                    existing_header_lines.add(serialized_line)
+            except ValueError as exc:
+                _cleanup_temp_files()
+                handle_critical_error(str(exc))
+
+        for metadata_line in header_metadata_lines:
+            normalized = metadata_line.strip()
+            if not normalized:
+                continue
+            if not normalized.startswith("##"):
+                normalized = "##" + normalized
+            if normalized in existing_header_lines:
+                continue
+            final_header_lines.append(normalized)
+            existing_header_lines.add(normalized)
+
+        final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
+
+        body_lines = []
+        with open(body_temp, "r", encoding="utf-8") as body_handle:
+            for line in body_handle:
+                body_lines.append(line.rstrip("\n"))
+
+        is_gzipped_output = False
+        if merged_vcf.endswith(".vcf.gz"):
+            base = merged_vcf[: -len(".vcf.gz")]
+            final_vcf = f"{base}.anonymized.vcf.gz"
+            is_gzipped_output = True
+        else:
+            base, ext = os.path.splitext(merged_vcf)
+            if not ext:
+                ext = ".vcf"
+            final_vcf = f"{base}.anonymized{ext}"
+
+        writer = gzip.open if is_gzipped_output else open
+        open_kwargs = {"mode": "wt", "encoding": "utf-8"} if is_gzipped_output else {"mode": "w", "encoding": "utf-8"}
+        with writer(final_vcf, **open_kwargs) as output_handle:
+            for line in final_header_lines:
+                output_handle.write(line + "\n")
+            for line in body_lines:
+                output_handle.write(line + "\n")
+    except Exception as exc:
+        _cleanup_temp_files()
+        if final_plain_vcf and os.path.exists(final_plain_vcf):
+            try:
+                os.remove(final_plain_vcf)
+            except Exception:
+                pass
+        handle_critical_error(
+            f"Failed to assemble final anonymized VCF contents: {exc}"
+        )
+
+    if expects_gzip:
+        try:
+            subprocess.run(["bgzip", "-f", final_plain_vcf], check=True)
+            subprocess.run(["tabix", "-p", "vcf", "-f", final_vcf], check=True)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            _cleanup_temp_files()
+            if os.path.exists(final_plain_vcf):
+                try:
+                    os.remove(final_plain_vcf)
+                except Exception:
+                    pass
+            if os.path.exists(final_vcf):
+                try:
+                    os.remove(final_vcf)
+                except Exception:
+                    pass
+            handle_critical_error(
+                f"Failed to finalize anonymized VCF compression/indexing: {exc}"
+            )
+        finally:
+            if os.path.exists(final_plain_vcf):
+                try:
+                    os.remove(final_plain_vcf)
+                except Exception:
+                    pass
+    else:
+        final_vcf = final_plain_vcf
+
+    _cleanup_temp_files()
+
+    _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
+
+    log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
+    return final_vcf
 
 
 def normalize_vcf_version(version_value):
@@ -745,6 +1003,222 @@ def validate_all_vcfs(input_dir, ref_genome, vcf_version, verbose=False, allow_g
     return valid_vcfs, reference_samples
 
 
+def union_headers(valid_files, sample_order=None):
+    """Return a merged header with combined metadata from *valid_files*."""
+
+    combined_header = None
+    info_ids = set()
+    filter_ids = set()
+    contig_ids = set()
+    computed_sample_order = []
+    merged_sample_metadata = None
+
+    for file_path in valid_files:
+        preprocessed_file = preprocess_vcf(file_path)
+        reader = None
+        try:
+            reader = vcfpy.Reader.from_path(preprocessed_file)
+            header = reader.header
+
+            if combined_header is None:
+                combined_header = header.copy()
+                for line in combined_header.lines:
+                    if isinstance(line, vcfpy.header.InfoHeaderLine):
+                        info_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                        filter_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                        contig_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                        mapping = OrderedDict(getattr(line, "mapping", {}))
+                        if mapping.get("ID"):
+                            merged_sample_metadata = OrderedDict(mapping)
+
+                _remove_format_and_sample_definitions(combined_header)
+                if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+                    computed_sample_order = list(combined_header.samples.names)
+                else:
+                    computed_sample_order = []
+                continue
+
+            if hasattr(header, "samples") and hasattr(header.samples, "names"):
+                for sample_name in header.samples.names:
+                    if sample_name not in computed_sample_order:
+                        computed_sample_order.append(sample_name)
+
+            for line in header.lines:
+                if isinstance(line, vcfpy.header.InfoHeaderLine):
+                    if line.id not in info_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        info_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                    if line.id not in filter_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        filter_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                    if line.id not in contig_ids:
+                        combined_header.add_line(copy.deepcopy(line))
+                        contig_ids.add(line.id)
+                elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                    mapping = OrderedDict(getattr(line, "mapping", {}))
+                    sample_id = mapping.get("ID")
+                    if not sample_id:
+                        continue
+                    if merged_sample_metadata is None:
+                        merged_sample_metadata = OrderedDict(mapping)
+                        continue
+                    for key, value in mapping.items():
+                        if key not in merged_sample_metadata or not merged_sample_metadata[key]:
+                            merged_sample_metadata[key] = value
+        except Exception as exc:
+            handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}")
+        finally:
+            if reader is not None:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+            if preprocessed_file != file_path and os.path.exists(preprocessed_file):
+                os.remove(preprocessed_file)
+
+    if combined_header is None:
+        handle_critical_error("Unable to construct a merged VCF header.")
+
+    target_sample_order = sample_order if sample_order is not None else computed_sample_order
+    if target_sample_order and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+        combined_header.samples.names = list(target_sample_order)
+
+    _remove_format_and_sample_definitions(combined_header)
+
+    if merged_sample_metadata:
+        serialized = build_sample_metadata_line(merged_sample_metadata)
+        parsed_mapping = _parse_sample_metadata_line(serialized)
+        sample_line = vcfpy.header.SampleHeaderLine.from_mapping(parsed_mapping)
+        combined_header.lines = [
+            line for line in combined_header.lines if getattr(line, "key", None) != "SAMPLE"
+        ]
+        combined_header.add_line(sample_line)
+
+    return combined_header
+
+
+def _create_missing_call_factory(format_keys, header):
+    if not format_keys:
+        return lambda: {}
+
+    template = {}
+    for key in format_keys:
+        if key == "GT":
+            template[key] = "./."
+            continue
+
+        field_info = None
+        try:
+            field_info = header.get_format_field_info(key)
+        except Exception:
+            field_info = None
+
+        number = getattr(field_info, "number", None)
+        if isinstance(number, str):
+            stripped = number.strip()
+            if not stripped:
+                number = None
+            elif stripped in {".", "A", "G", "R"}:
+                template[key] = []
+                continue
+            else:
+                try:
+                    number = int(stripped)
+                except ValueError:
+                    number = None
+
+        if isinstance(number, int):
+            if number <= 1:
+                default_value = None
+            else:
+                default_value = [None] * number
+        elif number in {".", "A", "G", "R"}:
+            default_value = []
+        else:
+            default_value = None
+
+        template.setdefault(key, default_value)
+
+    def factory():
+        data = {}
+        for fmt_key, default in template.items():
+            if isinstance(default, list):
+                data[fmt_key] = [None] * len(default)
+            else:
+                data[fmt_key] = default
+        return data
+
+    return factory
+
+
+def _remove_format_and_sample_definitions(header):
+    """Strip FORMAT definitions and sample columns from a VCF header."""
+
+    if header is None:
+        return
+
+    if hasattr(header, "lines"):
+        filtered_lines = []
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.FormatHeaderLine):
+                continue
+            key = getattr(line, "key", None)
+            if isinstance(key, str) and key.upper() == "FORMAT":
+                continue
+            filtered_lines.append(line)
+        header.lines = filtered_lines
+
+    if hasattr(header, "formats"):
+        try:
+            header.formats.clear()
+        except AttributeError:
+            header.formats = OrderedDict()
+
+    if hasattr(header, "samples") and hasattr(header.samples, "names"):
+        header.samples.names = []
+
+
+def _pad_record_samples(record, header, sample_order):
+    if not sample_order or not hasattr(record, "call_for_sample"):
+        return
+
+    format_keys = list(record.FORMAT or [])
+    factory = _create_missing_call_factory(format_keys, header)
+    updated_calls = []
+    for name in sample_order:
+        call = record.call_for_sample.get(name)
+        if call is None:
+            call = vcfpy.Call(name, factory())
+        else:
+            defaults = factory()
+            for key in format_keys:
+                if key not in call.data:
+                    call.data[key] = defaults[key]
+                    continue
+
+                default_value = defaults[key]
+                current_value = call.data[key]
+                if isinstance(default_value, list) and not isinstance(current_value, list):
+                    if current_value is None:
+                        call.data[key] = default_value
+                    elif isinstance(current_value, tuple):
+                        call.data[key] = list(current_value)
+                    else:
+                        call.data[key] = [current_value]
+
+            if "GT" in defaults:
+                genotype_value = call.data.get("GT")
+                if genotype_value in {None, "", "."}:
+                    call.data["GT"] = defaults["GT"]
+        updated_calls.append(call)
+    record.update_calls(updated_calls)
+
+
 import os, shutil, subprocess, datetime
 
 def merge_vcfs(
@@ -848,6 +1322,373 @@ def merge_vcfs(
     log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
     return gz_vcf
 
+def _parse_simple_metadata_line(line):
+    stripped = line.strip()
+    if not stripped.startswith("##") or "=" not in stripped:
+        return None
+    key, value = stripped[2:].split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        return None
+    return key, value
+
+
+def preprocess_vcf(file_path):
+    """
+    Check if the VCF file uses spaces instead of tabs for the column header and data lines.
+    If so, create a temporary file where the column header (#CHROM) and all subsequent lines 
+    are converted to be tab-delimited. Lines starting with "##" (metadata) are left unchanged.
+    Returns the path to the file to be used (original or temporary).
+    """
+    import re
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    
+    modified = False
+    new_lines = []
+    header_found = False  # indicates when the column header has been encountered
+    for line in lines:
+        if line.startswith("##"):
+            # Do not change metadata lines (they may contain spaces that are part of the value)
+            new_lines.append(line)
+        elif line.startswith("#"):
+            # This is the column header line (e.g. "#CHROM ...")
+            new_line = re.sub(r'\s+', '\t', line.rstrip()) + "\n"
+            new_lines.append(new_line)
+            header_found = True
+            if new_line != line:
+                modified = True
+        else:
+            # Data lines: once header_found is True, convert spaces to tabs.
+            if header_found:
+                new_line = re.sub(r'\s+', '\t', line.rstrip()) + "\n"
+                new_lines.append(new_line)
+                if new_line != line:
+                    modified = True
+            else:
+                new_lines.append(line)
+    
+    if modified:
+        temp_file = file_path + ".tmp"
+        with open(temp_file, 'w') as f:
+            f.writelines(new_lines)
+        return temp_file
+    else:
+        return file_path
+
+
+
+def _info_field_requires_value(number):
+    """Return True when the INFO definition expects an accompanying value."""
+
+    if number is None:
+        return False
+    if isinstance(number, str):
+        stripped = number.strip()
+        if stripped == "":
+            return False
+        if stripped == "0":
+            return False
+        # symbolic numbers (., A, G, R) all expect a value when present
+        if stripped in {".", "A", "G", "R"}:
+            return True
+        number = stripped
+    try:
+        return int(number) > 0
+    except (TypeError, ValueError):
+        # Unknown token, err on the side of requiring a value
+        return True
+
+
+def _has_null_value(value):
+    """Return True if *value* or any nested value is considered missing."""
+
+    if value is None:
+        return True
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped == "" or stripped == "."
+    if isinstance(value, (list, tuple)):
+        return any(_has_null_value(v) for v in value)
+    return False
+
+
+def _parse_header_info_definition(line):
+    """Return (id, metadata) parsed from a ##INFO header line."""
+
+    lower = line.lower()
+    if not lower.startswith("##info"):
+        return None, {}
+    start = line.find("<")
+    end = line.rfind(">")
+    if start == -1 or end == -1 or end <= start + 1:
+        return None, {}
+
+    payload = line[start + 1 : end]
+    entries = {}
+    for part in payload.split(","):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        entries[key.strip().upper()] = value.strip()
+
+    info_id = entries.get("ID")
+    if not info_id:
+        return None, {}
+    return info_id, entries
+
+
+def _read_vcf_without_vcfpy(file_path):
+    """Yield header metadata and record lines for a VCF file without vcfpy."""
+
+    opener = gzip.open if str(file_path).endswith(".gz") else open
+    try:
+        with opener(file_path, "rt", encoding="utf-8") as handle:
+            header_lines = []
+            column_header_seen = False
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if not line:
+                    continue
+                if line.startswith("##"):
+                    header_lines.append(line)
+                    continue
+                if line.startswith("#CHROM"):
+                    column_header_seen = True
+                    break
+
+            records = []
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if line.strip():
+                    records.append(line)
+    except OSError as exc:
+        handle_critical_error(f"Could not open {file_path}: {exc}.")
+
+    if not column_header_seen:
+        handle_critical_error(
+            f"Could not open {file_path}: Missing #CHROM header line."
+        )
+
+    return header_lines, records
+
+
+def _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=False):
+    """Fallback validator that performs minimal checks without vcfpy."""
+
+    header_lines, records = _read_vcf_without_vcfpy(merged_vcf)
+
+    normalized_headers = [line.lower() for line in header_lines]
+    if not any(line.startswith("##fileformat=") for line in normalized_headers):
+        handle_critical_error(
+            f"Missing required meta-information: ##fileformat in {merged_vcf} header."
+        )
+    if not any(line.startswith("##reference=") for line in normalized_headers):
+        handle_critical_error(
+            f"Missing required meta-information: ##reference in {merged_vcf} header."
+        )
+
+    info_definitions = {}
+    for line in header_lines:
+        info_id, entries = _parse_header_info_definition(line)
+        if not info_id:
+            continue
+        info_definitions[info_id] = entries
+
+    required_info_ids = {
+        info_id
+        for info_id, entries in info_definitions.items()
+        if _info_field_requires_value(entries.get("NUMBER"))
+    }
+
+    for record_line in records:
+        if record_line.startswith("#"):
+            continue
+        fields = record_line.split("\t")
+        if len(fields) < 8:
+            continue
+        chrom, pos = fields[0], fields[1]
+        record_label = f"{chrom}:{pos}"
+        info_field = fields[7].strip()
+        if info_field in {"", "."}:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
+            )
+            continue
+
+        info_map = {}
+        for entry in info_field.split(";"):
+            if not entry:
+                continue
+            if "=" in entry:
+                key, value = entry.split("=", 1)
+                info_map[key] = value
+            else:
+                info_map[entry] = ""
+
+        undefined_keys = sorted(
+            key for key in info_map.keys() if key not in info_definitions
+        )
+        if undefined_keys:
+            logger.warning(
+                "Record %s in %s has INFO fields not present in header definitions: %s.",
+                record_label,
+                merged_vcf,
+                ", ".join(undefined_keys),
+            )
+
+        missing_keys = sorted(required_info_ids.difference(info_map.keys()))
+        if missing_keys:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
+            )
+
+        null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
+        if null_keys:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
+            )
+
+    log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+    print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+
+
+def validate_merged_vcf(merged_vcf, verbose=False):
+    log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
+    if not os.path.isfile(merged_vcf):
+        handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
+
+    if not VCFPY_AVAILABLE:
+        _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=verbose)
+        return
+
+    reader = None
+    gz_stream = None
+    try:
+        reader = vcfpy.Reader.from_path(merged_vcf)
+    except Exception as exc:
+        if merged_vcf.endswith(".gz"):
+            try:
+                gz_stream = gzip.open(merged_vcf, "rt")
+                reader = vcfpy.Reader.from_stream(gz_stream, merged_vcf)
+            except Exception as gzip_exc:
+                if gz_stream is not None:
+                    gz_stream.close()
+                handle_critical_error(
+                    f"Could not open {merged_vcf}: {str(gzip_exc)}."
+                )
+        else:
+            handle_critical_error(f"Could not open {merged_vcf}: {str(exc)}.")
+
+    if reader is None:
+        handle_critical_error(f"Could not open {merged_vcf}: Unknown error.")
+
+
+    header = reader.header
+    required_meta = ["fileformat", "reference"]
+    for meta in required_meta:
+        found = False
+        for line in header.lines:
+            if line.key == meta:
+                found = True
+                break
+        if not found:
+            handle_critical_error(f"Missing required meta-information: ##{meta} in {merged_vcf} header.")
+
+
+    defined_info_ids = OrderedDict()
+    info_ids_iterable = []
+    if hasattr(header, "info_ids"):
+        candidate = header.info_ids
+        if callable(candidate):
+            try:
+                info_ids_iterable = list(candidate())
+            except Exception:
+                info_ids_iterable = []
+        else:
+            info_ids_iterable = list(candidate)
+
+    for info_id in info_ids_iterable:
+        try:
+            info_def = header.get_info_field_info(info_id)
+        except Exception:
+            info_def = None
+        if isinstance(info_def, vcfpy.header.InfoHeaderLine):
+            defined_info_ids[info_id] = info_def
+
+    if not defined_info_ids:
+        for line in header.lines:
+            if isinstance(line, vcfpy.header.InfoHeaderLine):
+                defined_info_ids[line.id] = line
+
+    required_info_ids = {
+        info_id
+        for info_id, info_def in defined_info_ids.items()
+        if _info_field_requires_value(getattr(info_def, "number", None))
+    }
+    required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
+
+    encountered_exception = False
+    try:
+        for record in reader:
+            info_map = getattr(record, "INFO", None)
+            record_label = f"{getattr(record, 'CHROM', '?')}:{getattr(record, 'POS', '?')}"
+
+            if info_map is None:
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
+                )
+                continue
+
+            if not isinstance(info_map, dict):
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} has an unexpected INFO type: {type(info_map).__name__}. Continuing without INFO validation for this record."
+                )
+                continue
+
+            record_info_keys = set(info_map.keys())
+
+            undefined_keys = sorted(record_info_keys.difference(defined_info_ids))
+            if undefined_keys:
+                logger.warning(
+                    "Record %s in %s has INFO fields not present in header definitions: %s.",
+                    record_label,
+                    merged_vcf,
+                    ", ".join(undefined_keys),
+                )
+
+            missing_keys = sorted(required_info_ids.difference(record_info_keys))
+            if missing_keys:
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
+                )
+
+            null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
+            if null_keys:
+                handle_non_critical_error(
+                    f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
+                )
+
+    except SystemExit:
+        raise
+    except Exception as exc:
+        encountered_exception = True
+        logger.warning("Error while parsing records in %s: %s", merged_vcf, exc)
+
+    if not encountered_exception:
+        log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+        print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+
+    try:
+        reader.close()
+    except Exception:
+        pass
+    if gz_stream is not None:
+        try:
+            gz_stream.close()
+        except Exception:
+            pass
 
 
 def summarize_produced_vcfs(output_dir, fallback_vcf):
@@ -891,12 +1732,7 @@ def main():
         sample_metadata_entries,
         sanitized_header_lines,
         serialized_sample_line,
-    ) = parse_metadata_arguments(
-        args,
-        verbose,
-        log_message=log_message,
-        handle_critical_error=handle_critical_error,
-    )
+    ) = parse_metadata_arguments(args, verbose)
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -960,28 +1796,17 @@ def main():
 
     validate_merged_vcf(final_vcf, verbose)
 
-# Ensure the repository root is on ``sys.path`` so the ``merge_vcf`` package
-# can be imported when this file is executed directly.
-_THIS_FILE = Path(__file__).resolve()
-_REPO_ROOT = _THIS_FILE.parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from merge_vcf.main import *  # noqa: F401,F403 - re-export legacy symbols
-from merge_vcf import main as _main
-
-
-configure_merging_callbacks(
-    MergeCallbacks(
-        preprocess_vcf=preprocess_vcf,
-        log_message=log_message,
-        handle_critical_error=handle_critical_error,
-        build_sample_metadata_line=build_sample_metadata_line,
-        parse_sample_metadata_line=_parse_sample_metadata_line,
-        apply_metadata_to_header=apply_metadata_to_header,
-        vcfpy=vcfpy,
+    summary_dir, sample_filename, produced_count = summarize_produced_vcfs(
+        output_dir, final_vcf
     )
-)
+    summary_path = os.path.join(summary_dir, sample_filename)
+    print(f"Wrote: {summary_path} x {produced_count}")
+    log_message(
+        "Script execution completed successfully. "
+        f"Wrote {produced_count} VCF file(s) (e.g., {summary_path}).",
+        verbose,
+    )
+
 
 
 if __name__ == "__main__":

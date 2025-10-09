@@ -41,6 +41,16 @@ class ImportDataViewIntegrationTests(TestCase):
 1\t1234\trsMalformed\tA\tC\t60\tPASS\tSOMATIC;AF=0.1\tGT:GQ\t0/1:45
 """
 
+    FALLBACK_JSON_METADATA_VCF = (
+        "##fileformat=VCFv4.2\n"
+        "##contig=<ID=1>\n"
+        "##SAMPLE=<ID=JsonGroup,Description=\"JSON fallback\"," 
+        "Input_Quality_Additional_Metrics={\"rna_integrity\":7.4,\"metrics\":{\"inner\":1}},"
+        "Reference_Genome_Build_Additional_Info={\"notes\":\"fallback\"}>\n"
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001\n"
+        "1\t111\trsJson\tA\tG\t50\tPASS\tAF=0.2\tGT:GQ\t0/1:70\n"
+    )
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -251,3 +261,38 @@ class ImportDataViewIntegrationTests(TestCase):
         self.assertEqual(allele.variant_id, "rsMalformed")
         self.assertTrue(allele.info.additional["somatic"])
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")
+
+    @mock.patch("app.views.pysam.VariantFile", side_effect=OSError("fallback"))
+    def test_text_fallback_preserves_json_metadata(self, mocked_variant_file: mock.Mock) -> None:
+        """JSON-like SAMPLE metadata survives the manual header parsing fallback."""
+
+        self.client.login(username="vcf_user", password="import-pass")
+
+        upload = SimpleUploadedFile(
+            "fallback_json.vcf",
+            self.FALLBACK_JSON_METADATA_VCF.encode("utf-8"),
+            content_type="text/vcf",
+        )
+
+        response = self.client.post(reverse("import_data"), {"data_file": upload})
+
+        self.assertRedirects(response, reverse("profile"))
+        mocked_variant_file.assert_called()
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build",
+            "input_quality",
+        ).get(name="JsonGroup")
+
+        self.assertEqual(sample_group.comments, "JSON fallback")
+        self.assertIsNotNone(sample_group.reference_genome_build)
+        self.assertEqual(
+            sample_group.reference_genome_build.additional_info,
+            {"notes": "fallback"},
+        )
+
+        self.assertIsNotNone(sample_group.input_quality)
+        self.assertEqual(
+            sample_group.input_quality.additional_metrics,
+            {"rna_integrity": 7.4, "metrics": {"inner": 1}},
+        )

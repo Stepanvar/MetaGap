@@ -1,11 +1,156 @@
 # filters.py
 import django_filters
-from django.db.models import Q
+from django.db.models import (
+    CharField,
+    F,
+    FloatField,
+    Q,
+    Value,
+)
+from django.db.models.functions import Cast, NullIf
+from django.db.models.fields.json import KeyTextTransform
+
 from .models import AlleleFrequency, SampleGroup
 
 
 class AlleleFrequencyFilter(django_filters.FilterSet):
-    query = django_filters.CharFilter(method='universal_search', label='Search')
+    query = django_filters.CharFilter(method="universal_search", label="Search")
+    chrom = django_filters.CharFilter(
+        field_name="chrom", lookup_expr="iexact", label="Chrom"
+    )
+    pos_min = django_filters.NumberFilter(
+        field_name="pos", lookup_expr="gte", label="Position (min)"
+    )
+    pos_max = django_filters.NumberFilter(
+        field_name="pos", lookup_expr="lte", label="Position (max)"
+    )
+    ref = django_filters.CharFilter(
+        field_name="ref", lookup_expr="iexact", label="Reference"
+    )
+    alt = django_filters.CharFilter(
+        field_name="alt", lookup_expr="iexact", label="Alternate"
+    )
+    filter_pass = django_filters.BooleanFilter(
+        method="filter_pass_status", label="Filter is PASS"
+    )
+    qual_min = django_filters.NumberFilter(
+        field_name="qual", lookup_expr="gte", label="QUAL (min)"
+    )
+    qual_max = django_filters.NumberFilter(
+        field_name="qual", lookup_expr="lte", label="QUAL (max)"
+    )
+    af_min = django_filters.NumberFilter(
+        method="filter_info_numeric", label="AF (min)"
+    )
+    af_max = django_filters.NumberFilter(
+        method="filter_info_numeric", label="AF (max)"
+    )
+    dp_min = django_filters.NumberFilter(
+        method="filter_info_numeric", label="DP (min)"
+    )
+    dp_max = django_filters.NumberFilter(
+        method="filter_info_numeric", label="DP (max)"
+    )
+    mq_min = django_filters.NumberFilter(
+        method="filter_info_numeric", label="MQ (min)"
+    )
+    mq_max = django_filters.NumberFilter(
+        method="filter_info_numeric", label="MQ (max)"
+    )
+    qd_min = django_filters.NumberFilter(
+        method="filter_info_numeric", label="QD (min)"
+    )
+    qd_max = django_filters.NumberFilter(
+        method="filter_info_numeric", label="QD (max)"
+    )
+    fs_min = django_filters.NumberFilter(
+        method="filter_info_numeric", label="FS (min)"
+    )
+    fs_max = django_filters.NumberFilter(
+        method="filter_info_numeric", label="FS (max)"
+    )
+    sor_min = django_filters.NumberFilter(
+        method="filter_info_numeric", label="SOR (min)"
+    )
+    sor_max = django_filters.NumberFilter(
+        method="filter_info_numeric", label="SOR (max)"
+    )
+
+    sample_group_source_lab = django_filters.CharFilter(
+        field_name="sample_group__source_lab",
+        lookup_expr="icontains",
+        label="Source lab",
+    )
+    sample_group_sample_origin_tissue = django_filters.CharFilter(
+        field_name="sample_group__sample_origin__tissue",
+        lookup_expr="icontains",
+        label="Sample tissue",
+    )
+    sample_group_bioinfo_variant_calling_tool = django_filters.CharFilter(
+        field_name="sample_group__bioinfo_variant_calling__tool",
+        lookup_expr="icontains",
+        label="Variant calling tool",
+    )
+    sample_group_bioinfo_variant_calling_version = django_filters.CharFilter(
+        field_name="sample_group__bioinfo_variant_calling__version",
+        lookup_expr="icontains",
+        label="Variant calling version",
+    )
+    sample_group_bioinfo_alignment_tool = django_filters.CharFilter(
+        field_name="sample_group__bioinfo_alignment__tool",
+        lookup_expr="icontains",
+        label="Alignment tool",
+    )
+    sample_group_bioinfo_alignment_ref_genome = django_filters.CharFilter(
+        field_name="sample_group__bioinfo_alignment__ref_genome_version",
+        lookup_expr="icontains",
+        label="Alignment reference genome",
+    )
+    sample_group_bioinfo_alignment_recalibration = django_filters.CharFilter(
+        field_name="sample_group__bioinfo_alignment__recalibration_settings",
+        lookup_expr="icontains",
+        label="Alignment recalibration",
+    )
+
+    field_order = [
+        "query",
+        "chrom",
+        "pos_min",
+        "pos_max",
+        "ref",
+        "alt",
+        "filter_pass",
+        "qual_min",
+        "qual_max",
+        "af_min",
+        "af_max",
+        "dp_min",
+        "dp_max",
+        "mq_min",
+        "mq_max",
+        "qd_min",
+        "qd_max",
+        "fs_min",
+        "fs_max",
+        "sor_min",
+        "sor_max",
+        "sample_group_source_lab",
+        "sample_group_sample_origin_tissue",
+        "sample_group_bioinfo_variant_calling_tool",
+        "sample_group_bioinfo_variant_calling_version",
+        "sample_group_bioinfo_alignment_tool",
+        "sample_group_bioinfo_alignment_ref_genome",
+        "sample_group_bioinfo_alignment_recalibration",
+    ]
+
+    NUMERIC_INFO_EXPRESSIONS = {
+        "af": F("info__af"),
+        "dp": F("info__dp"),
+        "mq": F("info__mq"),
+        "qd": KeyTextTransform("QD", "info__additional"),
+        "fs": KeyTextTransform("FS", "info__additional"),
+        "sor": KeyTextTransform("SOR", "info__additional"),
+    }
 
     class Meta:
         model = AlleleFrequency
@@ -19,6 +164,39 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
                 filters_q |= Q(pos=int(value))
             return queryset.filter(filters_q)
         return queryset
+
+    def filter_pass_status(self, queryset, name, value):
+        if value is None:
+            return queryset
+
+        if value:
+            return queryset.filter(filter__iexact="PASS")
+        return queryset.exclude(filter__iexact="PASS")
+
+    def filter_info_numeric(self, queryset, name, value):
+        if value is None:
+            return queryset
+
+        lookup_map = {"min": "gte", "max": "lte"}
+        parts = name.rsplit("_", 1)
+        if len(parts) != 2 or parts[1] not in lookup_map:
+            return queryset
+
+        field_key, bound = parts
+        lookup = lookup_map[bound]
+        alias = f"numeric_{field_key}"
+        expression = self.NUMERIC_INFO_EXPRESSIONS.get(field_key)
+        if expression is None:
+            return queryset
+        cleaned_expression = Cast(
+            NullIf(
+                NullIf(expression, Value(".", output_field=CharField())),
+                Value("", output_field=CharField()),
+            ),
+            FloatField(),
+        )
+        queryset = queryset.annotate(**{alias: cleaned_expression})
+        return queryset.filter(**{f"{alias}__{lookup}": value})
 
 
 class SampleGroupFilter(django_filters.FilterSet):

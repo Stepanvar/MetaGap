@@ -4,7 +4,14 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 
 from app import filters
-from app.models import AlleleFrequency, SampleGroup, SampleOrigin
+from app.models import (
+    AlleleFrequency,
+    BioinfoAlignment,
+    BioinfoVariantCalling,
+    Info,
+    SampleGroup,
+    SampleOrigin,
+)
 
 
 class AlleleFrequencyFilterTests(TestCase):
@@ -12,8 +19,69 @@ class AlleleFrequencyFilterTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create(username="filter-user")
+        self.sample_origin = SampleOrigin.objects.create(tissue="Liver")
+        self.other_origin = SampleOrigin.objects.create(tissue="Blood")
+        self.alignment_primary = BioinfoAlignment.objects.create(
+            tool="AlignerA",
+            params="--fast",
+            ref_genome_version="GRCh38",
+            recalibration_settings="BQSR",
+        )
+        self.alignment_secondary = BioinfoAlignment.objects.create(
+            tool="AlignerB",
+            params="--sensitive",
+            ref_genome_version="GRCh37",
+            recalibration_settings="None",
+        )
+        self.variant_primary = BioinfoVariantCalling.objects.create(
+            tool="CallerA",
+            version="1.0",
+            filtering_thresholds="QD>10",
+            duplicate_handling="Remove",
+            mq="60",
+        )
+        self.variant_secondary = BioinfoVariantCalling.objects.create(
+            tool="CallerB",
+            version="2.1",
+            filtering_thresholds="QD>15",
+            duplicate_handling="Mark",
+            mq="50",
+        )
+
         self.sample_group = SampleGroup.objects.create(
-            name="Population A", created_by=self.user.organization_profile
+            name="Population A",
+            created_by=self.user.organization_profile,
+            source_lab="North Lab",
+            sample_origin=self.sample_origin,
+            bioinfo_alignment=self.alignment_primary,
+            bioinfo_variant_calling=self.variant_primary,
+        )
+        self.other_group = SampleGroup.objects.create(
+            name="Population B",
+            created_by=self.user.organization_profile,
+            source_lab="South Lab",
+            sample_origin=self.other_origin,
+            bioinfo_alignment=self.alignment_secondary,
+            bioinfo_variant_calling=self.variant_secondary,
+        )
+
+        self.info_chr1 = Info.objects.create(
+            af="0.12",
+            dp="25",
+            mq="55",
+            additional={"QD": "15.0", "FS": "0.4", "SOR": "1.5"},
+        )
+        self.info_chr2 = Info.objects.create(
+            af=".",
+            dp="",
+            mq=".",
+            additional={"QD": ".", "FS": "", "SOR": "."},
+        )
+        self.info_chr3 = Info.objects.create(
+            af="0.45",
+            dp="100",
+            mq="70",
+            additional={"QD": "20.5", "FS": "3.1", "SOR": "0.9"},
         )
 
         self.record_chr1 = AlleleFrequency.objects.create(
@@ -23,6 +91,9 @@ class AlleleFrequencyFilterTests(TestCase):
             variant_id="rs123",
             ref="A",
             alt="T",
+            qual=75.0,
+            filter="PASS",
+            info=self.info_chr1,
         )
         self.record_chr2 = AlleleFrequency.objects.create(
             sample_group=self.sample_group,
@@ -31,6 +102,20 @@ class AlleleFrequencyFilterTests(TestCase):
             variant_id="rs543",
             ref="G",
             alt="C",
+            qual=15.0,
+            filter="LowQual",
+            info=self.info_chr2,
+        )
+        self.record_chr3 = AlleleFrequency.objects.create(
+            sample_group=self.other_group,
+            chrom="chr3",
+            pos=88888,
+            variant_id="rs789",
+            ref="C",
+            alt="G",
+            qual=120.0,
+            filter="PASS",
+            info=self.info_chr3,
         )
 
     def test_search_matches_chrom_field(self):
@@ -53,6 +138,181 @@ class AlleleFrequencyFilterTests(TestCase):
         ).qs
 
         self.assertEqual(list(qs), [self.record_chr2])
+
+    def test_chrom_filter_matches_exact_value(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"chrom": "chr3"}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr3])
+
+    def test_position_min_and_max_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"pos_min": 20000, "pos_max": 60000},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr2])
+
+    def test_reference_and_alternate_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"ref": "G", "alt": "C"}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr2])
+
+    def test_filter_pass_true_includes_only_pass_variants(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"filter_pass": True}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1, self.record_chr3])
+
+    def test_filter_pass_false_excludes_pass_variants(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"filter_pass": False}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr2])
+
+    def test_qual_range_filters(self):
+        qs_min = filters.AlleleFrequencyFilter(
+            {"qual_min": 100}, queryset=AlleleFrequency.objects.all()
+        ).qs
+        qs_max = filters.AlleleFrequencyFilter(
+            {"qual_max": 50}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs_min), [self.record_chr3])
+        self.assertEqual(list(qs_max), [self.record_chr2])
+
+    def test_af_range_filters_handle_placeholder_values(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"af_min": 0.1, "af_max": 0.2}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1])
+        self.assertNotIn(self.record_chr2, qs)
+
+    def test_dp_range_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"dp_min": 50}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr3])
+
+    def test_mq_range_filters(self):
+        qs_max = filters.AlleleFrequencyFilter(
+            {"mq_max": 60}, queryset=AlleleFrequency.objects.all()
+        ).qs
+        qs_min = filters.AlleleFrequencyFilter(
+            {"mq_min": 60}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs_max), [self.record_chr1])
+        self.assertEqual(list(qs_min), [self.record_chr3])
+
+    def test_qd_range_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"qd_min": 18, "qd_max": 19}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [])
+
+        qs_max_only = filters.AlleleFrequencyFilter(
+            {"qd_max": 16}, queryset=AlleleFrequency.objects.all()
+        ).qs
+        qs_min_only = filters.AlleleFrequencyFilter(
+            {"qd_min": 18}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs_max_only), [self.record_chr1])
+        self.assertEqual(list(qs_min_only), [self.record_chr3])
+
+    def test_fs_range_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"fs_max": 1.0}, queryset=AlleleFrequency.objects.all()
+        ).qs
+        qs_min = filters.AlleleFrequencyFilter(
+            {"fs_min": 2.0}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1])
+        self.assertEqual(list(qs_min), [self.record_chr3])
+
+    def test_sor_range_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"sor_min": 1.0}, queryset=AlleleFrequency.objects.all()
+        ).qs
+        qs_max = filters.AlleleFrequencyFilter(
+            {"sor_max": 1.0}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1])
+        self.assertEqual(list(qs_max), [self.record_chr3])
+
+    def test_combined_numeric_and_string_filters(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"chrom": "chr1", "af_min": 0.1, "qd_max": 16},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1])
+
+    def test_metadata_filters_for_source_lab(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"sample_group_source_lab": "South"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr3])
+
+    def test_metadata_filters_for_sample_origin(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"sample_group_sample_origin_tissue": "Liver"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1, self.record_chr2])
+
+    def test_metadata_filters_for_variant_calling(self):
+        qs_tool = filters.AlleleFrequencyFilter(
+            {"sample_group_bioinfo_variant_calling_tool": "CallerB"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+        qs_version = filters.AlleleFrequencyFilter(
+            {"sample_group_bioinfo_variant_calling_version": "2.1"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs_tool), [self.record_chr3])
+        self.assertEqual(list(qs_version), [self.record_chr3])
+
+    def test_metadata_filters_for_alignment(self):
+        qs_tool = filters.AlleleFrequencyFilter(
+            {"sample_group_bioinfo_alignment_tool": "AlignerA"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+        qs_ref = filters.AlleleFrequencyFilter(
+            {"sample_group_bioinfo_alignment_ref_genome": "GRCh37"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+        qs_recal = filters.AlleleFrequencyFilter(
+            {"sample_group_bioinfo_alignment_recalibration": "BQSR"},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs_tool), [self.record_chr1, self.record_chr2])
+        self.assertEqual(list(qs_ref), [self.record_chr3])
+        self.assertEqual(list(qs_recal), [self.record_chr1, self.record_chr2])
+
+    def test_metadata_and_numeric_filters_combined(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"sample_group_source_lab": "South", "af_min": 0.4},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr3])
 
 
 class SampleGroupFilterTests(TestCase):

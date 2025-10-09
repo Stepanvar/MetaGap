@@ -1,0 +1,7 @@
+##SAMPLE=<ID=Cohort01,Center="Genotek",N=100>
+##REFERENCE_GENOME_BUILD=<BuildName=GRCh38,BuildVersion="p14">
+##SAMPLE_ORIGIN=<Tissue=Lung>
+##LIBRARY_CONSTRUCTION=<Kit="TruSeq",PCRCyles=12>
+##SEQUENCING_PLATFORM=<Platform=Illumina,Instrument="NovaSeq 6000",FlowCell=S4,ReadLength=150bp>
+##BIOINFO_ALIGNMENT=<Software=BWA>
+##BIOINFO_VARIANT_CALLING=<Tool=GATK,Version=4.2>

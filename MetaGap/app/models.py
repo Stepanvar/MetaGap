@@ -409,8 +409,6 @@ class AlleleFrequency(models.Model):
         SampleGroup,
         on_delete=models.CASCADE,
         related_name="allele_frequencies",
-        blank=True,
-        null=True,
     )
     chrom = models.CharField(max_length=10)
     pos = models.IntegerField()
@@ -422,6 +420,18 @@ class AlleleFrequency(models.Model):
     info = models.ForeignKey(Info, on_delete=models.CASCADE, blank=True, null=True)
     format = models.ForeignKey(Format, on_delete=models.CASCADE, blank=True, null=True)
     comments = models.TextField(blank=True, null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["sample_group", "chrom", "pos"]),
+            models.Index(fields=["variant_id"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sample_group", "chrom", "pos", "ref", "alt"],
+                name="allele_frequency_unique_variant",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.chrom}:{self.pos} {self.ref}>{self.alt}"

@@ -19,7 +19,6 @@ from ..models import (
     MaterialType,
     OntSeq,
     PacBioSeq,
-    PlatformIndependent,
     ReferenceGenomeBuild,
     SampleGroup,
     SampleOrigin,
@@ -83,7 +82,6 @@ class SampleGroupTableViewTests(TestCase):
         self.ont_seq = OntSeq.objects.create(instrument="PromethION")
         self.pacbio_seq = PacBioSeq.objects.create(instrument="Sequel")
         self.iontorrent_seq = IonTorrentSeq.objects.create(instrument="Ion S5")
-        self.platform_independent = PlatformIndependent.objects.create(instrument="Generic")
         self.bioinfo_alignment = BioinfoAlignment.objects.create(tool="BWA")
         self.bioinfo_variant_calling = BioinfoVariantCalling.objects.create(tool="GATK")
         self.bioinfo_post_proc = BioinfoPostProc.objects.create(normalization="bcftools")
@@ -101,7 +99,6 @@ class SampleGroupTableViewTests(TestCase):
             ont_seq=self.ont_seq,
             pacbio_seq=self.pacbio_seq,
             iontorrent_seq=self.iontorrent_seq,
-            platform_independent=self.platform_independent,
             bioinfo_alignment=self.bioinfo_alignment,
             bioinfo_variant_calling=self.bioinfo_variant_calling,
             bioinfo_post_proc=self.bioinfo_post_proc,

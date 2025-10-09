@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -194,6 +195,13 @@ class InputQuality(models.Model):
 class Info(models.Model):
     """Representation of INFO fields in a VCF file."""
 
+    PLACEHOLDER_STRINGS = {".", ""}
+    NUMERIC_FIELD_TYPES = (
+        models.IntegerField,
+        models.FloatField,
+        models.DecimalField,
+    )
+
     aa = models.CharField(max_length=50, blank=True, null=True)
     ac = models.IntegerField(blank=True, null=True)
     af = models.FloatField(blank=True, null=True)
@@ -219,6 +227,68 @@ class Info(models.Model):
 
     def __str__(self) -> str:
         return f"Info for {self.pk}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Normalize placeholder numeric values before persisting."""
+
+        self._normalize_placeholder_values()
+        super().save(*args, **kwargs)
+
+    def _normalize_placeholder_values(self) -> None:
+        numeric_field_names = self._normalize_numeric_fields()
+        self._normalize_additional_numeric_entries(numeric_field_names)
+
+    def _normalize_numeric_fields(self) -> set[str]:
+        numeric_fields: set[str] = set()
+        for field in self._meta.concrete_fields:
+            if field.primary_key:
+                continue
+            if not isinstance(field, self.NUMERIC_FIELD_TYPES):
+                continue
+
+            numeric_fields.add(field.name.lower())
+            raw_value = getattr(self, field.attname)
+            normalized_value = self._coerce_placeholder_value(raw_value)
+            if normalized_value is not None:
+                try:
+                    normalized_value = field.to_python(normalized_value)
+                except (TypeError, ValueError, ValidationError):
+                    normalized_value = None
+            setattr(self, field.attname, normalized_value)
+
+        return numeric_fields
+
+    def _normalize_additional_numeric_entries(self, numeric_field_names: set[str]) -> None:
+        if not isinstance(self.additional, dict):
+            return
+
+        cleaned_additional: Dict[Any, Any] = {}
+        modified = False
+
+        for key, value in self.additional.items():
+            lookup_key = str(key).lower()
+            if lookup_key in numeric_field_names:
+                coerced_value = self._coerce_placeholder_value(value)
+                if coerced_value is None:
+                    modified = True
+                    continue
+                if coerced_value != value:
+                    modified = True
+                    value = coerced_value
+
+            cleaned_additional[key] = value
+
+        if cleaned_additional:
+            if modified or cleaned_additional != self.additional:
+                self.additional = cleaned_additional
+        elif self.additional:
+            self.additional = None
+
+    @classmethod
+    def _coerce_placeholder_value(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip() in cls.PLACEHOLDER_STRINGS:
+            return None
+        return value
 
 
 class Format(models.Model):

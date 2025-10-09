@@ -4,6 +4,7 @@ import csv
 import json
 import logging
 import os
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
 
@@ -737,10 +738,17 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "sample_group": {
             "name": ["group", "group_name", "dataset", "id"],
             "doi": ["dataset_doi", "group_doi"],
-            "source_lab": ["lab", "lab_name", "source"],
+            "source_lab": ["lab", "lab_name", "source", "center"],
             "contact_email": ["email", "lab_email", "contact"],
             "contact_phone": ["phone", "lab_phone"],
-            "total_samples": ["samples", "sample_count", "n_samples"],
+            "total_samples": [
+                "samples",
+                "sample_count",
+                "n_samples",
+                "n",
+                "num_samples",
+                "number_of_samples",
+            ],
             "inclusion_criteria": ["inclusion", "inclusioncriteria"],
             "exclusion_criteria": ["exclusion", "exclusioncriteria"],
             "comments": ["description", "notes"],

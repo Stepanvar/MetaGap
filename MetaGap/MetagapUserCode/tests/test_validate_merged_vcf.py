@@ -1,3 +1,4 @@
+import gzip
 import importlib.util
 from pathlib import Path
 
@@ -34,6 +35,27 @@ def test_validate_merged_vcf_missing_info_is_tolerated(tmp_path, capsys):
     vcf_path.write_text(vcf_content)
 
     module.validate_merged_vcf(str(vcf_path))
+
+    captured = capsys.readouterr()
+    assert "Validation completed successfully" in captured.out
+
+
+def test_validate_merged_vcf_supports_bgzipped_input(tmp_path, capsys):
+    module = load_user_module()
+
+    vcf_content = """##fileformat=VCFv4.2
+##reference=GRCh38
+##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count in genotypes\">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
+1\t2000\trs2\tC\tT\t.\tPASS\tAC=1
+"""
+
+    gz_path = tmp_path / "anonymized.vcf.gz"
+
+    with gzip.open(gz_path, "wt") as handle:
+        handle.write(vcf_content)
+
+    module.validate_merged_vcf(str(gz_path))
 
     captured = capsys.readouterr()
     assert "Validation completed successfully" in captured.out

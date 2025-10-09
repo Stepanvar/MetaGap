@@ -1,5 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
+
+# activate project env
+if ! command -v conda >/dev/null 2>&1; then
+  echo "conda not found in PATH"; exit 1
+fi
+# shell integration for non-interactive shells
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate "$(pwd)/.conda/env"
+
+# hard fail if tools missing
+for t in bcftools bgzip tabix; do
+  command -v "$t" >/dev/null || { echo "Missing tool: $t"; exit 1; }
+done
+
 
 # Minimal Joint Calling Pipeline Script
 # Usage: joint_call_mvp.sh <input_vcf_dir> <metadata_template.txt> <output_dir>
@@ -35,6 +49,25 @@ if [[ "${#VCF_LIST[@]}" -eq 0 ]]; then
     echo "ERROR: No VCF files found in $IN_DIR"
     exit 1
 fi
+
+echo "Ensuring all VCFs are bgzipped and indexed..."
+# Build a fresh list of gzipped, indexed inputs
+PREPARED_LIST=()
+for f in "${VCF_LIST[@]}"; do
+  g="$f"
+  if [[ "$f" == *.vcf ]]; then
+    bgzip -f "$f"
+    g="$f.gz"
+  fi
+  tabix -f -p vcf "$g"
+  PREPARED_LIST+=("$g")
+done
+VCF_LIST=("${PREPARED_LIST[@]}")
+
+echo "Check *.vcf files"
+for g in "${VCF_LIST[@]}"; do
+  bcftools view -h "$g" >/dev/null || exit 1
+done
 
 echo "Found ${#VCF_LIST[@]} VCF files. Merging them into a combined VCF..."
 # Merge all VCFs, preserving all alleles/genotypes (-m all)

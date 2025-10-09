@@ -1,0 +1,11 @@
+prefix=/workspaces/MetaGap/MetaGap/MetagapUserCode/.conda/env
+exec_prefix=/workspaces/MetaGap/MetaGap/MetagapUserCode/.conda/env
+libdir=/workspaces/MetaGap/MetaGap/MetagapUserCode/.conda/env/lib
+includedir=/workspaces/MetaGap/MetaGap/MetagapUserCode/.conda/env/include
+GSL_CBLAS_LIB=-lgslcblas
+
+Name: GSL
+Description: GNU Scientific Library
+Version: 2.7
+Libs: -L/workspaces/MetaGap/MetaGap/MetagapUserCode/.conda/env/lib -lgsl ${GSL_CBLAS_LIB} -lm -lcblas -lm
+Cflags: -I/workspaces/MetaGap/MetaGap/MetagapUserCode/.conda/env/include

@@ -322,19 +322,22 @@
     "pk": 1,
     "fields": {
       "aa": "K",
-      "ac": "12",
-      "af": "0.24",
-      "an": "50",
+      "ac": 12,
+      "af": 0.24,
+      "an": 50,
       "bq": "35",
       "cigar": null,
       "db": "dbSNP",
-      "dp": "120",
+      "dp": 120,
       "end": null,
       "h2": null,
       "h3": null,
-      "mq": "60",
+      "mq": 60.0,
       "mq0": "0",
       "ns": "25",
+      "qd": 18.5,
+      "fs": 22.1,
+      "sor": 2.3,
       "sb": "0.02",
       "additional": {
         "clinvar_significance": "Pathogenic"
@@ -346,19 +349,22 @@
     "pk": 2,
     "fields": {
       "aa": "R",
-      "ac": "4",
-      "af": "0.08",
-      "an": "48",
+      "ac": 4,
+      "af": 0.08,
+      "an": 48,
       "bq": "32",
       "cigar": null,
       "db": "gnomAD",
-      "dp": "85",
+      "dp": 85,
       "end": null,
       "h2": null,
       "h3": null,
-      "mq": "58",
+      "mq": 58.0,
       "mq0": "1",
       "ns": "20",
+      "qd": 16.2,
+      "fs": 18.7,
+      "sor": 2.1,
       "sb": "0.10",
       "additional": {
         "clinvar_significance": "VUS"
@@ -370,19 +376,22 @@
     "pk": 3,
     "fields": {
       "aa": "L",
-      "ac": "8",
-      "af": "0.16",
-      "an": "50",
+      "ac": 8,
+      "af": 0.16,
+      "an": 50,
       "bq": "30",
       "cigar": null,
       "db": "ENA",
-      "dp": "210",
+      "dp": 210,
       "end": null,
       "h2": null,
       "h3": null,
-      "mq": "48",
+      "mq": 48.0,
       "mq0": "3",
       "ns": "40",
+      "qd": 14.0,
+      "fs": 12.4,
+      "sor": 1.8,
       "sb": "0.12",
       "additional": {
         "microbiome_relevance": "Bacteroides fragilis toxin variant"
@@ -569,42 +578,6 @@
     }
   },
   {
-    "model": "app.platformindependent",
-    "pk": 1,
-    "fields": {
-      "pooling": "8 samples per lane",
-      "sequencing_kit": "Illumina SP kit",
-      "base_calling_alg": "Dragen 4.3",
-      "q30": "93%",
-      "normalized_coverage": "45x",
-      "run_specific_calibration": "Standard"
-    }
-  },
-  {
-    "model": "app.platformindependent",
-    "pk": 2,
-    "fields": {
-      "pooling": "3 libraries",
-      "sequencing_kit": "ONT Ligation kit",
-      "base_calling_alg": "Guppy 6.5",
-      "q30": "85%",
-      "normalized_coverage": "35x",
-      "run_specific_calibration": "Adaptive sampling"
-    }
-  },
-  {
-    "model": "app.platformindependent",
-    "pk": 3,
-    "fields": {
-      "pooling": "24 amplicons",
-      "sequencing_kit": "Swift 16S Kit",
-      "base_calling_alg": "Qiime2 DADA2",
-      "q30": "88%",
-      "normalized_coverage": "20k reads/sample",
-      "run_specific_calibration": "Microbiome controls"
-    }
-  },
-  {
     "model": "app.referencegenomebuild",
     "pk": 1,
     "fields": {
@@ -656,7 +629,6 @@
       "ont_seq": null,
       "pacbio_seq": 1,
       "iontorrent_seq": 1,
-      "platform_independent": 1,
       "bioinfo_alignment": 1,
       "bioinfo_variant_calling": 1,
       "bioinfo_post_proc": 1
@@ -678,7 +650,6 @@
       "ont_seq": 2,
       "pacbio_seq": null,
       "iontorrent_seq": null,
-      "platform_independent": 2,
       "bioinfo_alignment": 2,
       "bioinfo_variant_calling": 2,
       "bioinfo_post_proc": 2
@@ -700,7 +671,6 @@
       "ont_seq": 3,
       "pacbio_seq": 2,
       "iontorrent_seq": 2,
-      "platform_independent": 3,
       "bioinfo_alignment": 3,
       "bioinfo_variant_calling": 3,
       "bioinfo_post_proc": 3

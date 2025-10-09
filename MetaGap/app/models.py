@@ -141,21 +141,6 @@ class IonTorrentSeq(SequencingInstrument):
         return f"Ion Torrent - {self.instrument}, Chip Type: {self.chip_type}"
 
 
-class PlatformIndependent(models.Model):
-    """Platform-independent sequencing details."""
-
-    instrument = models.CharField(max_length=100, blank=True, null=True)
-    pooling = models.CharField(max_length=100, blank=True, null=True)
-    sequencing_kit = models.CharField(max_length=100, blank=True, null=True)
-    base_calling_alg = models.CharField(max_length=100, blank=True, null=True)
-    q30 = models.CharField(max_length=50, blank=True, null=True)
-    normalized_coverage = models.CharField(max_length=100, blank=True, null=True)
-    run_specific_calibration = models.CharField(max_length=100, blank=True, null=True)
-
-    def __str__(self) -> str:
-        return f"Pooling: {self.pooling}, Sequencing Kit: {self.sequencing_kit}"
-
-
 class BioinfoAlignment(models.Model):
     """Bioinformatics alignment settings."""
 
@@ -210,19 +195,22 @@ class Info(models.Model):
     """Representation of INFO fields in a VCF file."""
 
     aa = models.CharField(max_length=50, blank=True, null=True)
-    ac = models.CharField(max_length=50, blank=True, null=True)
-    af = models.CharField(max_length=50, blank=True, null=True)
-    an = models.CharField(max_length=50, blank=True, null=True)
+    ac = models.IntegerField(blank=True, null=True)
+    af = models.FloatField(blank=True, null=True)
+    an = models.IntegerField(blank=True, null=True)
     bq = models.CharField(max_length=50, blank=True, null=True)
     cigar = models.CharField(max_length=50, blank=True, null=True)
     db = models.CharField(max_length=50, blank=True, null=True)
-    dp = models.CharField(max_length=50, blank=True, null=True)
+    dp = models.IntegerField(blank=True, null=True)
     end = models.CharField(max_length=50, blank=True, null=True)
     h2 = models.CharField(max_length=50, blank=True, null=True)
     h3 = models.CharField(max_length=50, blank=True, null=True)
-    mq = models.CharField(max_length=50, blank=True, null=True)
+    mq = models.FloatField(blank=True, null=True)
     mq0 = models.CharField(max_length=50, blank=True, null=True)
     ns = models.CharField(max_length=50, blank=True, null=True)
+    qd = models.FloatField(blank=True, null=True)
+    fs = models.FloatField(blank=True, null=True)
+    sor = models.FloatField(blank=True, null=True)
     sb = models.CharField(max_length=50, blank=True, null=True)
     additional = models.JSONField(blank=True, null=True)
 
@@ -329,12 +317,6 @@ class SampleGroup(models.Model):
         null=True,
         blank=True,
     )
-    platform_independent = models.ForeignKey(
-        PlatformIndependent,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
     bioinfo_alignment = models.ForeignKey(
         BioinfoAlignment,
         on_delete=models.SET_NULL,
@@ -370,7 +352,6 @@ class SampleGroup(models.Model):
             "ont_seq",
             "pacbio_seq",
             "iontorrent_seq",
-            "platform_independent",
             "bioinfo_alignment",
             "bioinfo_variant_calling",
             "bioinfo_post_proc",
@@ -409,8 +390,6 @@ class AlleleFrequency(models.Model):
         SampleGroup,
         on_delete=models.CASCADE,
         related_name="allele_frequencies",
-        blank=True,
-        null=True,
     )
     chrom = models.CharField(max_length=10)
     pos = models.IntegerField()
@@ -422,6 +401,18 @@ class AlleleFrequency(models.Model):
     info = models.ForeignKey(Info, on_delete=models.CASCADE, blank=True, null=True)
     format = models.ForeignKey(Format, on_delete=models.CASCADE, blank=True, null=True)
     comments = models.TextField(blank=True, null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["sample_group", "chrom", "pos"]),
+            models.Index(fields=["variant_id"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sample_group", "chrom", "pos", "ref", "alt"],
+                name="allele_frequency_unique_variant",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.chrom}:{self.pos} {self.ref}>{self.alt}"

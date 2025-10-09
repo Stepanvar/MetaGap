@@ -28,7 +28,6 @@ from ..models import (
     MaterialType,
     OntSeq,
     PacBioSeq,
-    PlatformIndependent,
     ReferenceGenomeBuild,
     SampleGroup,
     SampleOrigin,
@@ -62,11 +61,6 @@ class SampleGroupTestDataMixin:
             kit="MetaPrep",
             fragmentation="Acoustic",
             adapter_ligation_efficiency="95%",
-        )
-        platform_independent = PlatformIndependent.objects.create(
-            instrument="NovaSeq",
-            pooling="Single",
-            sequencing_kit="v3 Chemistry",
         )
         illumina_seq = IlluminaSeq.objects.create(
             instrument="NovaSeq 6000",
@@ -116,7 +110,6 @@ class SampleGroupTestDataMixin:
             sample_origin=sample_origin,
             material_type=material_type,
             library_construction=library_construction,
-            platform_independent=platform_independent,
             illumina_seq=illumina_seq,
             ont_seq=ont_seq,
             pacbio_seq=pacbio_seq,
@@ -714,7 +707,7 @@ class ImportDataViewTests(TestCase):
         self.assertEqual(allele.chrom, "1")
         self.assertEqual(allele.pos, 1234)
         self.assertEqual(allele.variant_id, "rsTest")
-        self.assertEqual(allele.info.af, "0.5")
+        self.assertAlmostEqual(allele.info.af, 0.5)
         self.assertEqual(allele.info.additional["clnsig"], "Pathogenic")
         self.assertEqual(allele.format.genotype, "0/1")
         self.assertEqual(allele.format.fields["gq"], "99")

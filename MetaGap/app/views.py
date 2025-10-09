@@ -516,8 +516,38 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        sample_group_field_names = [
+            field.name
+            for field in SampleGroup._meta.get_fields()
+            if isinstance(field, django_models.Field) and not field.auto_created
+        ]
+        exclude_columns = [
+            "sample_group",
+            "sample_group__id",
+            *[f"sample_group__{name}" for name in sample_group_field_names],
+            "info__id",
+            "info__additional",
+            "format__id",
+            "format__payload",
+        ]
+        priority_columns = [
+            "chrom",
+            "pos",
+            "variant_id",
+            "ref",
+            "alt",
+            "qual",
+            "filter",
+            "info__af",
+            "info__dp",
+            "format__genotype",
+        ]
         table_class = create_dynamic_table(
-            AlleleFrequency, table_name="AlleleFrequencyTable", include_related=True
+            AlleleFrequency,
+            table_name="AlleleFrequencyTable",
+            include_related=True,
+            priority_fields=priority_columns,
+            exclude_fields=exclude_columns,
         )
         allele_qs = self.object.allele_frequencies.all()
         table = table_class(allele_qs)

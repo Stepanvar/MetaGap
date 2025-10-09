@@ -45,7 +45,9 @@
                 <span class="text-muted">{{ variant_table.rows|length }} variants</span>
             </div>
             {% if variant_table.rows %}
-                {% render_table variant_table %}
+                <div class="table-responsive">
+                    {% render_table variant_table %}
+                </div>
             {% else %}
                 <p class="text-muted mb-0">No variant data has been imported for this sample group yet.</p>
             {% endif %}

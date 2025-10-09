@@ -11,7 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.urls import NoReverseMatch, reverse
 
-from ..filters import SampleGroupFilter
+from ..filters import AlleleFrequencySearchFilter
 from ..forms import ImportDataForm, SearchForm
 from ..models import (
     AlleleFrequency,
@@ -316,61 +316,164 @@ class SearchResultsViewTests(TestCase):
             storage_conditions="Room Temperature",
         )
 
+        self.variant_caller_a = BioinfoVariantCalling.objects.create(tool="CallerA")
+        self.variant_caller_b = BioinfoVariantCalling.objects.create(tool="CallerB")
+
         self.kidney_group = SampleGroup.objects.create(
             name="Kidney Cohort",
+            source_lab="Lab One",
             sample_origin=self.kidney_origin,
+            bioinfo_variant_calling=self.variant_caller_a,
             created_by=self.user.organization_profile,
         )
         self.liver_group = SampleGroup.objects.create(
             name="Liver Cohort",
+            source_lab="Lab Two",
             sample_origin=self.liver_origin,
+            bioinfo_variant_calling=self.variant_caller_b,
             created_by=self.user.organization_profile,
         )
 
-    def test_search_query_filters_expected_sample_group(self) -> None:
+        self.format = Format.objects.create(genotype="0/1")
+
+        self.kidney_info_high = Info.objects.create(
+            af="0.15",
+            ac="12",
+            an="80",
+            dp="55",
+            mq="60",
+        )
+        self.kidney_info_low = Info.objects.create(
+            af="0.05",
+            ac="4",
+            an="60",
+            dp="35",
+            mq="45",
+        )
+        self.liver_info = Info.objects.create(
+            af="0.22",
+            ac="18",
+            an="90",
+            dp="70",
+            mq="58",
+        )
+
+        self.kidney_variant_pass = AlleleFrequency.objects.create(
+            sample_group=self.kidney_group,
+            chrom="1",
+            pos=150,
+            ref="A",
+            alt="T",
+            qual=180.5,
+            filter="PASS",
+            info=self.kidney_info_high,
+            format=self.format,
+        )
+        self.kidney_variant_filtered = AlleleFrequency.objects.create(
+            sample_group=self.kidney_group,
+            chrom="2",
+            pos=300,
+            ref="C",
+            alt="G",
+            qual=75.0,
+            filter="q10",
+            info=self.kidney_info_low,
+            format=self.format,
+        )
+        self.liver_variant = AlleleFrequency.objects.create(
+            sample_group=self.liver_group,
+            chrom="3",
+            pos=400,
+            ref="G",
+            alt="A",
+            qual=95.2,
+            filter="PASS",
+            info=self.liver_info,
+            format=self.format,
+        )
+
+    def test_query_filters_variants_and_prioritises_columns(self) -> None:
         response = self.client.get(reverse("search_results"), {"query": "Kidney"})
 
         self.assertEqual(response.status_code, 200)
 
         table = response.context["table"]
-        self.assertEqual([row.record for row in table.rows], [self.kidney_group])
+        records = [row.record for row in table.rows]
+        self.assertEqual(records, [self.kidney_variant_pass, self.kidney_variant_filtered])
 
-        sample_filter = response.context["filter"]
-        self.assertIsInstance(sample_filter, SampleGroupFilter)
-        self.assertEqual(sample_filter.data.get("query"), "Kidney")
-        self.assertQuerySetEqual(
-            sample_filter.qs,
-            [self.kidney_group],
-            transform=lambda group: group,
+        filterset = response.context["filter"]
+        self.assertIsInstance(filterset, AlleleFrequencySearchFilter)
+        self.assertEqual(filterset.form["query"].value(), "Kidney")
+
+        column_names = [column.name for column in table.columns]
+        self.assertEqual(
+            column_names[:11],
+            [
+                "chrom",
+                "pos",
+                "ref",
+                "alt",
+                "qual",
+                "filter",
+                "info__af",
+                "info__ac",
+                "info__an",
+                "info__dp",
+                "info__mq",
+            ],
         )
 
-        form = response.context["form"]
-        self.assertIsInstance(form, SearchForm)
-        self.assertEqual(form.data.get("query"), "Kidney")
-
-    def test_empty_query_returns_all_records(self) -> None:
-        response = self.client.get(reverse("search_results"), {"query": ""})
+    def test_combined_filters_reduce_results(self) -> None:
+        response = self.client.get(
+            reverse("search_results"),
+            {
+                "chrom": "1",
+                "pos_min": 100,
+                "pos_max": 400,
+                "pass_only": "on",
+                "af_min": 0.1,
+                "mq_min": 55,
+                "sample_group_source_lab": "Lab One",
+                "variant_calling_tool": "CallerA",
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
-
         table = response.context["table"]
-        self.assertCountEqual(
-            [row.record for row in table.rows],
-            [self.kidney_group, self.liver_group],
-        )
+        records = [row.record for row in table.rows]
+        self.assertEqual(records, [self.kidney_variant_pass])
 
-        sample_filter = response.context["filter"]
-        self.assertIsInstance(sample_filter, SampleGroupFilter)
-        self.assertEqual(sample_filter.data.get("query"), "")
-        self.assertQuerySetEqual(
-            sample_filter.qs.order_by("pk"),
-            SampleGroup.objects.order_by("pk"),
-            transform=lambda group: group,
-        )
+        filterset = response.context["filter"]
+        self.assertEqual(filterset.form["chrom"].value(), "1")
+        self.assertEqual(filterset.form["sample_group_source_lab"].value(), "Lab One")
 
-        form = response.context["form"]
-        self.assertIsInstance(form, SearchForm)
-        self.assertEqual(form.data.get("query"), "")
+    def test_pagination_limits_results_to_ten(self) -> None:
+        # Create additional variants to exceed a single page of results.
+        for index in range(9):
+            info = Info.objects.create(af="0.30", ac=str(index + 1), an="50", dp="40", mq="55")
+            AlleleFrequency.objects.create(
+                sample_group=self.kidney_group,
+                chrom="4",
+                pos=500 + index,
+                ref="T",
+                alt="C",
+                qual=88.0,
+                filter="PASS",
+                info=info,
+                format=self.format,
+            )
+
+        response = self.client.get(reverse("search_results"))
+
+        self.assertEqual(response.status_code, 200)
+        page_obj = response.context["page_obj"]
+        self.assertEqual(page_obj.paginator.per_page, 10)
+        self.assertEqual(page_obj.paginator.count, AlleleFrequency.objects.count())
+        self.assertEqual(len(page_obj.object_list), 10)
+
+        filterset = response.context["filter"]
+        self.assertIsInstance(filterset, AlleleFrequencySearchFilter)
+        self.assertIn("filter_form", response.context)
 
 
 class DashboardViewTests(TestCase):

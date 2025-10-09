@@ -153,7 +153,6 @@ class SearchResultsView(SingleTableMixin, FilterView):
                 "sample_group__ont_seq",
                 "sample_group__pacbio_seq",
                 "sample_group__iontorrent_seq",
-                "sample_group__platform_independent",
                 "sample_group__bioinfo_alignment",
                 "sample_group__bioinfo_variant_calling",
                 "sample_group__bioinfo_post_proc",

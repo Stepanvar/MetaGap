@@ -122,6 +122,10 @@ class SampleGroupTestDataMixin:
 
         info = Info.objects.create(
             af="0.5",
+            ac="5",
+            an="10",
+            dp="150",
+            mq="60",
             additional={"clinvar_significance": "Pathogenic"},
         )
         fmt = Format.objects.create(
@@ -677,11 +681,16 @@ class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
         expected_prefix = [
             "chrom",
             "pos",
-            "variant_id",
             "ref",
             "alt",
             "qual",
             "filter",
+            "info__af",
+            "info__ac",
+            "info__an",
+            "info__dp",
+            "info__mq",
+            "variant_id",
         ]
         self.assertGreaterEqual(len(header_names), len(expected_prefix))
         self.assertEqual(header_names[: len(expected_prefix)], expected_prefix)
@@ -691,6 +700,11 @@ class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
         self.assertIn(str(self.allele.pos), table_html)
         self.assertIn(self.allele.ref, table_html)
         self.assertIn(self.allele.alt, table_html)
+        self.assertIn(self.allele.info.af, table_html)
+        self.assertIn(self.allele.info.ac, table_html)
+        self.assertIn(self.allele.info.an, table_html)
+        self.assertIn(self.allele.info.dp, table_html)
+        self.assertIn(self.allele.info.mq, table_html)
 
 
 class SampleGroupExportViewTests(SampleGroupTestDataMixin, TestCase):

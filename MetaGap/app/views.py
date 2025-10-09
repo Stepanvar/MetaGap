@@ -559,13 +559,16 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
         priority_columns = [
             "chrom",
             "pos",
-            "variant_id",
             "ref",
             "alt",
             "qual",
             "filter",
             "info__af",
+            "info__ac",
+            "info__an",
             "info__dp",
+            "info__mq",
+            "variant_id",
             "format__genotype",
         ]
         table_class = create_dynamic_table(

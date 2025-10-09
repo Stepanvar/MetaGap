@@ -1236,6 +1236,67 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 return candidate
         return None
 
+    @staticmethod
+    def _split_sample_attributes(content: str) -> Iterable[str]:
+        items: list[str] = []
+        current: list[str] = []
+        quote_char: Optional[str] = None
+        escape = False
+        bracket_stack: list[str] = []
+        opening = {"{": "}", "[": "]", "(": ")"}
+        closing = {value: key for key, value in opening.items()}
+
+        for char in content:
+            if quote_char:
+                current.append(char)
+                if escape:
+                    escape = False
+                    continue
+                if char == "\\":
+                    escape = True
+                    continue
+                if char == quote_char:
+                    quote_char = None
+                continue
+
+            if char in {'"', "'"}:
+                quote_char = char
+                current.append(char)
+                continue
+
+            if char in opening:
+                bracket_stack.append(char)
+                current.append(char)
+                continue
+
+            if char in closing:
+                if bracket_stack and bracket_stack[-1] == closing[char]:
+                    bracket_stack.pop()
+                current.append(char)
+                continue
+
+            if char == "," and not bracket_stack:
+                item = "".join(current).strip()
+                if item:
+                    items.append(item)
+                current = []
+                continue
+
+            current.append(char)
+
+        tail = "".join(current).strip()
+        if tail:
+            items.append(tail)
+
+        return items
+
+    @staticmethod
+    def _normalize_metadata_value(value: str) -> str:
+        stripped = value.strip()
+        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
+            return stripped[1:-1]
+        return stripped
+
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -1249,11 +1310,11 @@ class ImportDataView(LoginRequiredMixin, FormView):
                     if start == -1 or end == -1 or end <= start:
                         continue
                     content = stripped[start + 1 : end]
-                    for item in content.split(","):
+                    for item in self._split_sample_attributes(content):
                         if "=" not in item:
                             continue
                         key, value = item.split("=", 1)
-                        metadata[key.lower()] = value
+                        metadata[key.lower()] = self._normalize_metadata_value(value)
                     metadata.setdefault("name", metadata.get("id"))
                 if stripped.startswith("#CHROM"):
                     break

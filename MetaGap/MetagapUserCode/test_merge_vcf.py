@@ -404,6 +404,29 @@ def apply_metadata_to_header(
     return header
 
 
+def _validate_anonymized_vcf_header(final_vcf_path, ensure_for_uncompressed=False):
+    """Use ``bcftools`` to confirm that ``final_vcf_path`` has a readable header."""
+
+    if not final_vcf_path:
+        return
+
+    requires_validation = ensure_for_uncompressed or final_vcf_path.endswith(".vcf.gz")
+    if not requires_validation:
+        return
+
+    try:
+        subprocess.run(
+            ["bcftools", "view", "-h", final_vcf_path],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        handle_critical_error(
+            f"Failed to read header from anonymized VCF using bcftools: {exc}"
+        )
+
+
 def append_metadata_to_merged_vcf(
     merged_vcf,
     sample_metadata_entries=None,
@@ -592,7 +615,20 @@ def append_metadata_to_merged_vcf(
             for line in body_handle:
                 body_lines.append(line.rstrip("\n"))
 
-        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
+        is_gzipped_output = False
+        if merged_vcf.endswith(".vcf.gz"):
+            base = merged_vcf[: -len(".vcf.gz")]
+            final_vcf = f"{base}.anonymized.vcf.gz"
+            is_gzipped_output = True
+        else:
+            base, ext = os.path.splitext(merged_vcf)
+            if not ext:
+                ext = ".vcf"
+            final_vcf = f"{base}.anonymized{ext}"
+
+        writer = gzip.open if is_gzipped_output else open
+        open_kwargs = {"mode": "wt", "encoding": "utf-8"} if is_gzipped_output else {"mode": "w", "encoding": "utf-8"}
+        with writer(final_vcf, **open_kwargs) as output_handle:
             for line in final_header_lines:
                 output_handle.write(line + "\n")
             for line in body_lines:
@@ -637,6 +673,8 @@ def append_metadata_to_merged_vcf(
         final_vcf = final_plain_vcf
 
     _cleanup_temp_files()
+
+    _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
 
     log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
     return final_vcf

@@ -33,6 +33,16 @@ import subprocess
 import gzip
 from collections import OrderedDict
 
+if __package__ in {None, ""}:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    if current_dir not in sys.path:
+        sys.path.append(current_dir)
+
+try:  # pragma: no cover - import guard for script/module execution
+    from .io_utils import parse_simple_metadata_line, preprocess_vcf
+except ImportError:  # pragma: no cover - executed when running as a script
+    from io_utils import parse_simple_metadata_line, preprocess_vcf  # type: ignore
+
 try:
     import vcfpy  # type: ignore
     VCFPY_AVAILABLE = True
@@ -362,7 +372,7 @@ def parse_metadata_arguments(args, verbose=False):
             continue
         if not normalized.startswith("##"):
             normalized = "##" + normalized
-        parsed = _parse_simple_metadata_line(normalized)
+        parsed = parse_simple_metadata_line(normalized)
         if not parsed:
             handle_critical_error(
                 f"Additional metadata '{raw_line}' must be in '##key=value' format."
@@ -1321,61 +1331,6 @@ def merge_vcfs(
 
     log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
     return gz_vcf
-
-def _parse_simple_metadata_line(line):
-    stripped = line.strip()
-    if not stripped.startswith("##") or "=" not in stripped:
-        return None
-    key, value = stripped[2:].split("=", 1)
-    key = key.strip()
-    value = value.strip()
-    if not key:
-        return None
-    return key, value
-
-
-def preprocess_vcf(file_path):
-    """
-    Check if the VCF file uses spaces instead of tabs for the column header and data lines.
-    If so, create a temporary file where the column header (#CHROM) and all subsequent lines 
-    are converted to be tab-delimited. Lines starting with "##" (metadata) are left unchanged.
-    Returns the path to the file to be used (original or temporary).
-    """
-    import re
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-    
-    modified = False
-    new_lines = []
-    header_found = False  # indicates when the column header has been encountered
-    for line in lines:
-        if line.startswith("##"):
-            # Do not change metadata lines (they may contain spaces that are part of the value)
-            new_lines.append(line)
-        elif line.startswith("#"):
-            # This is the column header line (e.g. "#CHROM ...")
-            new_line = re.sub(r'\s+', '\t', line.rstrip()) + "\n"
-            new_lines.append(new_line)
-            header_found = True
-            if new_line != line:
-                modified = True
-        else:
-            # Data lines: once header_found is True, convert spaces to tabs.
-            if header_found:
-                new_line = re.sub(r'\s+', '\t', line.rstrip()) + "\n"
-                new_lines.append(new_line)
-                if new_line != line:
-                    modified = True
-            else:
-                new_lines.append(line)
-    
-    if modified:
-        temp_file = file_path + ".tmp"
-        with open(temp_file, 'w') as f:
-            f.writelines(new_lines)
-        return temp_file
-    else:
-        return file_path
 
 
 

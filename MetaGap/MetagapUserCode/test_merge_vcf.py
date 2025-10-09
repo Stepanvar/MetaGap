@@ -29,9 +29,22 @@ import gzip
 from collections import OrderedDict
 
 try:
-    import vcfpy
-except ImportError:
-    sys.exit("Error: vcfpy package is required. Please install it with 'pip install vcfpy'.")
+    import vcfpy  # type: ignore
+    VCFPY_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised when dependency is missing
+    VCFPY_AVAILABLE = False
+
+    class _MissingVcfpyModule:
+        """Placeholder that raises a helpful error when vcfpy is unavailable."""
+
+        __slots__ = ()
+
+        def __getattr__(self, name):  # pragma: no cover - defensive, attribute driven
+            raise ModuleNotFoundError(
+                "Error: vcfpy package is required. Please install it with 'pip install vcfpy'."
+            )
+
+    vcfpy = _MissingVcfpyModule()  # type: ignore
 
 # Configure logging
 LOG_FILE = "script_execution.log"
@@ -420,6 +433,28 @@ def append_metadata_to_merged_vcf(
     header_temp = f"{merged_vcf}.header.temp"
     body_temp = f"{merged_vcf}.body.temp"
 
+    expects_gzip = merged_vcf.endswith(".gz")
+    final_plain_vcf = None
+    final_vcf = None
+
+    if merged_vcf.endswith(".vcf.gz"):
+        base_path = merged_vcf[: -len(".vcf.gz")]
+        final_plain_vcf = f"{base_path}.anonymized.vcf"
+        final_vcf = f"{final_plain_vcf}.gz"
+    elif merged_vcf.endswith(".vcf"):
+        base_path = merged_vcf[: -len(".vcf")]
+        final_plain_vcf = f"{base_path}.anonymized.vcf"
+        final_vcf = final_plain_vcf
+    else:
+        base_path, ext = os.path.splitext(merged_vcf)
+        if ext == ".gz":
+            base_path = base_path or merged_vcf[:-3]
+            final_plain_vcf = f"{base_path}.anonymized"
+            final_vcf = f"{final_plain_vcf}.gz"
+        else:
+            final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
+            final_vcf = final_plain_vcf
+
     def _cleanup_temp_files():
         for path in [joint_temp, filtered_temp, header_temp, body_temp]:
             try:
@@ -570,21 +605,49 @@ def append_metadata_to_merged_vcf(
             for line in body_handle:
                 body_lines.append(line.rstrip("\n"))
 
-        base, ext = os.path.splitext(merged_vcf)
-        if not ext:
-            ext = ".vcf"
-        final_vcf = f"{base}.anonymized{ext}"
-
-        with open(final_vcf, "w", encoding="utf-8") as output_handle:
+        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
             for line in final_header_lines:
                 output_handle.write(line + "\n")
             for line in body_lines:
                 output_handle.write(line + "\n")
     except Exception as exc:
         _cleanup_temp_files()
+        if final_plain_vcf and os.path.exists(final_plain_vcf):
+            try:
+                os.remove(final_plain_vcf)
+            except Exception:
+                pass
         handle_critical_error(
             f"Failed to assemble final anonymized VCF contents: {exc}"
         )
+
+    if expects_gzip:
+        try:
+            subprocess.run(["bgzip", "-f", final_plain_vcf], check=True)
+            subprocess.run(["tabix", "-p", "vcf", "-f", final_vcf], check=True)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            _cleanup_temp_files()
+            if os.path.exists(final_plain_vcf):
+                try:
+                    os.remove(final_plain_vcf)
+                except Exception:
+                    pass
+            if os.path.exists(final_vcf):
+                try:
+                    os.remove(final_vcf)
+                except Exception:
+                    pass
+            handle_critical_error(
+                f"Failed to finalize anonymized VCF compression/indexing: {exc}"
+            )
+        finally:
+            if os.path.exists(final_plain_vcf):
+                try:
+                    os.remove(final_plain_vcf)
+                except Exception:
+                    pass
+    else:
+        final_vcf = final_plain_vcf
 
     _cleanup_temp_files()
 
@@ -1114,7 +1177,6 @@ def _pad_record_samples(record, header, sample_order):
 
 
 import os, shutil, subprocess, datetime
-import vcfpy
 
 def merge_vcfs(
     valid_files,
@@ -1309,10 +1371,154 @@ def _has_null_value(value):
     return False
 
 
+def _parse_header_info_definition(line):
+    """Return (id, metadata) parsed from a ##INFO header line."""
+
+    lower = line.lower()
+    if not lower.startswith("##info"):
+        return None, {}
+    start = line.find("<")
+    end = line.rfind(">")
+    if start == -1 or end == -1 or end <= start + 1:
+        return None, {}
+
+    payload = line[start + 1 : end]
+    entries = {}
+    for part in payload.split(","):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        entries[key.strip().upper()] = value.strip()
+
+    info_id = entries.get("ID")
+    if not info_id:
+        return None, {}
+    return info_id, entries
+
+
+def _read_vcf_without_vcfpy(file_path):
+    """Yield header metadata and record lines for a VCF file without vcfpy."""
+
+    opener = gzip.open if str(file_path).endswith(".gz") else open
+    try:
+        with opener(file_path, "rt", encoding="utf-8") as handle:
+            header_lines = []
+            column_header_seen = False
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if not line:
+                    continue
+                if line.startswith("##"):
+                    header_lines.append(line)
+                    continue
+                if line.startswith("#CHROM"):
+                    column_header_seen = True
+                    break
+
+            records = []
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if line.strip():
+                    records.append(line)
+    except OSError as exc:
+        handle_critical_error(f"Could not open {file_path}: {exc}.")
+
+    if not column_header_seen:
+        handle_critical_error(
+            f"Could not open {file_path}: Missing #CHROM header line."
+        )
+
+    return header_lines, records
+
+
+def _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=False):
+    """Fallback validator that performs minimal checks without vcfpy."""
+
+    header_lines, records = _read_vcf_without_vcfpy(merged_vcf)
+
+    normalized_headers = [line.lower() for line in header_lines]
+    if not any(line.startswith("##fileformat=") for line in normalized_headers):
+        handle_critical_error(
+            f"Missing required meta-information: ##fileformat in {merged_vcf} header."
+        )
+    if not any(line.startswith("##reference=") for line in normalized_headers):
+        handle_critical_error(
+            f"Missing required meta-information: ##reference in {merged_vcf} header."
+        )
+
+    info_definitions = {}
+    for line in header_lines:
+        info_id, entries = _parse_header_info_definition(line)
+        if not info_id:
+            continue
+        info_definitions[info_id] = entries
+
+    required_info_ids = {
+        info_id
+        for info_id, entries in info_definitions.items()
+        if _info_field_requires_value(entries.get("NUMBER"))
+    }
+
+    for record_line in records:
+        if record_line.startswith("#"):
+            continue
+        fields = record_line.split("\t")
+        if len(fields) < 8:
+            continue
+        chrom, pos = fields[0], fields[1]
+        record_label = f"{chrom}:{pos}"
+        info_field = fields[7].strip()
+        if info_field in {"", "."}:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} is missing INFO data. Continuing without INFO validation for this record."
+            )
+            continue
+
+        info_map = {}
+        for entry in info_field.split(";"):
+            if not entry:
+                continue
+            if "=" in entry:
+                key, value = entry.split("=", 1)
+                info_map[key] = value
+            else:
+                info_map[entry] = ""
+
+        undefined_keys = sorted(
+            key for key in info_map.keys() if key not in info_definitions
+        )
+        if undefined_keys:
+            logger.warning(
+                "Record %s in %s has INFO fields not present in header definitions: %s.",
+                record_label,
+                merged_vcf,
+                ", ".join(undefined_keys),
+            )
+
+        missing_keys = sorted(required_info_ids.difference(info_map.keys()))
+        if missing_keys:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} is missing required INFO fields: {', '.join(missing_keys)}."
+            )
+
+        null_keys = [key for key, value in info_map.items() if _has_null_value(value)]
+        if null_keys:
+            handle_non_critical_error(
+                f"Record {record_label} in {merged_vcf} has INFO fields with null values: {', '.join(sorted(null_keys))}."
+            )
+
+    log_message(f"Validation completed successfully for merged VCF: {merged_vcf}", verbose)
+    print(f"Validation completed successfully for merged VCF: {merged_vcf}")
+
+
 def validate_merged_vcf(merged_vcf, verbose=False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
         handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
+
+    if not VCFPY_AVAILABLE:
+        _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=verbose)
+        return
 
     reader = None
     gz_stream = None
@@ -1440,6 +1646,171 @@ def validate_merged_vcf(merged_vcf, verbose=False):
             gz_stream.close()
         except Exception:
             pass
+
+
+def _split_genotype_tokens(genotype):
+    """Return individual allele tokens from a genotype string."""
+
+    if genotype is None:
+        return []
+    genotype = str(genotype).strip()
+    if not genotype or genotype == ".":
+        return []
+    normalized = genotype.replace("|", "/")
+    tokens = [token.strip() for token in normalized.split("/")]
+    return [token for token in tokens if token]
+
+
+def _parse_info_items(info_field):
+    """Parse an INFO string into an ordered list of (key, value) pairs."""
+
+    items = []
+    index = {}
+    if not info_field or info_field == ".":
+        return items, index
+    for entry in info_field.split(";"):
+        if entry == "":
+            continue
+        if "=" in entry:
+            key, value = entry.split("=", 1)
+        else:
+            key, value = entry, None
+        index.setdefault(key, len(items))
+        items.append([key, value])
+    return items, index
+
+
+def _set_info_value(items, index, key, value):
+    """Update or append an INFO field value while preserving order."""
+
+    if key in index:
+        items[index[key]][1] = value
+    else:
+        index[key] = len(items)
+        items.append([key, value])
+
+
+def _serialize_info_items(items):
+    if not items:
+        return "."
+    serialized = []
+    for key, value in items:
+        if value is None:
+            serialized.append(key)
+        else:
+            serialized.append(f"{key}={value}")
+    return ";".join(serialized)
+
+
+def _format_af_values(alt_counts, total_called):
+    if total_called <= 0:
+        return "."
+    values = []
+    for count in alt_counts:
+        ratio = count / total_called if total_called else 0.0
+        text = f"{ratio:.6f}".rstrip("0").rstrip(".")
+        values.append(text or "0")
+    return ",".join(values)
+
+
+def _recalculate_info_for_record(line):
+    fields = line.rstrip("\n").split("\t")
+    if len(fields) <= 8:
+        return line.rstrip("\n")
+
+    format_keys = fields[8].split(":") if fields[8] else []
+    alt_alleles = [alt.strip() for alt in fields[4].split(",") if alt.strip()]
+    alt_counts = [0 for _ in alt_alleles]
+    total_called = 0
+
+    for sample_entry in fields[9:]:
+        if not format_keys:
+            break
+        sample_values = sample_entry.split(":")
+        if len(sample_values) < len(format_keys):
+            sample_values.extend([""] * (len(format_keys) - len(sample_values)))
+        sample_map = {
+            key: sample_values[idx]
+            for idx, key in enumerate(format_keys)
+        }
+        genotype = sample_map.get("GT")
+        alleles = _split_genotype_tokens(genotype)
+        called = [allele for allele in alleles if allele not in {".", ""}]
+        if not called:
+            continue
+        total_called += len(called)
+        for allele in called:
+            try:
+                allele_index = int(allele)
+            except ValueError:
+                continue
+            if allele_index <= 0:
+                continue
+            alt_index = allele_index - 1
+            if 0 <= alt_index < len(alt_counts):
+                alt_counts[alt_index] += 1
+
+    info_items, info_index = _parse_info_items(fields[7])
+    if alt_counts:
+        ac_value = ",".join(str(count) for count in alt_counts)
+    else:
+        ac_value = "."
+    an_value = str(total_called) if total_called > 0 else "0"
+    af_value = _format_af_values(alt_counts, total_called)
+
+    _set_info_value(info_items, info_index, "AC", ac_value)
+    _set_info_value(info_items, info_index, "AN", an_value)
+    _set_info_value(info_items, info_index, "AF", af_value)
+
+    fields[7] = _serialize_info_items(info_items)
+    return "\t".join(fields)
+
+
+def recalculate_cohort_info_tags(vcf_path, verbose=False):
+    """Recalculate AC/AN/AF INFO values without relying on external tools."""
+
+    log_message(
+        "Recalculating AC, AN, AF tags across the merged cohort...",
+        verbose,
+    )
+
+    opener = gzip.open if str(vcf_path).endswith(".gz") else open
+    try:
+        with opener(vcf_path, "rt", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError as exc:
+        handle_critical_error(f"Failed to open {vcf_path} for reading: {exc}")
+
+    header_index = None
+    for idx, line in enumerate(lines):
+        if line.startswith("#CHROM"):
+            header_index = idx
+            break
+
+    if header_index is None:
+        handle_critical_error(
+            f"Failed to recalculate cohort INFO tags: {vcf_path} is missing a #CHROM header line."
+        )
+
+    new_lines = list(lines)
+    for idx in range(header_index + 1, len(lines)):
+        line = lines[idx]
+        if not line.strip() or line.startswith("#"):
+            continue
+        newline = "\n" if line.endswith("\n") else ""
+        updated = _recalculate_info_for_record(line.rstrip("\n"))
+        new_lines[idx] = updated + newline
+
+    try:
+        with opener(vcf_path, "wt", encoding="utf-8") as handle:
+            handle.writelines(new_lines)
+    except OSError as exc:
+        handle_critical_error(f"Failed to write updated INFO tags to {vcf_path}: {exc}")
+
+    log_message(
+        f"Successfully recalculated cohort INFO tags for {vcf_path}",
+        verbose,
+    )
 
 
 def main():

@@ -2,6 +2,7 @@
 
 import csv
 import json
+import logging
 import os
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
@@ -60,6 +61,9 @@ from .models import (
     SampleOrigin,
 )
 from .tables import create_dynamic_table
+
+
+logger = logging.getLogger(__name__)
 
 class SampleGroupTableView(ListView):
     """Display a django-tables2 listing of sample groups."""
@@ -688,6 +692,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
         "SAMPLE_GROUP": "sample_group",
         "SAMPLEGROUP": "sample_group",
         "GROUP": "sample_group",
+        "SAMPLE": "sample_group",
         "REFERENCE_GENOME_BUILD": "reference_genome_build",
         "REFERENCE_GENOME": "reference_genome_build",
         "REFERENCE": "reference_genome_build",
@@ -1286,7 +1291,12 @@ class ImportDataView(LoginRequiredMixin, FormView):
     def _normalize_metadata_value(value: str) -> str:
         stripped = value.strip()
         if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
-            return stripped[1:-1]
+            stripped = stripped[1:-1]
+        if "\\" in stripped:
+            try:
+                stripped = bytes(stripped, "utf-8").decode("unicode_escape")
+            except UnicodeDecodeError:  # pragma: no cover - defensive decoding
+                pass
         return stripped
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
@@ -1422,13 +1432,105 @@ class ImportDataView(LoginRequiredMixin, FormView):
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         for record in vcf_in.header.records:
-            if record.key == "SAMPLE":
-                metadata.setdefault("name", record.get("ID"))
-                for key, value in record.items():
-                    if key == "ID":
-                        continue
-                    metadata[key.lower()] = value
+            key = (record.key or "").upper()
+            if key == "SEQUENCING_PLATFORM":
+                self._ingest_sequencing_platform_record(metadata, record)
+                continue
+
+            section = self.METADATA_SECTION_MAP.get(key)
+            if not section:
+                continue
+
+            items = self._collect_record_items(record)
+            self._process_metadata_section(metadata, section, items)
+
+        if "name" not in metadata and "sample_group_name" in metadata:
+            metadata["name"] = metadata["sample_group_name"]
         return metadata
+
+    def _ingest_sequencing_platform_record(
+        self, metadata: Dict[str, Any], record: pysam.libcbcf.VariantHeaderRecord
+    ) -> None:
+        items = self._collect_record_items(record)
+        platform_value = None
+        for candidate in ("platform", "Platform"):
+            if candidate in items:
+                platform_value = items[candidate]
+                break
+
+        section = self._determine_platform_section(platform_value)
+        if not section:
+            logger.warning(
+                "Unsupported sequencing platform %r; storing raw metadata only.",
+                platform_value,
+            )
+            section = "platform_independent"
+
+        self._process_metadata_section(metadata, section, items)
+
+    def _determine_platform_section(self, platform_value: Any) -> Optional[str]:
+        if not platform_value:
+            return None
+
+        normalized = str(platform_value).strip().lower()
+        if "illumina" in normalized:
+            return "illumina_seq"
+        if "nanopore" in normalized or "ont" in normalized or "oxford" in normalized:
+            return "ont_seq"
+        if "pacbio" in normalized or "sequel" in normalized or "revio" in normalized:
+            return "pacbio_seq"
+        if "ion" in normalized:
+            return "iontorrent_seq"
+        return None
+
+    def _collect_record_items(
+        self, record: pysam.libcbcf.VariantHeaderRecord
+    ) -> Dict[str, Any]:
+        collected: Dict[str, Any] = {}
+        for key, value in record.items():
+            normalized_key = str(key)
+            if isinstance(value, str):
+                normalized_value = self._normalize_metadata_value(value)
+            else:
+                normalized_value = value
+            collected[normalized_key] = normalized_value
+        return collected
+
+    def _process_metadata_section(
+        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
+    ) -> None:
+        alias_lookup: Dict[str, str] = {}
+        for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
+            alias_lookup[field_name.lower()] = field_name
+            for alias in aliases:
+                alias_lookup[alias.lower()] = field_name
+
+        recognized: Dict[str, Any] = {}
+        leftovers: Dict[str, Any] = {}
+
+        for raw_key, value in items.items():
+            normalized_key = raw_key.lower()
+            canonical = alias_lookup.get(normalized_key)
+            if canonical:
+                recognized[canonical] = value
+            else:
+                leftovers[normalized_key] = value
+
+        for field_name, value in recognized.items():
+            metadata_key = f"{section}_{field_name}"
+            metadata[metadata_key] = value
+            if section == "sample_group":
+                if field_name == "name" and value is not None:
+                    metadata.setdefault("name", value)
+                elif field_name == "comments" and value is not None:
+                    metadata.setdefault("comments", value)
+
+        for raw_key, value in leftovers.items():
+            metadata_key = f"{section}_{raw_key}"
+            metadata[metadata_key] = value
+            logger.warning(
+                "Unhandled metadata key '%s' in section '%s'", raw_key, section
+            )
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)

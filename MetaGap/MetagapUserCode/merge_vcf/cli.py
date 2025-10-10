@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import glob
+import logging
 import os
 import shutil
 
@@ -12,8 +13,10 @@ from .logging_utils import (
     MergeConflictError,
     MergeVCFError,
     ValidationError,
+    configure_logging,
     handle_critical_error,
     log_message,
+    LOG_FILE,
 )
 from .metadata import append_metadata_to_merged_vcf, load_metadata_lines
 from .merging import merge_vcfs
@@ -113,6 +116,24 @@ def main():
     verbose = args.verbose
 
     try:
+        input_dir = os.path.abspath(args.input_dir)
+        if not os.path.isdir(input_dir):
+            handle_critical_error(
+                f"Input directory does not exist: {input_dir}",
+                exc_cls=ValidationError,
+            )
+
+        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
+        log_path = os.path.join(output_dir, LOG_FILE)
+        configure_logging(
+            log_level=logging.DEBUG if verbose else logging.INFO,
+            log_file=log_path,
+            enable_file_logging=True,
+        )
+
         metadata_header_lines = load_metadata_lines(args.metadata_file, verbose)
 
         log_message(
@@ -121,17 +142,8 @@ def main():
             verbose,
         )
 
-        input_dir = os.path.abspath(args.input_dir)
-        if not os.path.isdir(input_dir):
-            handle_critical_error(
-                f"Input directory does not exist: {input_dir}",
-                exc_cls=ValidationError,
-            )
         log_message("Input directory: " + input_dir, verbose)
 
-        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
         log_message("Output directory: " + output_dir, verbose)
 
         (

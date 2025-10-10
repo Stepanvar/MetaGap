@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import datetime
+import gzip
 import os
 import re
 import shutil
@@ -23,7 +24,10 @@ from .metadata import (
 def preprocess_vcf(file_path: str) -> str:
     """Normalize whitespace delimiters in ``file_path`` if necessary."""
 
-    with open(file_path, "r", encoding="utf-8") as handle:
+    opener = gzip.open if str(file_path).endswith(".gz") else open
+    mode = "rt" if opener is gzip.open else "r"
+
+    with opener(file_path, mode, encoding="utf-8") as handle:
         lines = handle.readlines()
 
     modified = False

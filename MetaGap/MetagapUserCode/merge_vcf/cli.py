@@ -21,6 +21,13 @@ from .logging_utils import (
 )
 
 
+# Re-export frequently patched helpers for unit tests.
+validate_all_vcfs = validation.validate_all_vcfs
+merge_vcfs = merging.merge_vcfs
+append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
+validate_merged_vcf = validation.validate_merged_vcf
+
+
 def _validate_metadata_entry(arg: str) -> str:
     """Validate KEY=VALUE and return sanitized string."""
     if arg is None:
@@ -124,17 +131,30 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
 
 def main():
     args = parse_arguments()
-    verbose = args.verbose
+    verbose = getattr(args, "verbose", False)
+    allow_gvcf = getattr(args, "allow_gvcf", False)
+    input_dir = None
+    output_dir = None
+    extra_file_lines: list[str] = []
+    ref_genome = getattr(args, "ref", None)
+    vcf_version = getattr(args, "vcf_version", None)
 
     # Phase 1: environment + autodetect metadata
     try:
-        # Infer a base input directory from files
-        base_dirs = [os.path.dirname(os.path.abspath(p)) or "." for p in args.input_files]
-        input_dir = os.path.commonpath(base_dirs) if base_dirs else "."
+        # Prefer an explicit input directory but fall back to legacy positional files.
+        input_dir = getattr(args, "input_dir", None)
+        if input_dir:
+            input_dir = os.path.abspath(input_dir)
+        else:
+            input_files = getattr(args, "input_files", [])
+            base_dirs = [os.path.dirname(os.path.abspath(p)) or "." for p in input_files]
+            input_dir = os.path.commonpath(base_dirs) if base_dirs else "."
+
         if not os.path.isdir(input_dir):
             raise ValidationError(f"Input directory does not exist: {input_dir}")
 
-        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
+        output_dir_arg = getattr(args, "output_dir", None)
+        output_dir = os.path.abspath(output_dir_arg) if output_dir_arg else input_dir
         os.makedirs(output_dir, exist_ok=True)
 
         log_path = os.path.join(output_dir, LOG_FILE)
@@ -142,18 +162,39 @@ def main():
             log_level=logging.DEBUG if verbose else logging.INFO,
             log_file=log_path,
             enable_file_logging=True,
-            enable_console=verbose,
+            enable_console=True,
         )
+        if not verbose:
+            for handler in logging.getLogger("vcf_merger").handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(logging.WARNING)
 
-        extra_file_lines = metadata_module.load_metadata_lines(args.metadata_file, verbose) if args.metadata_file else []
+        metadata_file = getattr(args, "metadata_file", None)
+        extra_file_lines = (
+            metadata_module.load_metadata_lines(metadata_file, verbose)
+            if metadata_file
+            else []
+        )
 
         log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         log_message(f"Input directory: {input_dir}")
         log_message(f"Output directory: {output_dir}")
 
-        detected_file, detected_fileformat, detected_reference = validation.find_first_vcf_with_header(input_dir, verbose)
-        ref_genome = detected_reference
-        vcf_version = validation.normalize_vcf_version(detected_fileformat)
+        detected_file = None
+        detected_fileformat = None
+        detected_reference = None
+
+        if not ref_genome or not vcf_version:
+            (
+                detected_file,
+                detected_fileformat,
+                detected_reference,
+            ) = validation.find_first_vcf_with_header(input_dir, verbose)
+
+            if not ref_genome:
+                ref_genome = detected_reference
+            if not vcf_version:
+                vcf_version = validation.normalize_vcf_version(detected_fileformat)
 
         if not ref_genome:
             raise ValidationError("Reference genome build must be auto-detectable from input files.")
@@ -180,17 +221,30 @@ def main():
 
     # Phase 2: validate, merge, annotate, finalize
     try:
-        out_dir = Path(args.output_dir)
+        out_dir = Path(output_dir or (input_dir or "."))
         out_dir.mkdir(parents=True, exist_ok=True)
         log_message(f"Output directory: {out_dir}", verbose)
 
-        valid_files, sample_order = validation.validate_all_vcfs(args.input_files, verbose=verbose)
+        try:
+            valid_files, sample_order = validate_all_vcfs(
+                input_dir,
+                ref_genome,
+                vcf_version,
+                verbose=verbose,
+                allow_gvcf=allow_gvcf,
+            )
+        except ValidationError:
+            if not allow_gvcf:
+                print("Use --allow-gvcf to include gVCF inputs.")
+            raise
 
-        qual_threshold = args.qual_threshold if args.qual_threshold >= 0 else None
-        an_threshold = args.an_threshold if args.an_threshold >= 0 else None
+        qual_raw = getattr(args, "qual_threshold", None)
+        an_raw = getattr(args, "an_threshold", None)
+        qual_threshold = qual_raw if isinstance(qual_raw, (int, float)) and qual_raw >= 0 else None
+        an_threshold = an_raw if isinstance(an_raw, (int, float)) and an_raw >= 0 else None
         allowed_filter_values = DEFAULT_ALLOWED_FILTER_VALUES
 
-        merged_vcf_path = merging.merge_vcfs(
+        merged_vcf_path = merge_vcfs(
             valid_files,
             str(out_dir),
             verbose=verbose,
@@ -200,12 +254,29 @@ def main():
             allowed_filter_values=allowed_filter_values,
         )
 
-        # Combine file-provided header lines with CLI-provided simple headers
-        header_metadata_lines = (args.simple_header_lines or []) + (extra_file_lines or [])
+        # Combine file-provided header lines with CLI-provided metadata entries
+        simple_header_lines = getattr(args, "simple_header_lines", None)
+        header_metadata_lines = getattr(args, "header_metadata_lines", None)
+        meta_entries = getattr(args, "meta", None)
+        header_metadata_lines_combined: list[str] = []
+        for source in (
+            header_metadata_lines,
+            simple_header_lines,
+            meta_entries,
+            extra_file_lines,
+        ):
+            if source:
+                header_metadata_lines_combined.extend(source)
+        header_metadata_lines = header_metadata_lines_combined
 
-        final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
+        sample_header_entries = getattr(args, "sample_header_entries", None)
+        sample_metadata_entries = getattr(args, "sample_metadata_entries", None)
+        sample_entries = sample_metadata_entries or sample_header_entries
+
+        final_vcf_path = append_metadata_to_merged_vcf(
             merged_vcf_path,
-            sample_header_entries=args.sample_header_entries,
+            sample_metadata_entries=sample_entries,
+            sample_header_entries=sample_header_entries,
             header_metadata_lines=header_metadata_lines,
             qual_threshold=qual_threshold,
             an_threshold=an_threshold,
@@ -213,7 +284,7 @@ def main():
             verbose=verbose,
         )
 
-        validation.validate_merged_vcf(final_vcf_path, verbose=verbose)
+        validate_merged_vcf(final_vcf_path, verbose=verbose)
 
         final_target = out_dir / "cohort_final.vcf.gz"
         final_vcf_path = Path(final_vcf_path)
@@ -224,7 +295,9 @@ def main():
 
             if final_vcf_path.suffix != ".gz":
                 try:
-                    validation.pysam.tabix_compress(str(final_vcf_path), str(final_vcf_path) + ".gz", force=True)
+                    validation.pysam.tabix_compress(
+                        str(final_vcf_path), str(final_vcf_path) + ".gz", force=True
+                    )
                 except Exception as e:
                     raise MergeVCFError(f"Failed to compress final VCF: {e}")
                 try:
@@ -245,7 +318,10 @@ def main():
 
             final_vcf_path = final_target
 
-        log_message(f"Script execution completed successfully. Final cohort VCF: {final_vcf_path}", verbose)
+        log_message(
+            f"Script execution completed successfully. Final cohort VCF: {final_vcf_path}",
+            verbose,
+        )
         print(f"Wrote: {final_vcf_path} x 1.")
     except (ValidationError, MergeConflictError, MergeVCFError) as exc:
         print(f"ERROR: {exc}")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import copy
+import glob
 import gzip
 import os
 from collections import OrderedDict
@@ -91,6 +93,7 @@ def discover_and_prepare_inputs(
     log_message(
         f"Discovered {len(discovered_paths)} potential VCF input file(s) in {input_dir}",
         verbose,
+        level=logging.INFO,
     )
 
     for path in discovered_paths:
@@ -103,7 +106,11 @@ def discover_and_prepare_inputs(
             try:
                 pysam.tabix_compress(path, compressed_path, force=True)
                 created_compressed = True
-                log_message(f"Compressed {path} -> {compressed_path}", verbose)
+                log_message(
+                    f"Compressed {path} -> {compressed_path}",
+                    verbose,
+                    level=logging.DEBUG,
+                )
             except Exception as exc:  # pragma: no cover - defensive logging path
                 handle_non_critical_error(
                     f"Failed to BGZF-compress {path}: {exc}. Skipping."
@@ -113,7 +120,11 @@ def discover_and_prepare_inputs(
         index_path = compressed_path + ".tbi"
         try:
             pysam.tabix_index(compressed_path, preset="vcf", force=True)
-            log_message(f"Indexed {compressed_path} -> {index_path}", verbose)
+            log_message(
+                f"Indexed {compressed_path} -> {index_path}",
+                verbose,
+                level=logging.DEBUG,
+            )
         except Exception as exc:  # pragma: no cover - defensive logging path
             handle_non_critical_error(
                 f"Failed to create tabix index for {compressed_path}: {exc}. Skipping."
@@ -187,6 +198,7 @@ def discover_and_prepare_inputs(
     log_message(
         f"Prepared {len(prepared)} VCF input file(s) for downstream validation.",
         verbose,
+        level=logging.INFO,
     )
     return prepared
 
@@ -278,6 +290,7 @@ def find_first_vcf_with_header(input_dir: str, verbose: bool = False):
             log_message(
                 f"Auto-detection using {file_path}: fileformat={fileformat}, reference={reference}",
                 verbose,
+                level=logging.DEBUG,
             )
             return file_path, fileformat, reference
 
@@ -295,7 +308,7 @@ def validate_vcf(
     verbose: bool = False,
     allow_gvcf: bool = False,
 ) -> bool:
-    log_message(f"Validating file: {file_path}", verbose)
+    log_message(f"Validating file: {file_path}", verbose, level=logging.DEBUG)
     if not os.path.isfile(file_path):
         handle_non_critical_error(f"File {file_path} does not exist. Skipping.")
         return False
@@ -370,7 +383,7 @@ def validate_vcf(
         )
         return False
 
-    log_message(f"Validation passed for {file_path}", verbose)
+    log_message(f"Validation passed for {file_path}", verbose, level=logging.INFO)
     return True
 
 
@@ -402,11 +415,12 @@ def validate_all_vcfs(
     allow_gvcf: bool = False,
 ):
     valid_vcfs: List[str] = []
-    log_message(f"Validating all VCF files in {input_dir}", verbose)
+    log_message(f"Validating all VCF files in {input_dir}", verbose, level=logging.INFO)
     all_candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
     log_message(
         f"Discovered {len(all_candidates)} VCF shard(s) prior to validation.",
         verbose,
+        level=logging.DEBUG,
     )
     reference_samples: List[str] = []
     reference_contigs: "OrderedDict[str, dict]" | None = None
@@ -735,16 +749,25 @@ def validate_all_vcfs(
                 ):
                     os.remove(preprocessed_file)
         else:
-            log_message(f"File {file_path} failed validation and is skipped.", verbose)
+            log_message(
+                f"File {file_path} failed validation and is skipped.",
+                verbose,
+                level=logging.WARNING,
+            )
     if not valid_vcfs:
         handle_critical_error(
             "No valid VCF files remain after validation. Aborting.",
             exc_cls=ValidationError,
         )
-    log_message("Validation completed. Valid VCF files: " + ", ".join(valid_vcfs), verbose)
+    log_message(
+        "Validation completed. Valid VCF files: " + ", ".join(valid_vcfs),
+        verbose,
+        level=logging.INFO,
+    )
     log_message(
         f"Validation summary: {len(valid_vcfs)} of {len(all_candidates)} shard(s) passed.",
         verbose,
+        level=logging.INFO,
     )
     return valid_vcfs, reference_samples
 
@@ -1014,7 +1037,9 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
         for info_id, info_def in defined_info_ids.items()
         if _info_field_requires_value(getattr(info_def, "number", None))
     }
-    required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
+    required_info_ids.update(
+        {"AC", "AN", "AF"}.intersection(set(defined_info_ids.keys()))
+    )
 
     encountered_exception = False
     try:

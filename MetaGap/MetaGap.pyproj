@@ -44,7 +44,12 @@
     <Compile Include="app\urls.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="app\views.py" />
+    <Compile Include="app\views\__init__.py" />
+    <Compile Include="app\views\accounts.py" />
+    <Compile Include="app\views\data_import.py" />
+    <Compile Include="app\views\pages.py" />
+    <Compile Include="app\views\sample_groups.py" />
+    <Compile Include="app\views\search.py" />
     <Compile Include="app\__init__.py" />
     <Compile Include="app\migrations\__init__.py" />
     <Compile Include="manage.py" />

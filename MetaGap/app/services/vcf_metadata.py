@@ -223,11 +223,12 @@ class VCFMetadataParser:
             if not section:
                 if self._is_metadata_section_candidate(key):
                     items = self._collect_record_items(record)
-                    message = (
+                    log_message = (
                         f"Unsupported metadata section '{record.key}' encountered in the VCF header."
                     )
-                    logger.warning("%s", message)
-                    self.warnings.append(message)
+                    logger.warning("%s", log_message)
+                    warning = f"Unsupported metadata section '{record.key}'"
+                    self.warnings.append(warning)
                     additional = metadata.setdefault("additional_metadata", {})
                     additional_key = normalize_metadata_key(record.key)
                     additional[additional_key] = items
@@ -347,8 +348,19 @@ def normalize_metadata_value(value: str) -> str:
 
 
 def normalize_metadata_key(key: Any) -> str:
-    normalized = re.sub(r"[^0-9a-z]+", "", str(key).lower())
-    return normalized
+    """Normalize metadata keys to snake_case-friendly strings.
+
+    The importer expects metadata keys to be lower case and delimited by
+    underscores.  Previously, normalization removed non-alphanumeric
+    characters entirely, which collapsed delimiters and caused section
+    qualified keys (e.g., ``sample_group_contact_email``) to lose their
+    underscores.  This new implementation replaces runs of
+    non-alphanumeric characters with single underscores and trims leading or
+    trailing underscores to maintain consistent snake_case keys.
+    """
+
+    normalized = re.sub(r"[^0-9a-z]+", "_", str(key).lower())
+    return normalized.strip("_")
 
 
 __all__ = [

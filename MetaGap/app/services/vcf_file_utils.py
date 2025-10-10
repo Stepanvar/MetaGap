@@ -22,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def extract_metadata_text_fallback(
-    file_path: str, warnings: Optional[list[str]] = None
-) -> Dict[str, Any]:
+def open_vcf_text(file_path: str) -> Iterator[TextIO]:
     """Open a VCF file as text, transparently handling gzip compression."""
 
     path = Path(file_path)
@@ -37,7 +35,9 @@ def extract_metadata_text_fallback(
             yield handle
 
 
-def extract_metadata_text_fallback(file_path: str) -> Dict[str, Any]:
+def extract_metadata_text_fallback(
+    file_path: str, warnings: Optional[list[str]] = None
+) -> Dict[str, Any]:
     """Extract metadata from a VCF file via text parsing."""
 
     metadata: Dict[str, Any] = {}
@@ -287,4 +287,5 @@ __all__ = [
     "extract_metadata_text_fallback",
     "parse_vcf_text_fallback",
     "split_sample_attributes",
+    "open_vcf_text",
 ]

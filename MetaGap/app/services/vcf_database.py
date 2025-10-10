@@ -86,6 +86,11 @@ class VCFDatabaseWriter:
 
         consumed_keys = set(group_consumed)
         additional_metadata: Dict[str, Any] = {}
+        parser_additional = metadata.get("additional_metadata")
+        if isinstance(parser_additional, dict):
+            for key, value in parser_additional.items():
+                additional_metadata[key] = self._coerce_additional_value(value)
+            consumed_keys.add("additional_metadata")
         if group_additional:
             additional_metadata.update(group_additional)
 

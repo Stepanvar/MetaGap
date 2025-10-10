@@ -407,6 +407,8 @@ def validate_all_vcfs(
     reference_info_defs: "OrderedDict[str, dict]" | None = None
     reference_filter_defs: "OrderedDict[str, dict]" | None = None
     reference_format_defs: "OrderedDict[str, dict]" | None = None
+    reference_info_sources: dict[str, str] | None = None
+    reference_format_sources: dict[str, str] | None = None
     prepared_inputs = discover_and_prepare_inputs(
         input_dir, verbose=verbose, allow_gvcf=allow_gvcf
     )
@@ -465,6 +467,12 @@ def validate_all_vcfs(
                     reference_filter_defs = current_filter_defs
                     reference_info_defs = current_info_defs
                     reference_format_defs = current_format_defs
+                    reference_info_sources = {
+                        info_id: file_path for info_id in current_info_defs.keys()
+                    }
+                    reference_format_sources = {
+                        format_id: file_path for format_id in current_format_defs.keys()
+                    }
                 else:
                     new_samples = [
                         sample for sample in current_samples if sample not in reference_samples
@@ -516,33 +524,118 @@ def validate_all_vcfs(
 
                     if reference_info_defs is None:
                         reference_info_defs = OrderedDict()
+                    if reference_info_sources is None:
+                        reference_info_sources = {}
+                    info_conflicts: list[tuple[str, str, str | None, str | None, str, str | None, str | None]] = []
                     for info_id, mapping in current_info_defs.items():
                         existing = reference_info_defs.get(info_id)
                         if existing is None:
                             reference_info_defs[info_id] = mapping
+                            reference_info_sources[info_id] = file_path
                             continue
-                        for key in ("Number", "Type", "Description"):
-                            if existing.get(key) != mapping.get(key):
-                                handle_critical_error(
-                                    "INFO header definitions conflict across shards. "
-                                    f"For INFO '{info_id}', field '{key}' differed: "
-                                    f"{existing.get(key)!r} vs {mapping.get(key)!r} in {file_path}."
+                        existing_source = reference_info_sources.get(info_id, "previous shard")
+                        number_mismatch = existing.get("Number") != mapping.get("Number")
+                        type_mismatch = existing.get("Type") != mapping.get("Type")
+                        if number_mismatch or type_mismatch:
+                            info_conflicts.append(
+                                (
+                                    info_id,
+                                    existing_source,
+                                    existing.get("Number"),
+                                    existing.get("Type"),
+                                    file_path,
+                                    mapping.get("Number"),
+                                    mapping.get("Type"),
                                 )
+                            )
+                            continue
+                        if existing.get("Description") != mapping.get("Description"):
+                            handle_critical_error(
+                                "INFO header definitions conflict across shards. "
+                                f"For INFO '{info_id}', field 'Description' differed: "
+                                f"{existing.get('Description')!r} vs {mapping.get('Description')!r} in {file_path}."
+                            )
 
                     if reference_format_defs is None:
                         reference_format_defs = OrderedDict()
+                    if reference_format_sources is None:
+                        reference_format_sources = {}
+                    format_conflicts: list[tuple[str, str, str | None, str | None, str, str | None, str | None]] = []
                     for format_id, mapping in current_format_defs.items():
                         existing = reference_format_defs.get(format_id)
                         if existing is None:
                             reference_format_defs[format_id] = mapping
+                            reference_format_sources[format_id] = file_path
                             continue
-                        for key in ("Number", "Type", "Description"):
-                            if existing.get(key) != mapping.get(key):
-                                handle_critical_error(
-                                    "FORMAT header definitions conflict across shards. "
-                                    f"For FORMAT '{format_id}', field '{key}' differed: "
-                                    f"{existing.get(key)!r} vs {mapping.get(key)!r} in {file_path}."
+                        existing_source = reference_format_sources.get(
+                            format_id, "previous shard"
+                        )
+                        number_mismatch = existing.get("Number") != mapping.get("Number")
+                        type_mismatch = existing.get("Type") != mapping.get("Type")
+                        if number_mismatch or type_mismatch:
+                            format_conflicts.append(
+                                (
+                                    format_id,
+                                    existing_source,
+                                    existing.get("Number"),
+                                    existing.get("Type"),
+                                    file_path,
+                                    mapping.get("Number"),
+                                    mapping.get("Type"),
                                 )
+                            )
+                            continue
+                        if existing.get("Description") != mapping.get("Description"):
+                            handle_critical_error(
+                                "FORMAT header definitions conflict across shards. "
+                                f"For FORMAT '{format_id}', field 'Description' differed: "
+                                f"{existing.get('Description')!r} vs {mapping.get('Description')!r} in {file_path}."
+                            )
+
+                    error_sections: list[str] = []
+                    if info_conflicts:
+                        lines = [
+                            (
+                                f"- {info_id}: {existing_source} (Number={existing_number!r}, "
+                                f"Type={existing_type!r}) vs {current_source} (Number={current_number!r}, "
+                                f"Type={current_type!r})"
+                            )
+                            for (
+                                info_id,
+                                existing_source,
+                                existing_number,
+                                existing_type,
+                                current_source,
+                                current_number,
+                                current_type,
+                            ) in info_conflicts
+                        ]
+                        error_sections.append(
+                            "INFO header definitions conflict across shards:\n" + "\n".join(lines)
+                        )
+                    if format_conflicts:
+                        lines = [
+                            (
+                                f"- {format_id}: {existing_source} (Number={existing_number!r}, "
+                                f"Type={existing_type!r}) vs {current_source} (Number={current_number!r}, "
+                                f"Type={current_type!r})"
+                            )
+                            for (
+                                format_id,
+                                existing_source,
+                                existing_number,
+                                existing_type,
+                                current_source,
+                                current_number,
+                                current_type,
+                            ) in format_conflicts
+                        ]
+                        error_sections.append(
+                            "FORMAT header definitions conflict across shards:\n"
+                            + "\n".join(lines)
+                        )
+                    if error_sections:
+                        handle_critical_error("\n".join(error_sections))
 
                 contig_order = {name: idx for idx, name in enumerate(current_contigs.keys())}
                 last_contig_index = None

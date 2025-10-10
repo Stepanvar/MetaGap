@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import copy
-from pathlib import Path
-import sys
-from types import SimpleNamespace
+import shutil
 from typing import Callable
 import datetime
 import gzip
@@ -884,144 +881,65 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
     assert all(len(line.split("\t")) == 8 for line in data_lines)
 
 
-def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
-    base_columns = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
+def test_merge_vcfs_emits_anonymized_gzip(tmp_path, monkeypatch):
+    import gzip, shutil
+    from pathlib import Path
+    from types import SimpleNamespace
 
-    fake_vcfpy = _FakeVcfpyModule()
-    monkeypatch.setattr(merging, "vcfpy", fake_vcfpy, raising=False)
-    monkeypatch.setattr(merging, "VCFPY_AVAILABLE", True, raising=False)
+    shard_template = """##fileformat=VCFv4.2
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count">
+##INFO=<ID=AN,Number=1,Type=Integer,Description="Allele number">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample}
+1\t{pos}\t.\tA\tC\t99\tPASS\tAC=1;AN=2;AF=0.5\tGT\t0/1
+"""
 
-    class _FilterHeaderLine(_HeaderDefinition):
-        def __init__(self, mapping):
-            self.key = "FILTER"
-            self.mapping = dict(mapping)
-            self.id = self.mapping.get("ID")
-            parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
-            super().__init__(f"##FILTER=<{parts}>")
+    shard_paths = []
+    for idx, pos in enumerate((100, 200), start=1):
+        p = tmp_path / f"shard{idx}.vcf"
+        p.write_text(shard_template.format(sample=f"S{idx}", pos=pos), encoding="utf-8")
+        shard_paths.append(str(p))
 
-        def copy(self):
-            return _FilterHeaderLine(self.mapping)
+    compressed = {}
 
-    class _ContigHeaderLine(_HeaderDefinition):
-        def __init__(self, mapping):
-            self.key = "contig"
-            self.mapping = dict(mapping)
-            self.id = self.mapping.get("ID")
-            parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
-            super().__init__(f"##contig=<{parts}>")
+    def fake_tabix_compress(src, dest, force=True):
+        with open(src, "rb") as s, gzip.open(dest, "wb") as d:
+            shutil.copyfileobj(s, d)
+        compressed["source"] = Path(src)
+        compressed["dest"] = Path(dest)
 
-        def copy(self):
-            return _ContigHeaderLine(self.mapping)
-
-    monkeypatch.setattr(fake_vcfpy.header, "FilterHeaderLine", _FilterHeaderLine, raising=False)
-    monkeypatch.setattr(fake_vcfpy.header, "ContigHeaderLine", _ContigHeaderLine, raising=False)
-
-    original_call_init = fake_vcfpy.Call.__init__
-
-    def _patched_call_init(self, name, data):
-        original_call_init(self, name, data)
-        self.sample = name
-
-    monkeypatch.setattr(_FakeCall, "__init__", _patched_call_init, raising=False)
-
-    def _patched_to_line(self):
-        info_parts = []
-        for key, value in self.INFO.items():
-            if isinstance(value, list):
-                serialized = ",".join(str(entry) for entry in value)
-            else:
-                serialized = str(value)
-            info_parts.append(f"{key}={serialized}")
-        info_field = ";".join(info_parts) if info_parts else "."
-
-        filter_field = self.FILTER
-        if isinstance(filter_field, (list, tuple)):
-            normalized = [entry for entry in filter_field if entry not in {None, "", "."}]
-            filter_field = ";".join(normalized) if normalized else "."
-        elif not filter_field:
-            filter_field = "."
-
-        qual_field = self.QUAL
-        if qual_field in {None, ""}:
-            qual_field = "."
-
-        fields = [
-            self.CHROM,
-            str(self.POS),
-            self.ID,
-            self.REF,
-            ",".join(self.ALT) if self.ALT else ".",
-            str(qual_field),
-            filter_field,
-            info_field,
-        ]
-
-        if self.FORMAT:
-            fields.append(":".join(self.FORMAT))
-            fields.extend(call.to_string(self.FORMAT) for call in self.calls)
-
-        return "\t".join(fields)
-
-    monkeypatch.setattr(_FakeRecord, "to_line", _patched_to_line, raising=False)
-
-    original_writer_from_path = fake_vcfpy.Writer.from_path.__func__
-
-    def _patched_writer_from_path(cls, path, header, *args, **kwargs):
-        if (
-            hasattr(header, "samples")
-            and hasattr(header.samples, "names")
-            and not header.samples.names
-            and hasattr(header, "_columns_line")
-        ):
-            header._columns_line = base_columns
-        return original_writer_from_path(cls, path, header, *args, **kwargs)
+    def fake_tabix_index(path, preset="vcf", force=True):
+        idx = Path(f"{path}.tbi")
+        idx.write_text("stub-index", encoding="utf-8")
+        compressed["index"] = idx
 
     monkeypatch.setattr(
-        fake_vcfpy.Writer,
-        "from_path",
-        classmethod(_patched_writer_from_path),
-        raising=False,
+        merging,
+        "pysam",
+        SimpleNamespace(tabix_compress=fake_tabix_compress, tabix_index=fake_tabix_index),
     )
 
-    class _FixedDateTime(datetime.datetime):
-        @classmethod
-        def now(cls):
-            return cls(2023, 1, 2, 3, 4, 5)
+    result_path = Path(
+        merging.merge_vcfs(
+            shard_paths,
+            str(tmp_path),
+            qual_threshold=None,
+            an_threshold=None,
+        )
+    )
 
-    monkeypatch.setattr(merging.datetime, "datetime", _FixedDateTime)
+    assert result_path.suffixes[-2:] == [".vcf", ".gz"]
+    assert "dest" in compressed
 
-    class _FakePysam:
-        @staticmethod
-        def tabix_compress(src, dest, force=False):
-            with open(src, "rb") as src_handle, gzip.open(dest, "wb") as dest_handle:
-                dest_handle.write(src_handle.read())
+    with gzip.open(result_path, "rt", encoding="utf-8") as fh:
+        lines = [ln.rstrip("\n") for ln in fh if ln.strip()]
 
-        @staticmethod
-        def tabix_index(path, preset="vcf", force=False):
-            Path(path + ".tbi").write_bytes(b"")
+    header_lines = [ln for ln in lines if ln.startswith("##")]
+    assert header_lines
+    assert all(not ln.startswith("##FORMAT=") for ln in header_lines)
 
-    monkeypatch.setattr(merging, "pysam", _FakePysam)
-    monkeypatch.setattr(merging, "preprocess_vcf", lambda path: path)
-    monkeypatch.setattr(merging, "log_message", lambda *args, **kwargs: None)
-    monkeypatch.setattr(merging, "_filter_vcf_records", lambda *args, **kwargs: None)
-    monkeypatch.setattr(merging, "_ensure_info_header_lines", lambda header: None)
-    monkeypatch.setattr(merging, "apply_metadata_to_header", lambda header, **_: header)
-
-    _VCF_STORAGE.clear()
-
-    shard_path = tmp_path / "toy.vcf"
-    _generate_demo_vcf(shard_path, "ToySample", "0/1")
-
-    result_path = merging.merge_vcfs([str(shard_path)], str(tmp_path))
-
-    with gzip.open(result_path, "rt", encoding="utf-8") as handle:
-        contents = handle.read()
-
-    lines = contents.splitlines()
-    header_lines = [line for line in lines if line.startswith("##")]
-    assert all(not line.startswith("##FORMAT=") for line in header_lines)
-
-    columns_line = next(line for line in lines if line.startswith("#CHROM"))
+    columns_line = next(ln for ln in lines if ln.startswith("#CHROM"))
     assert columns_line.split("\t") == [
         "#CHROM",
         "POS",
@@ -1033,9 +951,10 @@ def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
         "INFO",
     ]
 
-    data_lines = [line for line in lines if line and not line.startswith("#")]
-    assert data_lines, "Expected anonymized VCF to contain at least one record"
-    assert all(len(line.split("\t")) == 8 for line in data_lines)
+    data_lines = [ln for ln in lines if not ln.startswith("#")]
+    assert data_lines
+    assert all(len(ln.split("\t")) == 8 for ln in data_lines)
 
-    base_vcf_path = Path(result_path[:-3])
-    assert not base_vcf_path.exists(), "Non-anonymized intermediate VCF should be removed"
+    base_vcf_path = Path(str(result_path)[:-3])  # strip ".gz" -> ".vcf"
+    assert not base_vcf_path.exists()
+

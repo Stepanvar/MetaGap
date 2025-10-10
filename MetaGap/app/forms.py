@@ -1,8 +1,11 @@
+import re
 from django import forms
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.utils.html import format_html, format_html_join
+from django.template.defaultfilters import filesizeformat
 
 from .models import (
     BioinfoAlignment,
@@ -82,6 +85,48 @@ class BootstrapFormMixin:
         if new_class and new_class not in classes:
             classes.append(new_class)
         return " ".join(classes)
+
+    def get_error_summary(self):
+        """Return a structured list of field errors for UI feedback."""
+
+        if not getattr(self, "errors", None):
+            return []
+
+        summary = []
+        for name, field in self.fields.items():
+            errors = self.errors.get(name)
+            if not errors:
+                continue
+
+            bound_field = self[name]
+            label = field.label or bound_field.label or name.replace("_", " ").title()
+            summary.append(
+                {
+                    "name": name,
+                    "label": label,
+                    "errors": [str(error) for error in errors],
+                    "field_id": bound_field.auto_id,
+                }
+            )
+
+        return summary
+
+    def build_first_error_message(self) -> str:
+        """Return a concise message describing the first validation error."""
+
+        summary = self.get_error_summary()
+        if summary:
+            first = summary[0]
+            errors = first.get("errors") or []
+            if errors:
+                return f"{first['label']}: {errors[0]}"
+            return f"{first['label']} requires your attention."
+
+        non_field_errors = list(getattr(self, "non_field_errors", lambda: [])())
+        if non_field_errors:
+            return str(non_field_errors[0])
+
+        return "Please correct the highlighted errors and try again."
 
 
 class _OrganizationProfileFormMixin:
@@ -163,6 +208,26 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
         model = User
         fields = ("username", "email", "password1", "password2")
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        username_widget = self.fields["username"].widget
+        username_widget.attrs.setdefault("autocomplete", "username")
+        username_widget.attrs.setdefault("pattern", r"^[\w.@+-]+$")
+        username_widget.attrs.setdefault(
+            "title",
+            "Use letters, numbers, and characters . @ + - _",
+        )
+
+        email_widget = self.fields["email"].widget
+        email_widget.attrs.setdefault("autocomplete", "email")
+        email_widget.attrs.setdefault("inputmode", "email")
+
+        for password_field in ("password1", "password2"):
+            widget = self.fields[password_field].widget
+            widget.attrs.setdefault("minlength", "8")
+            widget.attrs.setdefault("autocomplete", "new-password")
+
     def save(self, commit=True):
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
@@ -176,6 +241,13 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
         else:
             self._store_pending_profile_update(organization_name)
         return user
+
+    def clean_email(self):
+        email = self.cleaned_data.get("email", "")
+        normalized = email.strip().lower()
+        if not normalized:
+            raise ValidationError("Enter a valid email address.")
+        return normalized
 
 class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
     """ModelForm that assigns ``created_by`` using the authenticated user."""
@@ -256,6 +328,20 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self._enhance_creatable_metadata_fields()
+
+        contact_email = self.fields.get("contact_email")
+        if contact_email is not None:
+            contact_email.widget.attrs.setdefault("autocomplete", "email")
+            contact_email.widget.attrs.setdefault("inputmode", "email")
+
+        contact_phone = self.fields.get("contact_phone")
+        if contact_phone is not None:
+            contact_phone.widget.attrs.setdefault("autocomplete", "tel")
+            contact_phone.widget.attrs.setdefault("inputmode", "tel")
+            contact_phone.widget.attrs.setdefault("pattern", r"^\+?[0-9\s().-]{7,20}$")
+            contact_phone.widget.attrs.setdefault(
+                "title", "Include country code if available. Minimum 7 digits."
+            )
 
         origin = getattr(self.instance, "sample_origin", None)
         if origin is not None:
@@ -342,6 +428,36 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             return stripped or None
         return value
 
+    def clean_contact_email(self):
+        email = self.cleaned_data.get("contact_email")
+        if not email:
+            return email
+
+        normalized = email.strip().lower()
+        return normalized or None
+
+    def clean_contact_phone(self):
+        phone = self.cleaned_data.get("contact_phone")
+        if phone is None:
+            return phone
+
+        raw_value = str(phone).strip()
+        if not raw_value:
+            return None
+
+        digits_only = re.sub(r"\D", "", raw_value)
+        has_plus_prefix = raw_value.startswith("+")
+
+        if has_plus_prefix:
+            normalized = f"+{digits_only}"
+        else:
+            normalized = digits_only
+
+        if normalized and len(digits_only) < 7:
+            raise ValidationError("Enter a phone number with at least 7 digits.")
+
+        return normalized or None
+
     CREATABLE_METADATA_FIELDS = {
         "reference_genome_build": (ReferenceGenomeBuild, "build_name"),
         "genome_complexity": (GenomeComplexity, "size"),
@@ -403,12 +519,51 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         seen = {}
         return [seen.setdefault(val, val) for val in values if val and val not in seen]
 
+DEFAULT_IMPORT_MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MiB
+
+
 class ImportDataForm(BootstrapFormMixin, forms.Form):
+
     data_file = forms.FileField(
         required=True,
-        widget=forms.ClearableFileInput(attrs={'class': 'form-control'}),
-        help_text='Upload a VCF file.'
+        widget=forms.ClearableFileInput(
+            attrs={
+                "class": "form-control",
+                "accept": ".vcf",
+            }
+        ),
+        help_text="",
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_upload_size = getattr(
+            settings, "IMPORT_DATA_MAX_UPLOAD_SIZE", DEFAULT_IMPORT_MAX_UPLOAD_SIZE
+        )
+        if self.max_upload_size:
+            readable = filesizeformat(self.max_upload_size)
+            help_text = f"Upload a VCF file (max {readable})."
+        else:
+            help_text = "Upload a VCF file."
+        self.fields["data_file"].help_text = help_text
+
+    def clean_data_file(self):
+        uploaded = self.cleaned_data.get("data_file")
+        if uploaded is None:
+            return uploaded
+
+        filename = getattr(uploaded, "name", "")
+        if not filename.lower().endswith(".vcf"):
+            raise ValidationError("Only Variant Call Format files (*.vcf) are supported.")
+
+        size_limit = self.max_upload_size
+        if size_limit and getattr(uploaded, "size", 0) > size_limit:
+            readable = filesizeformat(size_limit)
+            raise ValidationError(
+                f"The selected file is too large. Maximum allowed size is {readable}."
+            )
+
+        return uploaded
 
 class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserChangeForm):
     password = None  # Exclude password field
@@ -437,6 +592,9 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
         organization_profile = getattr(self.instance, "organization_profile", None)
         if organization_profile:
             self.fields["organization_name"].initial = organization_profile.organization_name
+        email_widget = self.fields["email"].widget
+        email_widget.attrs.setdefault("autocomplete", "email")
+        email_widget.attrs.setdefault("inputmode", "email")
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -449,6 +607,13 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
         else:
             self._store_pending_profile_update(organization_name)
         return user
+
+    def clean_email(self):
+        email = self.cleaned_data.get("email", "")
+        normalized = email.strip().lower()
+        if not normalized:
+            raise ValidationError("Enter a valid email address.")
+        return normalized
 
 class DeleteAccountForm(BootstrapFormMixin, forms.Form):
     confirm = forms.BooleanField(

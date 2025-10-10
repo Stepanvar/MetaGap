@@ -30,6 +30,23 @@ class ImportDataFormTests(SimpleTestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("data_file", form.errors)
 
+    def test_rejects_non_vcf_extension(self):
+        form = forms.ImportDataForm(
+            files={"data_file": SimpleUploadedFile("variants.txt", b"##fileformat=VCF\n")}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("Only Variant Call Format", form.errors["data_file"][0])
+
+    @override_settings(IMPORT_DATA_MAX_UPLOAD_SIZE=5)
+    def test_rejects_file_exceeding_configured_size_limit(self):
+        form = forms.ImportDataForm(
+            files={"data_file": SimpleUploadedFile("variants.vcf", b"123456")}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("too large", form.errors["data_file"][0])
+
 
 @override_settings(MIGRATION_MODULES={"app": None})
 class CustomUserCreationFormTests(TestCase):
@@ -61,6 +78,19 @@ class CustomUserCreationFormTests(TestCase):
         profile = OrganizationProfile.objects.get(user=user)
         self.assertEqual(profile.organization_name, "New Org")
         self.assertFalse(hasattr(form, "_pending_organization_name"))
+
+    def test_email_is_normalized_to_lowercase(self):
+        form = forms.CustomUserCreationForm(
+            data={
+                "username": "normalised",
+                "email": "UPPER@Example.COM ",
+                "password1": "complex-pass-123",
+                "password2": "complex-pass-123",
+            }
+        )
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["email"], "upper@example.com")
 
 
 @override_settings(MIGRATION_MODULES={"app": None})
@@ -198,6 +228,34 @@ class SampleGroupFormTests(TestCase):
         self.assertEqual(updated_group.sample_origin.collection_method, "Surgical")
         self.assertEqual(updated_group.sample_origin.storage_conditions, "Ambient")
         self.assertIsNone(updated_group.sample_origin.time_stored)
+
+    def test_contact_metadata_is_normalized(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        form = forms.SampleGroupForm(
+            data={
+                "name": "Normalized Group",
+                "contact_email": "TEAM@Example.COM ",
+                "contact_phone": "(123) 456-7890",
+            },
+            user=user,
+        )
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["contact_email"], "team@example.com")
+        self.assertEqual(form.cleaned_data["contact_phone"], "1234567890")
+
+    def test_invalid_short_phone_number_raises_validation_error(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        form = forms.SampleGroupForm(
+            data={
+                "name": "Invalid Phone",
+                "contact_phone": "123-45",
+            },
+            user=user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("contact_phone", form.errors)
 
     def test_creatable_metadata_fields_allow_new_entries(self):
         user = User.objects.create_user("creator", "creator@example.com", "secret")

@@ -13,7 +13,7 @@
     {% elif form.is_multipart %}
       enctype="multipart/form-data"
     {% endif %}
-    {% if form_novalidate|default:True %}novalidate{% endif %}
+    {% if form_novalidate is not False %}novalidate{% endif %}
     {% if form_class %}class="{{ form_class }}"{% endif %}
     {% if form_attrs %}
       {% for attr_name, attr_value in form_attrs.items %}
@@ -35,6 +35,29 @@
         {% endfor %}
       </div>
     {% endif %}
+    {% with summary=form.get_error_summary %}
+      {% if summary %}
+        <div class="alert alert-danger" role="alert" data-role="form-error-summary">
+          <h3 class="h6 mb-2">{% trans "Please correct the highlighted fields:" %}</h3>
+          <ul class="mb-0 ps-3">
+            {% for item in summary %}
+              <li>
+                {% if item.field_id %}
+                  <a class="alert-link" href="#{{ item.field_id }}" data-error-field-target="{{ item.field_id }}">
+                    {{ item.label }}
+                  </a>
+                {% else %}
+                  {{ item.label }}
+                {% endif %}
+                {% if item.errors %}
+                  <span class="d-block small text-muted">{{ item.errors|first }}</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
     {% for field in form.visible_fields %}
       {% with widget=field.field.widget widget_class_name=field.field.widget.attrs.data_widget_class_name|default:'' %}
         {% if widget.input_type == 'checkbox' or widget_class_name == 'CheckboxInput' %}
@@ -108,5 +131,62 @@
         </div>
       {% endif %}
     {% endwith %}
+    {% if form_client_helpers_disabled|default:False %}
+    {% else %}
+      <script>
+        (function() {
+          const script = document.currentScript;
+          if (!script) { return; }
+          const form = script.closest('form');
+          if (!form) { return; }
+
+          const focusFirstInvalidField = () => {
+            const invalidField = form.querySelector('.is-invalid, :invalid');
+            if (invalidField && typeof invalidField.focus === 'function') {
+              invalidField.focus({ preventScroll: false });
+            }
+          };
+
+          const applyWasValidated = () => {
+            form.classList.add('was-validated');
+            focusFirstInvalidField();
+          };
+
+          const escapeSelector = (value) => {
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+              return window.CSS.escape(value);
+            }
+            return value.replace(/([\s#.;,+>~:])/g, '\\$1');
+          };
+
+          const errorLinks = form.querySelectorAll('[data-error-field-target]');
+          errorLinks.forEach((link) => {
+            link.addEventListener('click', (event) => {
+              const targetId = link.getAttribute('data-error-field-target');
+              if (!targetId) { return; }
+              const target = form.querySelector(`#${escapeSelector(targetId)}`);
+              if (!target) { return; }
+              event.preventDefault();
+              target.focus({ preventScroll: false });
+              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+          });
+
+          form.addEventListener('submit', (event) => {
+            if (!form.checkValidity()) {
+              event.preventDefault();
+              event.stopPropagation();
+              applyWasValidated();
+            } else {
+              form.classList.add('was-validated');
+            }
+          });
+
+          if (form.querySelectorAll('.is-invalid, :invalid').length) {
+            applyWasValidated();
+          }
+        })();
+      </script>
+    {% endif %}
   </form>
 </div>

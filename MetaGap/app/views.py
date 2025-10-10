@@ -394,6 +394,10 @@ class UserRegistrationView(CreateView):
     template_name = "signup.html"
     success_url = reverse_lazy("login")
 
+    def form_invalid(self, form):
+        messages.error(self.request, form.build_first_error_message())
+        return super().form_invalid(form)
+
 
 class ContactView(TemplateView):
     template_name = "contact.html"
@@ -426,6 +430,10 @@ class SampleGroupUpdateView(
     def form_valid(self, form):
         messages.success(self.request, "Sample group metadata updated successfully.")
         return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, form.build_first_error_message())
+        return super().form_invalid(form)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

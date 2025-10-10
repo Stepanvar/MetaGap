@@ -18,6 +18,7 @@ from ..models import (
     Info,
     SampleGroup,
 )
+from ..services.import_exceptions import ImporterValidationError
 from ..views import ImportDataView
 from .sample_group_test_mixins import SampleGroupViewMatrixMixin
 
@@ -193,7 +194,9 @@ class ImportDataViewTests(TestCase):
         """Errors from the importer are shown to the user."""
 
         importer_instance = Mock()
-        importer_instance.import_file.side_effect = ValueError("boom")
+        importer_instance.import_file.side_effect = ImporterValidationError(
+            "boom", warnings=["Heads up"]
+        )
         importer_instance.warnings = []
 
         with patch("app.views.VCFImporter", return_value=importer_instance):
@@ -206,7 +209,9 @@ class ImportDataViewTests(TestCase):
         importer_instance.import_file.assert_called_once()
 
         messages = [message.message for message in response.wsgi_request._messages]
-        self.assertIn(
+        self.assertIn("boom", messages)
+        self.assertIn("Heads up", messages)
+        self.assertNotIn(
             "Something went wrong while processing the upload. Check the error above for details.",
             messages,
         )
@@ -238,7 +243,7 @@ class ImportDataViewTests(TestCase):
 
         messages = [message.message for message in response.wsgi_request._messages]
         self.assertIn(
-            "We could not import the file because some required metadata was missing or invalid.",
+            "Please complete your organization profile before importing data.",
             messages,
         )
         self.assertNotIn(
@@ -246,6 +251,27 @@ class ImportDataViewTests(TestCase):
             messages,
         )
 
+    def test_cleanup_failure_is_logged_and_suppressed(self) -> None:
+        importer_instance = Mock()
+        importer_instance.import_file.return_value = Mock(name="SampleGroupMock")
+        importer_instance.import_file.return_value.name = "Imported Group"
+        importer_instance.warnings = []
+
+        upload = self.build_upload("##fileformat=VCFv4.2\n")
+
+        with patch("app.views.VCFImporter", return_value=importer_instance) as importer_cls, \
+            patch("app.views.default_storage") as storage_mock, \
+            patch("app.views.logger") as logger_mock:
+            storage_mock.save.return_value = "tmp/import.vcf"
+            storage_mock.delete.side_effect = OSError("cleanup failed")
+
+            response = self.client.post(reverse("import_data"), {"data_file": upload})
+
+        self.assertRedirects(response, reverse("profile"))
+        importer_cls.assert_called_once_with(self.user)
+        storage_mock.delete.assert_called_once_with("tmp/import.vcf")
+        logger_mock.warning.assert_called()
+        
     @patch("app.services.vcf_importer.pysam.VariantFile", side_effect=ValueError("bad header"))
     def test_fallback_parsing_error_displays_validation_message(
         self, mock_variant_file: Mock

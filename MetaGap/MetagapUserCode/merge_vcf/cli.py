@@ -8,7 +8,7 @@ import glob
 import os
 
 from .logging_utils import handle_critical_error, log_message
-from .metadata import append_metadata_to_merged_vcf, parse_metadata_arguments
+from .metadata import append_metadata_to_merged_vcf, load_metadata_lines
 from .merging import merge_vcfs
 from .validation import (
     find_first_vcf_with_header,
@@ -35,50 +35,12 @@ def parse_arguments():
         help="Directory for the merged VCF. Defaults to the input directory when omitted.",
     )
     parser.add_argument(
-        "--ref",
-        help="Expected reference genome build. When omitted the script attempts to auto-detect it.",
-    )
-    parser.add_argument(
-        "--vcf-version",
-        help="Expected VCF version (e.g., 4.2). When omitted the script attempts to auto-detect it.",
-    )
-    parser.add_argument(
-        "--meta",
-        action="append",
-        default=[],
-        metavar="KEY=VALUE",
+        "-t",
+        "--metadata-file",
+        required=True,
+        dest="metadata_file",
         help=(
-            "Sample metadata in KEY=VALUE form. Repeat for multiple keys. "
-            "An ID entry is required when metadata is provided."
-        ),
-    )
-    parser.add_argument(
-        "--allow-gvcf",
-        action="store_true",
-        help="Allow input files that contain gVCF annotations such as <NON_REF> ALT alleles.",
-    )
-    parser.add_argument(
-        "--sample-metadata",
-        dest="sample_metadata_entries",
-        action="append",
-        metavar="KEY=VALUE",
-        default=[],
-        help="Add a key/value pair to the ##SAMPLE metadata line. Provide at least ID=... to emit the line.",
-    )
-    parser.add_argument(
-        "--header-metadata",
-        dest="header_metadata_lines",
-        action="append",
-        metavar="LINE",
-        default=[],
-        help="Add an arbitrary metadata header line (##key=value). The '##' prefix is optional.",
-    )
-    parser.add_argument(
-        "--metadata-template",
-        dest="metadata_template_path",
-        help=(
-            "Path to a file containing metadata header lines to merge into the output VCF. "
-            "Lines from the template are combined with any --header-metadata / --sample-metadata overrides."
+            "Path to a metadata template file containing header lines to apply to the merged VCF."
         ),
     )
     parser.add_argument(
@@ -124,13 +86,7 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
 def main():
     args = parse_arguments()
     verbose = args.verbose
-    (
-        sample_header_line,
-        simple_header_lines,
-        sample_metadata_entries,
-        sanitized_header_lines,
-        serialized_sample_line,
-    ) = parse_metadata_arguments(args, verbose)
+    metadata_header_lines = load_metadata_lines(args.metadata_file, verbose)
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -147,26 +103,20 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
     log_message("Output directory: " + output_dir, verbose)
 
-    ref_genome = args.ref.strip() if args.ref else None
-    vcf_version = normalize_vcf_version(args.vcf_version) if args.vcf_version else None
-
-    detection_needed = not ref_genome or not vcf_version
-    detected_file = detected_fileformat = detected_reference = None
-    if detection_needed:
-        detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(
-            input_dir, verbose
-        )
-        if not ref_genome and detected_reference:
-            ref_genome = detected_reference
-        if not vcf_version and detected_fileformat:
-            vcf_version = normalize_vcf_version(detected_fileformat)
+    detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(
+        input_dir, verbose
+    )
+    ref_genome = detected_reference
+    vcf_version = normalize_vcf_version(detected_fileformat)
 
     if not ref_genome:
-        handle_critical_error("Reference genome build must be provided via --ref or auto-detectable from input files.")
+        handle_critical_error(
+            "Reference genome build must be auto-detectable from input files."
+        )
     if not vcf_version:
-        handle_critical_error("VCF version must be provided via --vcf-version or auto-detectable from input files.")
+        handle_critical_error("VCF version must be auto-detectable from input files.")
 
-    if detection_needed and detected_file:
+    if detected_file:
         log_message(
             f"Auto-detected metadata from {detected_file} -> reference={detected_reference or 'unknown'}, "
             f"version={detected_fileformat or 'unknown'}",
@@ -180,7 +130,6 @@ def main():
         ref_genome,
         vcf_version,
         verbose,
-        allow_gvcf=args.allow_gvcf,
     )
 
     merged_vcf = merge_vcfs(
@@ -188,15 +137,11 @@ def main():
         output_dir,
         verbose,
         sample_order=sample_order,
-        sample_header_line=sample_header_line,
-        simple_header_lines=simple_header_lines,
     )
 
     final_vcf = append_metadata_to_merged_vcf(
         merged_vcf,
-        sample_metadata_entries=sample_metadata_entries,
-        header_metadata_lines=sanitized_header_lines,
-        serialized_sample_line=serialized_sample_line,
+        header_metadata_lines=metadata_header_lines,
         verbose=verbose,
     )
 

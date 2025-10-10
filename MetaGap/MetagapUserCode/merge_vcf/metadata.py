@@ -417,95 +417,50 @@ def _load_metadata_template(
     )
 
 
-def parse_metadata_arguments(args, verbose: bool = False):
-    """Return header metadata derived from CLI arguments."""
+def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
+    """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
-    sample_entries = []
-    for attr in ("sample_metadata_entries", "meta"):
-        values = getattr(args, attr, None)
-        if not values:
-            continue
-        if isinstance(values, (list, tuple)):
-            sample_entries.extend(values)
-        else:
-            sample_entries.append(values)
-    additional_lines = getattr(args, "header_metadata_lines", None) or []
+    if not metadata_file:
+        handle_critical_error("A metadata file path must be provided.")
 
-    sample_mapping: "OrderedDict[str, str]" = OrderedDict()
-    serialized_sample_line = template_serialized_sample
-    if template_sample_mapping:
-        sample_mapping.update(template_sample_mapping)
+    normalized_path = os.path.abspath(metadata_file)
+    if not os.path.exists(normalized_path):
+        handle_critical_error(f"Metadata file does not exist: {metadata_file}")
+    if not os.path.isfile(normalized_path):
+        handle_critical_error(f"Metadata file path is not a file: {metadata_file}")
 
-    for raw_entry in sample_entries:
-        entry = raw_entry.strip()
-        if not entry:
-            continue
-        if "=" not in entry:
-            handle_critical_error(
-                f"Invalid sample metadata entry '{raw_entry}'. Expected KEY=VALUE format."
-            )
-        key, value = entry.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            handle_critical_error("Sample metadata keys cannot be empty.")
-        sample_mapping[key] = value
-        serialized_sample_line = None
+    sanitized_lines: List[str] = []
+    seen_lines = set()
 
-    sample_header_line = None
-    if sample_mapping:
-        try:
-            sample_line = build_sample_metadata_line(sample_mapping)
-        except ValueError as exc:
-            handle_critical_error(str(exc))
-        log_message(f"Using sample metadata: {sample_line}", verbose)
-        serialized_sample_line = sample_line
-        sample_header_line = vcfpy.SampleHeaderLine.from_mapping(sample_mapping)
+    try:
+        with open(normalized_path, "r", encoding="utf-8") as handle:
+            for line_number, raw_line in enumerate(handle, 1):
+                stripped = raw_line.strip()
+                if not stripped:
+                    continue
+                if not stripped.startswith("##"):
+                    stripped = "##" + stripped
+                parsed = _parse_simple_metadata_line(stripped)
+                if not parsed:
+                    handle_critical_error(
+                        "Metadata file lines must be in '##key=value' format. "
+                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
+                    )
+                key, value = parsed
+                sanitized = f"##{key}={value}"
+                if sanitized in seen_lines:
+                    continue
+                sanitized_lines.append(sanitized)
+                seen_lines.add(sanitized)
+    except OSError as exc:
+        handle_critical_error(f"Unable to read metadata file {metadata_file}: {exc}")
 
-    simple_header_lines = list(template_simple_lines)
-    sanitized_header_lines: List[str] = list(template_header_lines)
-    existing_simple = {
-        (line.key, getattr(line, "value", None)) for line in simple_header_lines
-    }
-    existing_sanitized = set(sanitized_header_lines)
-    cli_added_lines: List[str] = []
-    for raw_line in additional_lines:
-        normalized = raw_line.strip()
-        if not normalized:
-            continue
-        if not normalized.startswith("##"):
-            normalized = "##" + normalized
-        parsed = _parse_simple_metadata_line(normalized)
-        if not parsed:
-            handle_critical_error(
-                f"Additional metadata '{raw_line}' must be in '##key=value' format."
-            )
-        key, value = parsed
-        sanitized = f"##{key}={value}"
-        cli_added_lines.append(sanitized)
-        if sanitized not in existing_sanitized:
-            sanitized_header_lines.append(sanitized)
-            existing_sanitized.add(sanitized)
-        identifier = (key, value)
-        if identifier not in existing_simple:
-            simple_header_lines.append(vcfpy.SimpleHeaderLine(key, value))
-            existing_simple.add(identifier)
-
-    if cli_added_lines:
-        log_message(
-            "Using CLI header metadata lines: " + ", ".join(cli_added_lines),
-            verbose,
-        )
-
-    sample_mapping_copy = OrderedDict(sample_mapping) if sample_mapping else None
-
-    return (
-        sample_header_line,
-        simple_header_lines,
-        sample_mapping_copy,
-        sanitized_header_lines,
-        serialized_sample_line,
+    log_message(
+        f"Loaded {len(sanitized_lines)} metadata header line(s) from {normalized_path}",
+        verbose,
     )
+
+    return sanitized_lines
 
 
 def apply_metadata_to_header(
@@ -1037,7 +992,7 @@ __all__ = [
     "build_sample_metadata_line",
     "_parse_sample_metadata_line",
     "_parse_simple_metadata_line",
-    "parse_metadata_arguments",
+    "load_metadata_lines",
     "apply_metadata_to_header",
     "_validate_anonymized_vcf_header",
     "append_metadata_to_merged_vcf",

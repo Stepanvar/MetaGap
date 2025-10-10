@@ -858,10 +858,15 @@ def merge_vcfs(
         rdr = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
         handle_critical_error(f"Failed to reopen VCF for anonymization: {exc}")
-    _remove_format_and_sample_definitions(rdr.header)
+
+    try:
+        anonymized_header = rdr.header.copy()
+    except Exception:
+        anonymized_header = copy.deepcopy(rdr.header)
+    _remove_format_and_sample_definitions(anonymized_header)
     anon_tmp = base_vcf + ".anon"
     try:
-        w = vcfpy.Writer.from_path(anon_tmp, rdr.header)
+        w = vcfpy.Writer.from_path(anon_tmp, anonymized_header)
     except Exception as exc:
         rdr.close()
         handle_critical_error(f"Failed to open anonymized VCF writer: {exc}")

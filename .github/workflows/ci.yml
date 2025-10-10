@@ -30,8 +30,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          cd MetaGap
-          coverage run manage.py test 2>&1 | tee ../test-output.log
+          python -m coverage run manage.py test 2>&1 | tee test-output.log
 
       - name: Generate coverage reports and enforce thresholds
         if: always()

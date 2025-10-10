@@ -56,60 +56,52 @@ class VCFImporter:
         sample_group: Optional[SampleGroup] = None
         with transaction.atomic():
             try:
-                with pysam.VariantFile(file_path) as vcf_in:
-                    metadata = self.extract_sample_group_metadata(vcf_in)
-                    sample_group = self._create_sample_group(
-                        metadata, file_path, organization_profile
+                try:
+                    with pysam.VariantFile(file_path) as vcf_in:
+                        metadata = self.extract_sample_group_metadata(vcf_in)
+                        sample_group = self._create_sample_group(
+                            metadata, file_path, organization_profile
+                        )
+                        self._populate_sample_group_from_pysam(vcf_in, sample_group)
+                except (OSError, ValueError, NotImplementedError) as exc:
+                    warning = (
+                        f"Could not parse VCF metadata with pysam: {exc}. "
+                        "Falling back to a text parser."
                     )
-                    self._populate_sample_group_from_pysam(vcf_in, sample_group)
-            except (OSError, ValueError) as exc:
-                warning = (
-                    f"Could not parse VCF metadata with pysam: {exc}. "
-                    "Falling back to a text parser."
-                )
-                logger.warning("%s", warning)
-                self.warnings.append(warning)
-                if sample_group is not None:
-                    sample_group.delete()
-                metadata = self._extract_metadata_text_fallback(file_path)
-                sample_group = self._create_sample_group(
-                    metadata, file_path, organization_profile
-                )
-                parse_vcf_text_fallback(file_path, sample_group, self.database_writer)
+                    logger.warning("%s", warning)
+                    self.warnings.append(warning)
+                    if sample_group is not None:
+                        sample_group.delete()
+                    try:
+                        metadata = self._extract_metadata_text_fallback(file_path)
+                        sample_group = self._create_sample_group(
+                            metadata, file_path, organization_profile
+                        )
+                        parse_vcf_text_fallback(
+                            file_path,
+                            sample_group,
+                            self.database_writer,
+                            warnings=self.warnings,
+                        )
+                    except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
+                        if sample_group is not None:
+                            sample_group.delete()
+                        raise ValidationError(
+                            "The uploaded VCF file appears to be invalid or corrupted. "
+                            "Please verify the file contents and try again."
+                        ) from fallback_exc
             except ImporterError:
                 raise
             except ValidationError as exc:
                 raise ImporterValidationError(
                     self._render_validation_error(exc)
-              ) from exc
+                ) from exc
             except (TypeError, ValueError) as exc:
-              message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
-              raise ImporterValidationError(message) from exc
-                    self._populate_sample_group_from_pysam(vcf_in, sample_group)
-            except (OSError, ValueError) as exc:
-                warning = (
-                    f"Could not parse VCF metadata with pysam: {exc}. "
-                    "Falling back to a text parser."
+                message = (
+                    str(exc).strip()
+                    or "The uploaded file could not be parsed as a valid VCF."
                 )
-            logger.warning("%s", warning)
-            self.warnings.append(warning)
-            if sample_group is not None:
-                sample_group.delete()
-            try:
-                metadata = self._extract_metadata_text_fallback(file_path)
-                sample_group = self._create_sample_group(
-                    metadata, file_path, organization_profile
-                )
-                parse_vcf_text_fallback(
-                    file_path, sample_group, self.database_writer, warnings=self.warnings,
-                )
-            except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
-                if sample_group is not None:
-                    sample_group.delete()
-                raise ValidationError(
-                    "The uploaded VCF file appears to be invalid or corrupted. "
-                    "Please verify the file contents and try again."
-                ) from fallback_exc
+                raise ImporterValidationError(message) from exc
 
         assert sample_group is not None
         return sample_group

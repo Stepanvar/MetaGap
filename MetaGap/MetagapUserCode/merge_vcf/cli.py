@@ -1,4 +1,8 @@
-"""Command-line entrypoint for the VCF merging workflow."""
+"""Command-line entrypoint for the VCF merging workflow.
+
+The CLI can be executed via ``python -m merge_vcf.cli`` or
+``python merge_vcf/cli.py``.
+"""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +11,13 @@ import logging
 import os
 import sys
 from pathlib import Path
+
+if __package__ in {None, ""} and __name__ == "__main__":
+    # Ensure relative imports succeed when executed as a script.
+    parent_dir = Path(__file__).resolve().parent.parent
+    if str(parent_dir) not in sys.path:
+        sys.path.insert(0, str(parent_dir))
+    __package__ = "merge_vcf"
 
 from . import merging, metadata as metadata_module, validation
 from .filtering import DEFAULT_ALLOWED_FILTER_VALUES
@@ -358,3 +369,12 @@ def main():
     except (ValidationError, MergeConflictError, MergeVCFError) as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    if __package__ in {None, ""}:
+        parent_dir = Path(__file__).resolve().parent.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        __package__ = "merge_vcf"
+    main()

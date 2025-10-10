@@ -420,16 +420,15 @@ def _load_metadata_template(
 def parse_metadata_arguments(args, verbose: bool = False):
     """Return header metadata derived from CLI arguments."""
 
-    (
-        template_sample_mapping,
-        template_simple_lines,
-        template_header_lines,
-        template_serialized_sample,
-    ) = _load_metadata_template(
-        getattr(args, "metadata_template_path", None), verbose=verbose
-    )
-
-    sample_entries = getattr(args, "sample_metadata_entries", None) or []
+    sample_entries = []
+    for attr in ("sample_metadata_entries", "meta"):
+        values = getattr(args, attr, None)
+        if not values:
+            continue
+        if isinstance(values, (list, tuple)):
+            sample_entries.extend(values)
+        else:
+            sample_entries.append(values)
     additional_lines = getattr(args, "header_metadata_lines", None) or []
 
     sample_mapping: "OrderedDict[str, str]" = OrderedDict()

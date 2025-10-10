@@ -25,34 +25,18 @@ class HomePageViewTests(TestCase):
         self.assertIn("form", response.context)
         self.assertIsInstance(response.context["form"], SearchForm)
 
-    def test_search_form_preserves_submitted_filters(self) -> None:
-        response = self.client.get(
-            reverse("home"),
-            {
-                "chrom": "7",
-                "pos_min": "1000",
-                "ref": "C",
-                "alt": "G",
-                "pass_only": "on",
-                "af_min": "0.25",
-            },
-        )
+    def test_search_form_only_exposes_keyword_field(self) -> None:
+        response = self.client.get(reverse("home"), {"query": "chr1:1000"})
 
         self.assertEqual(response.status_code, 200)
 
         form = response.context["form"]
         self.assertTrue(form.is_bound)
-        self.assertEqual(form["chrom"].value(), "7")
-        self.assertEqual(form["pos_min"].value(), "1000")
-        self.assertEqual(form["ref"].value(), "C")
-        self.assertEqual(form["alt"].value(), "G")
-        self.assertEqual(form["af_min"].value(), "0.25")
-        self.assertEqual(form["pass_only"].value(), True)
-
+        self.assertEqual(list(form.fields.keys()), ["query"])
+        self.assertEqual(form["query"].value(), "chr1:1000")
         self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data["pos_min"], 1000)
-        self.assertAlmostEqual(form.cleaned_data["af_min"], 0.25)
-        self.assertTrue(form.cleaned_data["pass_only"])
+        self.assertEqual(form.cleaned_data["query"], "chr1:1000")
+        self.assertNotIn("advanced_fields", response.context)
 
 
 class UserRegistrationViewTests(TestCase):

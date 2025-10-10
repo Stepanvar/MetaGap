@@ -24,6 +24,7 @@ from .logging_utils import (
     log_message,
     LOG_FILE,
 )
+from .filtering import DEFAULT_ALLOWED_FILTER_VALUES
 from .metadata import append_metadata_to_merged_vcf, load_metadata_lines
 from .merging import merge_vcfs
 from .validation import (
@@ -208,20 +209,28 @@ def main():
         # Validate and prepare input VCF files
         valid_files, sample_order = validation.validate_all_vcfs(args.input_files, verbose=verbose)
         # Perform merge and apply QUAL/AN filters
+        qual_threshold = args.qual_threshold if args.qual_threshold >= 0 else None
+        an_threshold = args.an_threshold if args.an_threshold >= 0 else None
+        allowed_filter_values = DEFAULT_ALLOWED_FILTER_VALUES
+
         merged_vcf_path = merging.merge_vcfs(
             valid_files,
             str(out_dir),
             verbose=verbose,
             sample_order=sample_order,
-            qual_threshold=(args.qual_threshold if args.qual_threshold >= 0 else None),
-            an_threshold=(args.an_threshold if args.an_threshold >= 0 else None)
+            qual_threshold=qual_threshold,
+            an_threshold=an_threshold,
+            allowed_filter_values=allowed_filter_values,
         )
         # Append sample and simple header metadata (if provided) to the merged VCF
         final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
             merged_vcf_path,
             sample_header_entries=args.sample_header_entries,
             simple_header_lines=args.simple_header_lines,
-            verbose=verbose
+            verbose=verbose,
+            qual_threshold=qual_threshold,
+            an_threshold=an_threshold,
+            allowed_filter_values=allowed_filter_values,
         )
         # Validate the final merged VCF file structure and content
         validation.validate_merged_vcf(final_vcf_path, verbose=verbose)

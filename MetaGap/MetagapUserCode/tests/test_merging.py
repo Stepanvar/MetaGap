@@ -667,6 +667,46 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
     assert all(len(line.split("\t")) == 8 for line in data_lines)
 
 
+def test_records_with_empty_filters_survive_filtering_phases():
+    allowed_filters = ("PASS", "q10")
+    merging_record = SimpleNamespace(QUAL="65", FILTER=[], INFO={"AN": 120})
+    metadata_record = SimpleNamespace(QUAL="65", FILTER=[])
+
+    assert merging._record_passes_filters(
+        merging_record,
+        qual_threshold=30,
+        an_threshold=50,
+        allowed_filter_values=allowed_filters,
+    )
+    assert metadata_module._metadata_record_passes_filters(
+        metadata_record,
+        allele_number=120,
+        qual_threshold=30,
+        an_threshold=50,
+        allowed_filter_values=allowed_filters,
+    )
+
+
+def test_custom_filter_codes_allowed_consistently():
+    allowed_filters = ("PASS", "LowQual", "q10")
+    merging_record = SimpleNamespace(QUAL="99", FILTER=["LowQual"], INFO={"AN": "200"})
+    metadata_record = SimpleNamespace(QUAL="99", FILTER=["LowQual"])
+
+    assert merging._record_passes_filters(
+        merging_record,
+        qual_threshold=30,
+        an_threshold=50,
+        allowed_filter_values=allowed_filters,
+    )
+    assert metadata_module._metadata_record_passes_filters(
+        metadata_record,
+        allele_number=200,
+        qual_threshold=30,
+        an_threshold=50,
+        allowed_filter_values=allowed_filters,
+    )
+
+
 def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
     base_columns = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import pysam
 
-from ..models import SampleGroup
+from ..models import Format, Info, SampleGroup
 from .vcf_database import VCFDatabaseWriter
 from .vcf_file_utils import extract_metadata_text_fallback, parse_vcf_text_fallback
 from .vcf_metadata import VCFMetadataParser
@@ -35,8 +35,8 @@ class VCFImporter:
         sample_group: Optional[SampleGroup] = None
         try:
             with pysam.VariantFile(file_path) as vcf_in:
-                metadata = self.metadata_parser.extract_sample_group_metadata(vcf_in)
-                sample_group = self.database_writer.create_sample_group(
+                metadata = self.extract_sample_group_metadata(vcf_in)
+                sample_group = self._create_sample_group(
                     metadata, file_path, organization_profile
                 )
                 self._populate_sample_group_from_pysam(vcf_in, sample_group)
@@ -49,8 +49,8 @@ class VCFImporter:
             self.warnings.append(warning)
             if sample_group is not None:
                 sample_group.delete()
-            metadata = extract_metadata_text_fallback(file_path)
-            sample_group = self.database_writer.create_sample_group(
+            metadata = self._extract_metadata_text_fallback(file_path)
+            sample_group = self._create_sample_group(
                 metadata, file_path, organization_profile
             )
             parse_vcf_text_fallback(file_path, sample_group, self.database_writer)
@@ -62,8 +62,8 @@ class VCFImporter:
         self, vcf_in: pysam.VariantFile, sample_group: SampleGroup
     ) -> None:
         for record in vcf_in.fetch():
-            info_instance = self.database_writer.create_info_instance(record.info)
-            format_instance, format_sample = self.database_writer.create_format_instance(
+            info_instance = self._create_info_instance(record.info)
+            format_instance, format_sample = self._create_format_instance(
                 record.samples
             )
 
@@ -80,3 +80,34 @@ class VCFImporter:
                 format_instance=format_instance,
                 format_sample=format_sample,
             )
+
+    # ------------------------------------------------------------------
+    # Wrapper helpers used by the unit tests
+    # ------------------------------------------------------------------
+    def _create_info_instance(self, info: Any) -> Optional[Info]:
+        return self.database_writer.create_info_instance(info)
+
+    def _create_format_instance(
+        self, samples: Any
+    ) -> Tuple[Optional[Format], Optional[str]]:
+        return self.database_writer.create_format_instance(samples)
+
+    def _create_sample_group(
+        self, metadata: Dict[str, Any], file_path: str, organization_profile: Any
+    ) -> SampleGroup:
+        return self.database_writer.create_sample_group(
+            metadata, file_path, organization_profile
+        )
+
+    def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
+        return extract_metadata_text_fallback(file_path)
+
+    def _extract_section_data(
+        self, metadata: Dict[str, Any], section: str, model_cls: Any
+    ) -> Tuple[Dict[str, Any], set[str], Optional[Dict[str, Any]]]:
+        return self.database_writer._extract_section_data(metadata, section, model_cls)
+
+    def extract_sample_group_metadata(
+        self, vcf_in: pysam.VariantFile
+    ) -> Dict[str, Any]:
+        return self.metadata_parser.extract_sample_group_metadata(vcf_in)

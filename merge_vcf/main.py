@@ -81,6 +81,143 @@ def handle_non_critical_error(message):
     print("Warning: " + message)
 
 
+STANDARD_INFO_DEFINITIONS = OrderedDict(
+    [
+        (
+            "AC",
+            OrderedDict(
+                [
+                    ("Number", "A"),
+                    ("Type", "Integer"),
+                    (
+                        "Description",
+                        "Alternate allele count in genotypes, for each ALT allele",
+                    ),
+                ]
+            ),
+        ),
+        (
+            "AN",
+            OrderedDict(
+                [
+                    ("Number", "1"),
+                    ("Type", "Integer"),
+                    ("Description", "Total number of alleles in called genotypes"),
+                ]
+            ),
+        ),
+        (
+            "AF",
+            OrderedDict(
+                [
+                    ("Number", "A"),
+                    ("Type", "Float"),
+                    ("Description", "Alternate allele frequency"),
+                ]
+            ),
+        ),
+    ]
+)
+
+
+INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
+
+
+def _format_info_definition(info_id, definition_mapping):
+    parts = [f"ID={info_id}"]
+    for key, value in definition_mapping.items():
+        if value is None:
+            continue
+        if key == "Description":
+            escaped_value = str(value).replace('"', '\\"')
+            parts.append(f'Description="{escaped_value}"')
+            continue
+        parts.append(f"{key}={value}")
+    return "##INFO=<" + ",".join(parts) + ">"
+
+
+def ensure_standard_info_definitions(header, verbose=False):
+    info_module = getattr(vcfpy, "header", None)
+    info_cls = getattr(info_module, "InfoHeaderLine", None) if info_module else None
+    if info_cls is None:
+        return header
+
+    existing_ids = set()
+    for line in getattr(header, "lines", []):
+        if isinstance(line, info_cls):
+            existing_ids.add(getattr(line, "id", None))
+
+    added_ids = []
+    for info_id, definition in STANDARD_INFO_DEFINITIONS.items():
+        if info_id in existing_ids:
+            continue
+
+        mapping = OrderedDict([("ID", info_id)])
+        mapping.update(definition)
+
+        try:
+            info_line = info_cls.from_mapping(mapping)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            handle_non_critical_error(
+                f"Unable to create INFO header definition for {info_id}: {exc}"
+            )
+            continue
+
+        try:
+            header.add_line(info_line)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            handle_non_critical_error(
+                f"Failed to append INFO header definition for {info_id}: {exc}"
+            )
+            continue
+
+        existing_ids.add(info_id)
+        added_ids.append(info_id)
+
+    if added_ids:
+        log_message(
+            "Inserted INFO header definitions for missing fields: "
+            + ", ".join(added_ids),
+            verbose,
+        )
+
+    return header
+
+
+def ensure_standard_info_header_lines(final_header_lines, existing_header_lines, verbose=False):
+    current_ids = set()
+    for line in final_header_lines:
+        if not isinstance(line, str):
+            continue
+        match = INFO_HEADER_PATTERN.match(line.strip())
+        if match:
+            current_ids.add(match.group(1))
+
+    added_ids = []
+    for info_id, definition in STANDARD_INFO_DEFINITIONS.items():
+        if info_id in current_ids:
+            continue
+
+        formatted = _format_info_definition(info_id, definition)
+        if formatted in existing_header_lines:
+            current_ids.add(info_id)
+            continue
+
+        final_header_lines.append(formatted)
+        existing_header_lines.add(formatted)
+        current_ids.add(info_id)
+        added_ids.append(info_id)
+
+    if added_ids:
+        log_message(
+            "Inserted INFO header definitions for missing fields: "
+            + ", ".join(added_ids),
+            verbose,
+        )
+
+    return final_header_lines
+
+
 def is_gvcf_header(header_lines):
     """Return True if the provided header metadata indicates a gVCF file."""
 
@@ -601,6 +738,10 @@ def append_metadata_to_merged_vcf(
         final_header_lines.extend(remaining_header_lines)
         existing_header_lines = set(final_header_lines)
 
+        ensure_standard_info_header_lines(
+            final_header_lines, existing_header_lines, verbose=verbose
+        )
+
         if sample_metadata_entries:
             try:
                 serialized_line = (
@@ -625,6 +766,10 @@ def append_metadata_to_merged_vcf(
                 continue
             final_header_lines.append(normalized)
             existing_header_lines.add(normalized)
+
+        ensure_standard_info_header_lines(
+            final_header_lines, existing_header_lines, verbose=verbose
+        )
 
         final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
 
@@ -1277,6 +1422,7 @@ def merge_vcfs(
             simple_header_lines=simple_header_lines,
             verbose=verbose,
         )
+        header = ensure_standard_info_definitions(header, verbose=verbose)
     except SystemExit:
         reader.close()
         raise

@@ -9,9 +9,11 @@ import os
 import shutil
 
 from .logging_utils import (
+    LOG_FILE,
     MergeConflictError,
     MergeVCFError,
     ValidationError,
+    configure_logging,
     handle_critical_error,
     log_message,
 )
@@ -111,6 +113,10 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
 def main():
     args = parse_arguments()
     verbose = args.verbose
+
+    log_directory = os.path.abspath(args.output_dir) if args.output_dir else os.getcwd()
+    log_path = os.path.join(log_directory, LOG_FILE)
+    configure_logging(verbose=verbose, log_file=log_path)
 
     try:
         metadata_header_lines = load_metadata_lines(args.metadata_file, verbose)

@@ -1,7 +1,6 @@
 import gzip
 import os
 import sys
-from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,7 +57,7 @@ class _FormatHeaderLine(_HeaderDefinition):
 class _SampleHeaderLine(_HeaderDefinition):
     def __init__(self, mapping):
         self.key = "SAMPLE"
-        self.mapping = OrderedDict(mapping)
+        self.mapping = dict(mapping)
         self.id = self.mapping.get("ID")
         parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
         super().__init__(f"##SAMPLE=<{parts}>")
@@ -110,7 +109,7 @@ class _FakeRecord:
         self.ALT = list(alts)
         self.QUAL = qual
         self.FILTER = filt
-        self.INFO = OrderedDict(info)
+        self.INFO = dict(info)
         self.FORMAT = list(format_keys)
         self.calls = list(calls)
         self.call_for_sample = {call.name: call for call in self.calls}
@@ -124,7 +123,7 @@ class _FakeRecord:
             list(self.ALT),
             self.QUAL,
             self.FILTER,
-            OrderedDict((k, v if not isinstance(v, list) else list(v)) for k, v in self.INFO.items()),
+            {k: (v if not isinstance(v, list) else list(v)) for k, v in self.INFO.items()},
             list(self.FORMAT),
             [call.copy() for call in self.calls],
         )
@@ -188,7 +187,7 @@ class _FakeHeader:
 
     @property
     def info_ids(self):
-        entries = OrderedDict()
+        entries: dict[str, _InfoHeaderLine] = {}
         for line in self.lines:
             if isinstance(line, _InfoHeaderLine) and line.id:
                 entries[line.id] = line.mapping
@@ -199,7 +198,7 @@ _VCF_STORAGE = {}
 
 
 def _parse_mapping_body(body: str):
-    mapping = OrderedDict()
+    mapping: dict[str, str] = {}
     token = []
     in_quotes = False
     escape = False
@@ -277,7 +276,7 @@ def _ensure_vcf_loaded(path: str):
                 continue
 
             fields = line.split("\t")
-            info_entries = OrderedDict()
+            info_entries: dict[str, object] = {}
             for part in fields[7].split(";"):
                 if "=" not in part:
                     continue
@@ -526,7 +525,7 @@ def _configure_fake_subprocess(monkeypatch, module):
             alts=["G"],
             qual=".",
             filt="PASS",
-            info=OrderedDict([("AC", "."), ("AN", "."), ("AF", ".")]),
+            info={"AC": ".", "AN": ".", "AF": "."},
             format_keys=["GT"],
             calls=calls,
         )

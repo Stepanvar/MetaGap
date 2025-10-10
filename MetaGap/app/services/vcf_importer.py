@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pysam
 from django.db import models as django_models
+from django.core.exceptions import ValidationError
 
 from ..models import (
     AlleleFrequency,
@@ -677,6 +678,12 @@ class VCFImporter:
 
             section = self.METADATA_SECTION_MAP.get(key)
             if not section:
+                if self._is_metadata_section_candidate(key):
+                    message = (
+                        f"Unsupported metadata section '{record.key}' encountered in the VCF header."
+                    )
+                    logger.error("%s", message)
+                    raise ValidationError(message)
                 continue
 
             items = self._collect_record_items(record)
@@ -698,13 +705,26 @@ class VCFImporter:
 
         section = self._determine_platform_section(platform_value)
         if not section:
-            logger.warning(
-                "Unsupported sequencing platform %r; storing raw metadata only.",
-                platform_value,
+            warning = (
+                "Unsupported sequencing platform "
+                f"{platform_value!r}; storing raw metadata only."
             )
+            logger.warning("%s", warning)
+            self.warnings.append(warning)
             section = "platform_independent"
 
         self._process_metadata_section(metadata, section, items)
+
+    @staticmethod
+    def _is_metadata_section_candidate(key: str) -> bool:
+        normalized = (key or "").upper()
+        metadata_prefixes = (
+            "SAMPLE_",
+            "SAMPLEGROUP",
+            "SAMPLE-GROUP",
+            "GROUP_",
+        )
+        return any(normalized.startswith(prefix) for prefix in metadata_prefixes)
 
     def _determine_platform_section(self, platform_value: Any) -> Optional[str]:
         if not platform_value:
@@ -860,7 +880,7 @@ class VCFImporter:
             return flattened
         if isinstance(value, str):
             stripped = value.strip()
-            if not stripped:
+            if not stripped or stripped == ".":
                 return None
             return stripped
         return value
@@ -905,7 +925,7 @@ class VCFImporter:
                 if item not in (None, "")
             ]
             return normalized_list or None
-        if value in (None, ""):
+        if value in (None, "", "."):
             return None
         if isinstance(value, (int, float, bool)):
             return value

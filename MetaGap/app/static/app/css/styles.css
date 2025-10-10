@@ -143,6 +143,24 @@
         box-shadow: 0 0 0 0.2rem rgba(60, 122, 255, 0.35);
 }
 
+[data-bs-theme='dark'] .card {
+        background-color: var(--app-surface-bg);
+        border-color: var(--app-surface-border);
+        color: var(--app-body-color);
+}
+
+[data-bs-theme='dark'] .card .card-body {
+        background-color: var(--app-surface-bg);
+        color: var(--app-body-color);
+}
+
+[data-bs-theme='dark'] .bg-body-secondary,
+[data-bs-theme='dark'] .bg-body-tertiary {
+        background-color: var(--app-surface-bg) !important;
+        border-color: var(--app-surface-border) !important;
+        color: var(--app-body-color) !important;
+}
+
 /* Global layout */
 body {
         padding-top: var(--header-height);

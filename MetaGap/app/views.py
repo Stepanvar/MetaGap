@@ -16,7 +16,7 @@ from django.core.files.storage import default_storage
 from django.db import models as django_models
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.text import slugify
 from django.views.generic import (
     CreateView,
@@ -643,6 +643,12 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         context = super().get_context_data(**kwargs)
         sample_groups = self.get_owned_sample_groups().order_by("name")
         context.setdefault("sample_groups", sample_groups)
+        context["form_action"] = reverse("import_data")
+        form = context.get("form")
+        if form is not None and getattr(form, "enctype", None):
+            context["form_enctype"] = form.enctype
+        else:
+            context["form_enctype"] = "multipart/form-data"
         return context
 
     def form_valid(self, form):

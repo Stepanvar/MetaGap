@@ -87,14 +87,31 @@ def parse_vcf_text_fallback(
                 if samples:
                     format_instance, sample_identifier = writer.create_format_instance(samples)
 
+            try:
+                pos_value = int(pos)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Invalid POS value '{pos}' encountered while parsing the VCF file."
+                ) from exc
+
+            if qual in {".", ""}:
+                qual_value: Optional[float] = None
+            else:
+                try:
+                    qual_value = float(qual)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"Invalid QUAL value '{qual}' encountered while parsing the VCF file."
+                    ) from exc
+
             writer.create_allele_frequency(
                 sample_group,
                 chrom=chrom,
-                pos=int(pos),
+                pos=pos_value,
                 variant_id=None if variant_id == "." else variant_id,
                 ref=ref,
                 alt=writer.serialize_alt((alt,)),
-                qual=None if qual in {".", ""} else float(qual),
+                qual=qual_value,
                 filter_value=writer.serialize_filter(filter_value),
                 info=info_instance,
                 format_instance=format_instance,

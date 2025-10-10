@@ -151,6 +151,30 @@ class ImportHelpersTests(TestCase):
         self.assertIn("bioinfoalignment_software", alignment_consumed)
         self.assertIn("bioinfovariantcalling_tool", variant_consumed)
 
+    def test_extract_section_data_prefers_collapsed_section_prefix(self):
+        """Collapsed section prefixes still take priority over bare aliases."""
+
+        metadata = {
+            "bioinfoalignment_tool": "BWA",
+            "bioinfoalignment_params": "--mem",
+            "tool": "Generic",
+            "bioinfovariantcalling_tool": "GATK",
+        }
+
+        alignment_data, alignment_consumed, _ = self.importer._extract_section_data(
+            metadata, "bioinfo_alignment", BioinfoAlignment
+        )
+        variant_data, variant_consumed, _ = self.importer._extract_section_data(
+            metadata, "bioinfo_variant_calling", BioinfoVariantCalling
+        )
+
+        self.assertEqual(alignment_data["tool"], "BWA")
+        self.assertEqual(alignment_data["params"], "--mem")
+        self.assertEqual(variant_data["tool"], "GATK")
+        self.assertIn("bioinfoalignment_tool", alignment_consumed)
+        self.assertIn("bioinfoalignment_params", alignment_consumed)
+        self.assertIn("bioinfovariantcalling_tool", variant_consumed)
+
     def test_extract_section_data_falls_back_to_section_value(self):
         """Section-level metadata populates the configured primary field when needed."""
 

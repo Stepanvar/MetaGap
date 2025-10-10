@@ -7,16 +7,19 @@
 {% endblock %}
 
 {% block content %}
-<h2>{{ title }}.</h2>
-<h3>{{ message }}</h3>
-<address>
-        One Microsoft Way<br />
-        Redmond, WA 98052-6399<br />
-        <abbr title="Phone">P:</abbr>
-        425.555.0100
-</address>
-<address>
-        <strong>Support:</strong>   <a href="mailto:Support@example.com">Support@example.com</a><br />
-        <strong>Marketing:</strong> <a href="mailto:Marketing@example.com">Marketing@example.com</a>
-</address>
+<h1>Контакты</h1>
+<p>По всем вопросам пишите на почту: zsteve2911@gmail.com</p>
+
+<h2>Что приложить к обращению</h2>
+<ul>
+  <li>Краткое описание проблемы и ожидаемого поведения.</li>
+  <li>Минимально воспроизводимый пример: небольшая выборка VCF (или ссылка), команда/параметры, фрагмент лога.</li>
+  <li>Версии окружения: Python, bcftools/htslib, ОС/дистрибутив, версия {{ SITE_NAME }} (коммит/тэг).</li>
+</ul>
+
+<h2>Ответственное обращение с данными</h2>
+<p>Не отправляйте персональные геномные данные и PHI. Для диагностики прикладывайте синтетические файлы или деперсонифицированные выдержки заголовков и метаданных.</p>
+
+<h2>Сотрудничество</h2>
+<p>Открыты к научному сотрудничеству и интеграциям пайплайнов. Пишите через тему почту, указав тему «Collaboration».</p>
 {% endblock %}

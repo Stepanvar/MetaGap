@@ -7,7 +7,6 @@ import re
 from typing import Any, Dict, Iterable, Optional
 
 import pysam
-from django.core.exceptions import ValidationError
 
 from ..models import (
     BioinfoAlignment,
@@ -223,11 +222,15 @@ class VCFMetadataParser:
             section = METADATA_SECTION_MAP.get(key)
             if not section:
                 if self._is_metadata_section_candidate(key):
+                    items = self._collect_record_items(record)
                     message = (
                         f"Unsupported metadata section '{record.key}' encountered in the VCF header."
                     )
-                    logger.error("%s", message)
-                    raise ValidationError(message)
+                    logger.warning("%s", message)
+                    self.warnings.append(message)
+                    additional = metadata.setdefault("additional_metadata", {})
+                    additional_key = normalize_metadata_key(record.key)
+                    additional[additional_key] = items
                 continue
 
             items = self._collect_record_items(record)

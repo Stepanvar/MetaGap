@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import io
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
@@ -13,6 +15,7 @@ from django.urls import NoReverseMatch, reverse
 
 from ..filters import AlleleFrequencySearchFilter
 from ..forms import CustomUserCreationForm, ImportDataForm, SearchForm
+from ..mixins import OrganizationSampleGroupMixin
 from ..models import (
     AlleleFrequency,
     BioinfoAlignment,
@@ -32,7 +35,14 @@ from ..models import (
     SampleGroup,
     SampleOrigin,
 )
-from ..views import EditProfileView
+from ..views import (
+    EditProfileView,
+    ImportDataView,
+    ProfileView,
+    SampleGroupDeleteView,
+    SampleGroupDetailView,
+    SampleGroupUpdateView,
+)
 
 
 class SampleGroupTestDataMixin:
@@ -152,6 +162,72 @@ class SampleGroupTestDataMixin:
         return sample_group, allele
 
 
+class OrganizationSampleGroupMixinTests(TestCase):
+    """Validate helper behaviour for organization-aware mixins."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.factory = RequestFactory()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="mixin_user",
+            password="secure-pass",
+            email="mixin@example.com",
+        )
+        self.other_user = User.objects.create_user(
+            username="mixin_other",
+            password="secure-pass",
+            email="other@example.com",
+        )
+
+    def _build_view(self, request):
+        class DummyView(OrganizationSampleGroupMixin):
+            def __init__(self, request):
+                self.request = request
+
+        return DummyView(request)
+
+    def test_get_organization_profile_returns_user_profile(self) -> None:
+        request = self.factory.get("/profile")
+        request.user = self.user
+
+        mixin = self._build_view(request)
+
+        self.assertEqual(
+            mixin.get_organization_profile(), self.user.organization_profile
+        )
+
+    def test_get_owned_sample_groups_returns_empty_without_profile(self) -> None:
+        request = self.factory.get("/profile")
+        request.user = SimpleNamespace()
+
+        mixin = self._build_view(request)
+
+        self.assertEqual(list(mixin.get_owned_sample_groups()), [])
+
+    def test_get_owned_sample_groups_filters_by_profile(self) -> None:
+        SampleGroup.objects.create(
+            name="Owned", created_by=self.user.organization_profile
+        )
+        SampleGroup.objects.create(
+            name="Other", created_by=self.other_user.organization_profile
+        )
+
+        request = self.factory.get("/profile")
+        request.user = self.user
+
+        mixin = self._build_view(request)
+
+        queryset = mixin.get_owned_sample_groups().order_by("name")
+        self.assertQuerySetEqual(
+            queryset,
+            SampleGroup.objects.filter(
+                created_by=self.user.organization_profile
+            ).order_by("name"),
+            transform=lambda group: group,
+        )
+
+
 class HomePageViewTests(TestCase):
     """Ensure the landing page renders the expected search form."""
 
@@ -266,6 +342,28 @@ class ProfileViewTests(TestCase):
         self.assertEqual(
             response.context["import_form_enctype"],
             "multipart/form-data",
+        )
+
+    def test_profile_context_uses_mixin_helpers(self) -> None:
+        self.client.force_login(self.user)
+        sentinel_profile = object()
+        queryset = SampleGroup.objects.filter(
+            created_by=self.user.organization_profile
+        )
+
+        with patch.object(
+            ProfileView, "get_organization_profile", return_value=sentinel_profile
+        ) as mock_profile, patch.object(
+            ProfileView, "get_owned_sample_groups", return_value=queryset
+        ) as mock_groups:
+            response = self.client.get(reverse("profile"))
+
+        mock_profile.assert_called_once_with()
+        mock_groups.assert_called_once_with()
+        self.assertIs(response.context["organization_profile"], sentinel_profile)
+        self.assertEqual(
+            list(response.context["sample_groups"]),
+            list(queryset.order_by("name")),
         )
 
 
@@ -750,6 +848,45 @@ class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
         self.assertIn(self.allele.info.dp, table_html)
         self.assertIn(self.allele.info.mq, table_html)
 
+    def test_detail_view_get_queryset_uses_mixin_helper(self) -> None:
+        request = RequestFactory().get(self.detail_url())
+        request.user = self.owner
+        view = SampleGroupDetailView()
+        view.setup(request, pk=self.sample_group.pk)
+
+        base_queryset = SampleGroup.objects.filter(pk=self.sample_group.pk)
+
+        with patch.object(
+            SampleGroupDetailView, "get_owned_sample_groups", return_value=base_queryset
+        ) as mock_groups:
+            result = view.get_queryset()
+
+        mock_groups.assert_called_once_with()
+        expected = (
+            base_queryset.select_related(
+                "created_by",
+                "created_by__user",
+                "reference_genome_build",
+                "genome_complexity",
+                "sample_origin",
+                "material_type",
+                "library_construction",
+                "illumina_seq",
+                "ont_seq",
+                "pacbio_seq",
+                "iontorrent_seq",
+                "bioinfo_alignment",
+                "bioinfo_variant_calling",
+                "bioinfo_post_proc",
+                "input_quality",
+            ).prefetch_related(
+                "allele_frequencies",
+                "allele_frequencies__info",
+                "allele_frequencies__format",
+            )
+        )
+        self.assertEqual(str(result.query), str(expected.query))
+
 
 class SampleGroupExportViewTests(SampleGroupTestDataMixin, TestCase):
     """Validate CSV exports for sample groups and their access controls."""
@@ -967,6 +1104,24 @@ class SampleGroupUpdateViewTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_update_view_get_queryset_uses_mixin_helper(self) -> None:
+        request = RequestFactory().get("/sample-group/edit/")
+        request.user = self.user
+        view = SampleGroupUpdateView()
+        view.setup(request, pk=self.sample_group.pk)
+
+        queryset = SampleGroup.objects.filter(
+            created_by=self.user.organization_profile
+        )
+
+        with patch.object(
+            SampleGroupUpdateView, "get_owned_sample_groups", return_value=queryset
+        ) as mock_groups:
+            result = view.get_queryset()
+
+        mock_groups.assert_called_once_with()
+        self.assertIs(result, queryset)
+
 
 class SampleGroupDeleteViewTests(TestCase):
     """Ensure the imported sample groups can be safely removed."""
@@ -1054,6 +1209,24 @@ class SampleGroupDeleteViewTests(TestCase):
             ReferenceGenomeBuild.objects.filter(pk=shared_reference.pk).exists()
         )
 
+    def test_delete_view_get_queryset_uses_mixin_helper(self) -> None:
+        request = RequestFactory().get(self.delete_url())
+        request.user = self.user
+        view = SampleGroupDeleteView()
+        view.setup(request, pk=self.sample_group.pk)
+
+        queryset = SampleGroup.objects.filter(
+            created_by=self.user.organization_profile
+        )
+
+        with patch.object(
+            SampleGroupDeleteView, "get_owned_sample_groups", return_value=queryset
+        ) as mock_groups:
+            result = view.get_queryset()
+
+        mock_groups.assert_called_once_with()
+        self.assertIs(result, queryset)
+
 
 class ImportDataPageTests(TestCase):
     """Verify the import page lists previously uploaded sample groups."""
@@ -1083,4 +1256,21 @@ class ImportDataPageTests(TestCase):
         self.assertContains(
             response,
             reverse("sample_group_delete", args=[self.sample_group.pk]),
+        )
+
+    def test_import_page_uses_mixin_helper(self) -> None:
+        self.client.force_login(self.user)
+        queryset = SampleGroup.objects.filter(
+            created_by=self.user.organization_profile
+        )
+
+        with patch.object(
+            ImportDataView, "get_owned_sample_groups", return_value=queryset
+        ) as mock_groups:
+            response = self.client.get(reverse("import_data"))
+
+        mock_groups.assert_called_once_with()
+        self.assertEqual(
+            list(response.context["sample_groups"]),
+            list(queryset.order_by("name")),
         )

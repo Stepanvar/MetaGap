@@ -1028,46 +1028,46 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                                     exc_cls=MergeConflictError,
                                 )
 
-                    elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                        existing = contig_lines.get(line.id)
-                        if existing is None:
-                            contig_lines[line.id] = copy.deepcopy(line)
-                            combined_header.add_line(copy.deepcopy(line))
-                        else:
-                            if _line_mapping(existing) != _line_mapping(line):
+                elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                    existing = contig_lines.get(line.id)
+                    if existing is None:
+                        contig_lines[line.id] = copy.deepcopy(line)
+                        combined_header.add_line(copy.deepcopy(line))
+                    else:
+                        if _line_mapping(existing) != _line_mapping(line):
+                            handle_critical_error(
+                                "Contig header definitions conflict across shards. "
+                                f"Contig '{line.id}' differs between shards (conflict in {file_path}).",
+                                exc_cls=MergeConflictError,
+                            )
+
+                elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                    existing = format_lines.get(line.id)
+                    if existing is None:
+                        format_lines[line.id] = copy.deepcopy(line)
+                        combined_header.add_line(copy.deepcopy(line))
+                    else:
+                        exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                        for field in ("Number", "Type", "Description"):
+                            if exist_map.get(field) != new_map.get(field):
                                 handle_critical_error(
-                                    "Contig header definitions conflict across shards. "
-                                    f"Contig '{line.id}' differs between shards (conflict in {file_path}).",
+                                    "FORMAT header definitions conflict across shards. "
+                                    f"Field '{field}' for FORMAT '{line.id}' differs: "
+                                    f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
                                     exc_cls=MergeConflictError,
                                 )
 
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        existing = format_lines.get(line.id)
-                        if existing is None:
-                            format_lines[line.id] = copy.deepcopy(line)
-                            combined_header.add_line(copy.deepcopy(line))
-                        else:
-                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
-                            for field in ("Number", "Type", "Description"):
-                                if exist_map.get(field) != new_map.get(field):
-                                    handle_critical_error(
-                                        "FORMAT header definitions conflict across shards. "
-                                        f"Field '{field}' for FORMAT '{line.id}' differs: "
-                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
-                                        exc_cls=MergeConflictError,
-                                    )
-
-                    elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                        m = _line_mapping(line)
-                        sid = m.get("ID")
-                        if not sid:
-                            continue
-                        if merged_sample_metadata is None:
-                            merged_sample_metadata = OrderedDict(m)
-                        else:
-                            for k, v in m.items():
-                                if k not in merged_sample_metadata or not merged_sample_metadata[k]:
-                                    merged_sample_metadata[k] = v
+                elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                    m = _line_mapping(line)
+                    sid = m.get("ID")
+                    if not sid:
+                        continue
+                    if merged_sample_metadata is None:
+                        merged_sample_metadata = OrderedDict(m)
+                    else:
+                        for k, v in m.items():
+                            if k not in merged_sample_metadata or not merged_sample_metadata[k]:
+                                merged_sample_metadata[k] = v
 
         except Exception as exc:
             handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}", exc_cls=MergeConflictError)

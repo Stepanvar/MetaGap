@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 import pysam
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.db import transaction
 
 from ..models import Format, Info, OrganizationProfile, SampleGroup
 from .vcf_database import VCFDatabaseWriter
@@ -47,9 +48,25 @@ class VCFImporter:
 
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None
-        try:
-            with pysam.VariantFile(file_path) as vcf_in:
-                metadata = self.extract_sample_group_metadata(vcf_in)
+        with transaction.atomic():
+            try:
+                with pysam.VariantFile(file_path) as vcf_in:
+                    metadata = self.extract_sample_group_metadata(vcf_in)
+                    sample_group = self._create_sample_group(
+                        metadata, file_path, organization_profile
+                    )
+                    self._populate_sample_group_from_pysam(vcf_in, sample_group)
+            except (OSError, ValueError) as exc:
+                warning = (
+                    f"Could not parse VCF metadata with pysam: {exc}. "
+                    "Falling back to a text parser."
+                )
+                logger.warning("%s", warning)
+                self.warnings.append(warning)
+                if sample_group is not None:
+                    sample_group.delete()
+                    sample_group = None
+                metadata = self._extract_metadata_text_fallback(file_path)
                 sample_group = self._create_sample_group(
                     metadata, file_path, organization_profile
                 )

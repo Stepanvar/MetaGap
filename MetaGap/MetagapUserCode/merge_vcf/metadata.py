@@ -660,6 +660,8 @@ def append_metadata_to_merged_vcf(
 
         fileformat_line = None
         remaining_header_lines = []
+        removed_format_lines = 0
+        removed_sample_lines = 0
         for line in header_lines:
             stripped = line.strip()
             if not stripped:
@@ -669,7 +671,11 @@ def append_metadata_to_merged_vcf(
             if stripped.startswith("##fileformat") and fileformat_line is None:
                 fileformat_line = stripped
                 continue
+            if stripped.startswith("##FORMAT="):
+                removed_format_lines += 1
+                continue
             if stripped.startswith("##SAMPLE="):
+                removed_sample_lines += 1
                 continue
             remaining_header_lines.append(stripped)
 
@@ -684,19 +690,24 @@ def append_metadata_to_merged_vcf(
             final_header_lines, existing_header_lines, verbose=verbose
         )
 
-        if sample_metadata_entries:
-            try:
-                serialized_line = (
-                    serialized_sample_line
-                    if serialized_sample_line is not None
-                    else build_sample_metadata_line(sample_metadata_entries)
-                )
-                if serialized_line not in existing_header_lines:
-                    final_header_lines.append(serialized_line)
-                    existing_header_lines.add(serialized_line)
-            except ValueError as exc:
-                _cleanup_temp_files()
-                handle_critical_error(str(exc))
+        if removed_format_lines and verbose:
+            log_message(
+                f"Removed {removed_format_lines} FORMAT header line"
+                f"{'s' if removed_format_lines != 1 else ''} from anonymized VCF.",
+                verbose,
+            )
+
+        if (sample_metadata_entries or serialized_sample_line) and verbose:
+            skipped = []
+            if removed_sample_lines:
+                skipped.append(f"removed {removed_sample_lines} sample header lines")
+            else:
+                skipped.append("sample columns removed")
+            skipped.append("omitting provided sample metadata entries")
+            log_message(
+                "Anonymized output " + ", ".join(skipped) + ".",
+                verbose,
+            )
 
         for metadata_line in header_metadata_lines:
             normalized = metadata_line.strip()
@@ -704,6 +715,8 @@ def append_metadata_to_merged_vcf(
                 continue
             if not normalized.startswith("##"):
                 normalized = "##" + normalized
+            if normalized.startswith("##FORMAT="):
+                continue
             if normalized in existing_header_lines:
                 continue
             final_header_lines.append(normalized)

@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 import logging
+import os
 
 LOG_FILE = "script_execution.log"
 logger = logging.getLogger("vcf_merger")
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s : %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-fh = logging.FileHandler(LOG_FILE)
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-ch = logging.StreamHandler()
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+logger.propagate = False
+
+
+def _has_existing_log_file_handler() -> bool:
+    """Return ``True`` if the logger already writes to ``LOG_FILE``."""
+
+    for handler in logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            filename = getattr(handler, "baseFilename", None)
+            if filename and os.path.basename(filename) == LOG_FILE:
+                return True
+    return False
+
+
+if not _has_existing_log_file_handler():
+    fh = logging.FileHandler(LOG_FILE)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
 
 
 class MergeVCFError(RuntimeError):
@@ -31,9 +44,13 @@ class MergeConflictError(MergeVCFError):
 def log_message(message: str, verbose: bool = False) -> None:
     """Log *message* and optionally echo it to stdout."""
 
-    logger.info(message)
+    if not logger.isEnabledFor(logging.INFO):
+        return
+
+    record = logger.makeRecord(logger.name, logging.INFO, fn="", lno=0, msg=message, args=(), exc_info=None)
+    logger.handle(record)
     if verbose:
-        print(message)
+        print(formatter.format(record))
 
 
 def handle_critical_error(message: str, exc_cls=None) -> None:

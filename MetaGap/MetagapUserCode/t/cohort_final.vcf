@@ -1,0 +1,18 @@
+##fileformat=VCFv4.2
+##FILTER=<ID=PASS,Description="All filters passed">
+##reference=GRCh37
+##contig=<ID=20>
+##FILTER=<ID=q10,Description="Quality below 10">
+##INFO=<ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
+##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency">
+##SAMPLE=<ID=Cohort01,Center="Genotek",N=100>
+##REFERENCE_GENOME_BUILD=<BuildName=GRCh38,BuildVersion="p14">
+##SAMPLE_ORIGIN=<Tissue=Lung>
+##LIBRARY_CONSTRUCTION=<Kit="TruSeq",PCRCyles=12>
+##SEQUENCING_PLATFORM=<Platform=Illumina,Instrument="NovaSeq 6000",FlowCell=S4,ReadLength=150bp>
+##BIOINFO_ALIGNMENT=<Software=BWA>
+##BIOINFO_VARIANT_CALLING=<Tool=GATK,Version=4.2>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO

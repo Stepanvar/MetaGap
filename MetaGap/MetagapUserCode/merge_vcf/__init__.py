@@ -2,23 +2,83 @@
 
 from __future__ import annotations
 
-try:
-    import vcfpy  # type: ignore
-    VCFPY_AVAILABLE = True
-except ImportError:  # pragma: no cover - exercised when dependency is missing
-    VCFPY_AVAILABLE = False
+import ast
+from pathlib import Path
+from typing import Iterable
 
-    class _MissingVcfpyModule:
-        """Placeholder that raises a helpful error when vcfpy is unavailable."""
 
-        __slots__ = ()
+def _import_dependency(name: str):
+    try:
+        module = __import__(name)
+    except ImportError as exc:  # pragma: no cover - exercised when dependency missing
+        raise ModuleNotFoundError(
+            f"The '{name}' package is required for MetaGap VCF utilities. "
+            "Please install it with 'pip install {name}'."
+        ) from exc
+    return module
 
-        def __getattr__(self, name):  # pragma: no cover - defensive, attribute driven
-            raise ModuleNotFoundError(
-                "Error: vcfpy package is required. Please install it with 'pip install vcfpy'."
+
+vcfpy = _import_dependency("vcfpy")
+pysam = _import_dependency("pysam")
+
+VCFPY_AVAILABLE = True
+PYSAM_AVAILABLE = True
+
+
+def _read_module_source(relative_path: str) -> str:
+    package_dir = Path(__file__).resolve().parent
+    module_path = package_dir / relative_path
+    if not module_path.exists():  # pragma: no cover - defensive
+        return ""
+    return module_path.read_text(encoding="utf-8")
+
+
+def _iter_forbidden_commands(tree: ast.AST, forbidden: Iterable[str]):
+    forbidden_set = set(forbidden)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if not isinstance(func.value, ast.Name):
+            continue
+        if func.value.id != "subprocess":
+            continue
+        if not node.args:
+            continue
+        first = node.args[0]
+        values: list[str] = []
+        if isinstance(first, ast.List):
+            for elt in first.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                    values.append(elt.value)
+        elif isinstance(first, ast.Constant) and isinstance(first.value, str):
+            values.append(first.value)
+        if forbidden_set.intersection(values):
+            yield values
+
+
+def _ensure_no_forbidden_subprocess_usage() -> None:
+    forbidden = {"bcftools", "bgzip", "tabix"}
+    for module_name in ("merging.py", "metadata.py"):
+        source = _read_module_source(module_name)
+        if not source:
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:  # pragma: no cover - defensive
+            continue
+        for values in _iter_forbidden_commands(tree, forbidden):
+            joined = ", ".join(values)
+            raise RuntimeError(
+                "Forbidden subprocess command detected in MetaGap tooling: "
+                f"{joined}. Please use the native Python implementations."
             )
 
-    vcfpy = _MissingVcfpyModule()  # type: ignore
 
-__all__ = ["vcfpy", "VCFPY_AVAILABLE"]
+_ensure_no_forbidden_subprocess_usage()
+
+
+__all__ = ["vcfpy", "pysam", "VCFPY_AVAILABLE", "PYSAM_AVAILABLE"]
 

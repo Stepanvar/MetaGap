@@ -304,7 +304,15 @@ def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
 def parse_metadata_arguments(args, verbose: bool = False):
     """Return header metadata derived from CLI arguments."""
 
-    sample_entries = getattr(args, "sample_metadata_entries", None) or []
+    sample_entries = []
+    for attr in ("sample_metadata_entries", "meta"):
+        values = getattr(args, attr, None)
+        if not values:
+            continue
+        if isinstance(values, (list, tuple)):
+            sample_entries.extend(values)
+        else:
+            sample_entries.append(values)
     additional_lines = getattr(args, "header_metadata_lines", None) or []
 
     sample_mapping: "OrderedDict[str, str]" = OrderedDict()

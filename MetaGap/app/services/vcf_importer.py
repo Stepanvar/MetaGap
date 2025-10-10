@@ -7,7 +7,9 @@ from typing import Any, Dict, Optional, Tuple
 
 import pysam
 
-from ..models import Format, Info, SampleGroup
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+
+from ..models import Format, Info, OrganizationProfile, SampleGroup
 from .vcf_database import VCFDatabaseWriter
 from .vcf_file_utils import extract_metadata_text_fallback, parse_vcf_text_fallback
 from .vcf_metadata import VCFMetadataParser
@@ -27,9 +29,21 @@ class VCFImporter:
     def import_file(self, file_path: str) -> SampleGroup:
         """Import the provided VCF file and return the created sample group."""
 
-        organization_profile = getattr(self.user, "organization_profile", None)
+        try:
+            organization_profile = self.user.organization_profile
+        except AttributeError as exc:  # pragma: no cover - defensive fallback
+            raise ValidationError(
+                "Please complete your organization profile before importing data."
+            ) from exc
+        except (OrganizationProfile.DoesNotExist, ObjectDoesNotExist) as exc:
+            raise ValidationError(
+                "Please complete your organization profile before importing data."
+            ) from exc
+
         if organization_profile is None:
-            raise ValueError("The current user does not have an organisation profile.")
+            raise ValidationError(
+                "Please complete your organization profile before importing data."
+            )
 
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None

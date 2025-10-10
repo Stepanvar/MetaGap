@@ -636,6 +636,49 @@ def _load_metadata_template(
     )
 
 
+def _split_metadata_segments(raw_line: str) -> list[str]:
+    """Split concatenated metadata segments into individual ``##`` records."""
+
+    if raw_line is None:
+        return []
+
+    text = raw_line.strip()
+    if not text:
+        return []
+
+    # Ensure the string begins with ``##`` before scanning for additional segments.
+    if not text.startswith("##"):
+        text = "##" + text.lstrip("#")
+
+    segments: list[str] = []
+    start = 0
+    length = len(text)
+
+    while start < length:
+        if not text.startswith("##", start):
+            # Residual text without a ``##`` prefix is coerced into a valid segment.
+            remainder = text[start:].strip()
+            if remainder:
+                if not remainder.startswith("##"):
+                    remainder = "##" + remainder.lstrip("#")
+                segments.append(remainder)
+            break
+
+        next_start = text.find("##", start + 2)
+        segment = text[start:] if next_start == -1 else text[start:next_start]
+        segment = segment.strip()
+        if segment:
+            if not segment.startswith("##"):
+                segment = "##" + segment.lstrip("#")
+            segments.append(segment)
+
+        if next_start == -1:
+            break
+        start = next_start
+
+    return segments
+
+
 def load_metadata_lines(metadata_file: str, verbose: bool = False) -> list[str]:
     """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
@@ -660,23 +703,20 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> list[str]:
     try:
         with normalized_path.open("r", encoding="utf-8") as handle:
             for line_number, raw_line in enumerate(handle, 1):
-                stripped = raw_line.strip()
-                if not stripped:
-                    continue
-                if not stripped.startswith("##"):
-                    stripped = "##" + stripped
-                parsed = _parse_simple_metadata_line(stripped)
-                if not parsed:
-                    raise ValidationError(
-                        "Metadata file lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
-                    )
-                key, value = parsed
-                sanitized = f"##{key}={value}"
-                if sanitized in seen_lines:
-                    continue
-                sanitized_lines.append(sanitized)
-                seen_lines.add(sanitized)
+                segments = _split_metadata_segments(raw_line)
+                for segment in segments:
+                    parsed = _parse_simple_metadata_line(segment)
+                    if not parsed:
+                        raise ValidationError(
+                            "Metadata file lines must be in '##key=value' format. "
+                            f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
+                        )
+                    key, value = parsed
+                    sanitized = f"##{key}={value}"
+                    if sanitized in seen_lines:
+                        continue
+                    sanitized_lines.append(sanitized)
+                    seen_lines.add(sanitized)
     except OSError as exc:
         raise ValidationError(
             f"Unable to read metadata file {metadata_file}: {exc}"
@@ -773,7 +813,7 @@ def append_metadata_to_merged_vcf(
     an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
     allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
     verbose: bool = False,
-) -> None:
+):
     """Finalize the merged VCF by applying in-Python processing and metadata."""
 
     if not PYSAM_AVAILABLE or not VCFPY_AVAILABLE:  # pragma: no cover - defensive
@@ -824,6 +864,128 @@ def append_metadata_to_merged_vcf(
                     break
                 header_lines.append(raw.rstrip("\n"))
         return header_lines
+
+    def _ensure_standard_info_lines(lines: list[str]) -> None:
+        need = {
+            "AC": '##INFO=<ID=AC,Number=A,Type=Integer,Description="Alternate allele count in genotypes, for each ALT allele">',
+            "AN": '##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">',
+            "AF": '##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency, for each ALT allele">',
+        }
+        present = set()
+        for line in lines:
+            if line.startswith("##INFO=<ID="):
+                try:
+                    kid = line.split("##INFO=<ID=", 1)[1].split(",", 1)[0].split(">", 1)[0]
+                    present.add(kid)
+                except Exception:
+                    continue
+        for key, value in need.items():
+            if key not in present:
+                lines.append(value)
+
+    header_lines = _read_header_lines(Path(merged_vcf))
+    fileformat_line = None
+    remaining_header_lines: list[str] = []
+    for line in header_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#CHROM"):
+            continue
+        if stripped.startswith("##fileformat") and fileformat_line is None:
+            fileformat_line = stripped
+            continue
+        if stripped.startswith("##SAMPLE="):
+            continue  # drop per-sample meta; we'll add cohort SAMPLE
+        remaining_header_lines.append(stripped)
+
+    final_header_lines: list[str] = [
+        fileformat_line or "##fileformat=VCFv4.2",
+        *remaining_header_lines,
+    ]
+    existing = set(final_header_lines)
+
+    _ensure_standard_info_lines(final_header_lines)
+
+    if sample_metadata_entries or serialized_sample_line:
+        try:
+            smp = serialized_sample_line or build_sample_metadata_line(sample_metadata_entries)
+            if not smp.startswith("##"):
+                smp = "##" + smp
+            if smp not in existing:
+                final_header_lines.append(smp)
+                existing.add(smp)
+        except ValueError as exc:
+            handle_critical_error(str(exc))
+
+    normalized_metadata: list[str] = []
+    for meta in header_metadata_lines:
+        for segment in _split_metadata_segments(meta):
+            normalized_metadata.append(segment)
+
+    deduplicated_metadata: list[str] = []
+    seen_normalized: set[str] = set()
+    for nm in normalized_metadata:
+        cleaned = (nm or "").strip()
+        if not cleaned:
+            continue
+        if not cleaned.startswith("##"):
+            cleaned = "##" + cleaned.lstrip("#")
+        if cleaned in existing or cleaned in seen_normalized:
+            continue
+        deduplicated_metadata.append(cleaned)
+        seen_normalized.add(cleaned)
+
+    final_header_lines.extend(deduplicated_metadata)
+    existing.update(seen_normalized)
+
+    _ensure_standard_info_lines(final_header_lines)
+    final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
+
+    # ----- Serializer for 8-column anonymized records -----
+    def _fmt_filter(filt) -> str:
+        if not filt:
+            return "."
+        if isinstance(filt, (list, tuple)):
+            if not filt:
+                return "."
+            if filt == ["PASS"] or filt == ("PASS",):
+                return "PASS"
+            return ",".join(str(x) for x in filt)
+        return str(filt)
+
+    def _fmt_info(info: dict) -> str:
+        if not info:
+            return "."
+        parts = []
+        for key, value in info.items():
+            if value is None:
+                parts.append(key)
+            elif isinstance(value, (list, tuple)):
+                parts.append(
+                    f"{key}=" + ",".join("" if entry is None else str(entry) for entry in value)
+                )
+            else:
+                parts.append(f"{key}={value}")
+        return ";".join(parts) if parts else "."
+
+    def _serialize_record_8col(rec) -> str:
+        chrom = str(getattr(rec, "CHROM", "."))
+        pos = str(getattr(rec, "POS", "."))
+        rid = getattr(rec, "ID", None)
+        rid_field = (
+            ";".join(rid)
+            if isinstance(rid, (list, tuple))
+            else (rid if rid else ".")
+        )
+        ref = str(getattr(rec, "REF", "."))
+        alts = getattr(rec, "ALT", []) or []
+        alt_field = ",".join(str(a) for a in alts) if alts else "."
+        qual = getattr(rec, "QUAL", None)
+        qual_field = "." if qual is None else str(qual)
+        filt_field = _fmt_filter(getattr(rec, "FILTER", None))
+        info_field = _fmt_info(getattr(rec, "INFO", {}) or {})
+        return "\t".join(
+            [chrom, pos, rid_field, ref, alt_field, qual_field, filt_field, info_field]
+        )
 
     def _format_scalar(value) -> str:
         if value is None:

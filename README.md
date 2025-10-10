@@ -25,6 +25,18 @@ After loading the data you can sign in with either demo account and visit the pr
 - Run checks with `python manage.py check` and execute the test suite using `python manage.py test`.
 - Static files are served from the `static/` directory; new assets should be collected with `python manage.py collectstatic` in production environments.
 
+### Logging format for the VCF merger
+
+The `MetaGap.MetagapUserCode.merge_vcf` workflow logs to both `script_execution.log`
+and the console using the format:
+
+```
+YYYY-MM-DD HH:MM:SS | LEVEL | vcf_merger | module | message
+```
+
+The shared formatter ensures severity and module details are visible across file and
+console handlers so operational logs can be correlated easily.
+
 ### Continuous integration expectations
 
 - Every pull request and push to `main` runs the Django test suite (`python manage.py test`) under coverage on GitHub Actions.

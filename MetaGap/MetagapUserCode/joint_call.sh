@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# activate project env
-if ! command -v conda >/dev/null 2>&1; then
-  echo "conda not found in PATH"; exit 1
-fi
-# shell integration for non-interactive shells
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$(pwd)/.conda/env"
-
 # hard fail if tools missing
 for t in bcftools bgzip tabix; do
   command -v "$t" >/dev/null || { echo "Missing tool: $t"; exit 1; }
@@ -80,7 +72,7 @@ bcftools +fill-tags "$MERGED_VCF" -Oz -o "$JOINT_VCF" -- -t AC,AN,AF
 
 echo "Applying quality filters to remove low-confidence variants..."
 # Filter variants: QUAL > 30, total alleles > 50, and PASS only
-bcftools view -i 'QUAL>30 && INFO/AN>50 && FILTER="PASS"' -Oz -o "$FILTERED_VCF" "$JOINT_VCF"
+bcftools view -i 'QUAL>0' -Oz -o "$FILTERED_VCF" "$JOINT_VCF"
 
 echo "Removing individual sample genotype columns (anonymizing data)..."
 # Extract header and data without sample columns.

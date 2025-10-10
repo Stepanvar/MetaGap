@@ -81,9 +81,9 @@ jobs:
         with:
           name: django-test-artifacts
           path: |
-            test-output.log
-            coverage-summary.txt
-            coverage.xml
+            MetaGap/test-output.log
+            MetaGap/coverage-summary.txt
+            MetaGap/coverage.xml
           if-no-files-found: warn
 
       - name: Fail if tests failed

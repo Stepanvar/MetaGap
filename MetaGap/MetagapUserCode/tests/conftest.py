@@ -7,6 +7,7 @@ from types import ModuleType
 from typing import Dict
 
 import pytest
+from pytest import MonkeyPatch
 
 # Cache loaded modules across tests (especially useful for session-scoped fixtures)
 _MODULE_CACHE: Dict[str, ModuleType] = {}
@@ -81,7 +82,7 @@ def cli_module(monkeypatch):
 
 
 @pytest.fixture(scope="session")
-def merge_script_module(request, monkeypatch) -> ModuleType:
+def merge_script_module(request) -> ModuleType:
     """
     Return either the user's standalone script module or the CLI module.
 
@@ -99,8 +100,12 @@ def merge_script_module(request, monkeypatch) -> ModuleType:
         return cached
 
     base_dir = Path(__file__).resolve().parents[1]
-    if variant == "cli":
-        module = _load_cli_module(base_dir, monkeypatch=monkeypatch)
+    script_path = base_dir / "test_merge_vcf.py"
+
+    if variant == "cli" or not script_path.exists():
+        mp = MonkeyPatch()
+        request.addfinalizer(mp.undo)
+        module = _load_cli_module(base_dir, monkeypatch=mp)
     else:
         module = _load_script_module(base_dir)
 

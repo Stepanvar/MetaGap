@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import copy
 import gzip
 import os
@@ -133,6 +134,7 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
             "Inserted INFO header definitions for missing fields: "
             + ", ".join(added_ids),
             verbose,
+            level=logging.INFO,
         )
 
     return header
@@ -169,6 +171,7 @@ def ensure_standard_info_header_lines(
             "Inserted INFO header definitions for missing fields: "
             + ", ".join(added_ids),
             verbose,
+            level=logging.INFO,
         )
 
     return final_header_lines
@@ -359,6 +362,7 @@ def _load_metadata_template(
                             f"{normalized_path} line {line_number}: {stripped}"
                         ),
                         verbose,
+                        level=logging.DEBUG,
                     )
                     continue
                 if stripped.startswith("##SAMPLE="):
@@ -420,16 +424,19 @@ def _load_metadata_template(
     log_message(
         f"Loaded metadata template header from {normalized_path}",
         verbose,
+        level=logging.INFO,
     )
     if sanitized_lines:
         log_message(
             "Metadata template header lines: " + ", ".join(sanitized_lines),
             verbose,
+            level=logging.DEBUG,
         )
     if template_serialized_sample:
         log_message(
             f"Metadata template sample line: {template_serialized_sample}",
             verbose,
+            level=logging.DEBUG,
         )
 
     return (
@@ -494,6 +501,7 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
     log_message(
         f"Loaded {len(sanitized_lines)} metadata header line(s) from {normalized_path}",
         verbose,
+        level=logging.INFO,
     )
 
     return sanitized_lines
@@ -533,7 +541,7 @@ def apply_metadata_to_header(
 
     header = ensure_standard_info_definitions(header, verbose=verbose)
 
-    log_message("Applied CLI metadata to merged header.", verbose)
+    log_message("Applied CLI metadata to merged header.", verbose, level=logging.INFO)
     return header
 
 
@@ -735,6 +743,7 @@ def append_metadata_to_merged_vcf(
     log_message(
         "Recalculating AC, AN, AF tags across the merged cohort...",
         verbose,
+        level=logging.DEBUG,
     )
 
     header_lines = _read_header_lines(merged_vcf)
@@ -864,7 +873,11 @@ def append_metadata_to_merged_vcf(
 
     _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
 
-    log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
+    log_message(
+        f"Anonymized merged VCF written to: {final_vcf}",
+        verbose,
+        level=logging.INFO,
+    )
     return final_vcf
 
 
@@ -874,6 +887,7 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
     log_message(
         "Recalculating AC, AN, AF tags across the merged cohort...",
         verbose,
+        level=logging.DEBUG,
     )
 
     if VCFPY_AVAILABLE:

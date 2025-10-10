@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import copy
 import datetime
 import heapq
@@ -461,31 +462,51 @@ def _filter_vcf_records(
     allowed_filter_values: Optional[Sequence[str]],
     verbose: bool,
 ) -> None:
-    """In-place filter of VCF records in `input_path` based on quality/AN thresholds and FILTER values."""
-    try:
-        reader = vcfpy.Reader.from_path(input_path)
-    except Exception as exc:
-        handle_critical_error(f"Failed to read VCF for filtering ({input_path}): {exc}")
+    """In-place filter of VCF records based on quality/AN thresholds and FILTER values."""
+    import os
+
     tmp_path = input_path + ".filtered"
     kept = 0
     total = 0
+
     try:
-        writer = vcfpy.Writer.from_path(tmp_path, reader.header)
+        import vcfpy  # local import to avoid global dependency at import time
+
+        # Read → write filtered → atomic replace
+        try:
+            with vcfpy.Reader.from_path(input_path) as reader:
+                try:
+                    with vcfpy.Writer.from_path(tmp_path, header=reader.header) as writer:
+                        for rec in reader:
+                            total += 1
+                            if _record_passes_filters(rec, qual_threshold, an_threshold, allowed_filter_values):
+                                writer.write_record(rec)
+                                kept += 1
+                except Exception as exc:
+                    # Best-effort cleanup of partial tmp file
+                    try:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                    except OSError:
+                        pass
+                    handle_critical_error(f"Failed to write filtered VCF ({input_path}): {exc}", exc_cls=MergeVCFError)
+        except Exception as exc:
+            handle_critical_error(f"Failed to read VCF for filtering ({input_path}): {exc}", exc_cls=MergeVCFError)
+
+        try:
+            os.replace(tmp_path, input_path)  # atomic on same filesystem
+        except Exception as exc:
+            handle_critical_error(
+                f"Failed to replace original with filtered VCF ({input_path}): {exc}", exc_cls=MergeVCFError
+            )
+
+        log_message(f"Applied variant filter: kept {kept} of {total}.", verbose, level=logging.INFO)
+
+    except MergeVCFError:
+        raise
     except Exception as exc:
-        reader.close()
-        handle_critical_error(f"Failed to open filtered VCF writer ({input_path}): {exc}")
-    try:
-        for rec in reader:
-            total += 1
-            if _record_passes_filters(rec, qual_threshold, an_threshold, allowed_filter_values):
-                writer.write_record(rec)
-                kept += 1
-    finally:
-        reader.close()
-        writer.close()
-    # Replace original file with filtered file
-    shutil.move(tmp_path, input_path)
-    log_message(f"Applied variant filter: kept {kept} of {total}.", verbose)
+        handle_critical_error(f"Unexpected filtering error for {input_path}: {exc}", exc_cls=MergeVCFError)
+
 
 def merge_vcfs(
     valid_files: Sequence[str],
@@ -508,7 +529,12 @@ def merge_vcfs(
     base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     gz_vcf = base_vcf + ".gz"
 
-    log_message(f"Discovered {len(valid_files)} validated VCF shard(s) for merging.", verbose)
+    file_count = len(valid_files)
+    log_message(
+        f"Discovered {file_count} validated VCF shard(s) for merging.",
+        verbose,
+        level=logging.INFO,
+    )
 
     temp_files: List[str] = []
     preprocessed: List[str] = []
@@ -760,7 +786,11 @@ def merge_vcfs(
         return rec
 
     # Heap-based k-way merge: each heap entry is (sort_key, counter, source_index, record)
-    log_message("Performing heap-based k-way merge of VCF shards...", verbose)
+    log_message(
+        "Performing heap-based k-way merge of VCF shards...",
+        verbose,
+        level=logging.DEBUG,
+    )
     heap: List[Tuple[Tuple[int, int, str, Tuple[str, ...]], int, int, vcfpy.Record]] = []
     counter = itertools.count()  # unique counter to avoid comparison of records in heap
     # Initialize heap with the first record from each reader (if available)
@@ -846,16 +876,26 @@ def merge_vcfs(
     # Replace original merged VCF with the anonymized version
     shutil.move(anon_tmp, base_vcf)
 
-    # Compress and index the final VCF using BGZF and Tabix
-    log_message("Compressing and indexing the final VCF...", verbose)
+    # BGZF compress + Tabix index using pysam
+    log_message(
+        "Compressing and indexing the final VCF...",
+        verbose,
+        level=logging.INFO,
+    )
     try:
         pysam.tabix_compress(base_vcf, gz_vcf, force=True)
         pysam.tabix_index(gz_vcf, preset="vcf", force=True)
         os.remove(base_vcf)  # remove uncompressed VCF after successful compression
     except Exception as exc:
-        handle_critical_error(f"Failed to compress/index final VCF: {exc}", exc_cls=MergeConflictError)
-
-    log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
+        handle_critical_error(
+            f"Failed to compress/index final VCF: {exc}",
+            exc_cls=MergeConflictError,
+        )
+    log_message(
+        f"Merged VCF created and indexed successfully: {gz_vcf}",
+        verbose,
+        level=logging.INFO,
+    )
     return gz_vcf
 
 def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[str]] = None):

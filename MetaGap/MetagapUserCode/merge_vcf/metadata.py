@@ -9,13 +9,10 @@ import re
 from collections import OrderedDict
 from typing import List, Optional, Tuple
 
-from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
-from .logging_utils import handle_critical_error, log_message
+import logging
 import subprocess
-from collections import OrderedDict
-from typing import List, Optional, Tuple
 
-from . import VCFPY_AVAILABLE, vcfpy
+from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
 from .logging_utils import (
     MergeConflictError,
     ValidationError,
@@ -112,8 +109,9 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
             info_line = info_cls.from_mapping(mapping)
         except Exception as exc:  # pragma: no cover - defensive logging
             log_message(
-                f"WARNING: Unable to create INFO header definition for {info_id}: {exc}",
+                f"Unable to create INFO header definition for {info_id}: {exc}",
                 verbose,
+                level=logging.WARNING,
             )
             continue
 
@@ -121,8 +119,9 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
             header.add_line(info_line)
         except Exception as exc:  # pragma: no cover - defensive logging
             log_message(
-                f"WARNING: Failed to append INFO header definition for {info_id}: {exc}",
+                f"Failed to append INFO header definition for {info_id}: {exc}",
                 verbose,
+                level=logging.WARNING,
             )
             continue
 
@@ -374,10 +373,11 @@ def _load_metadata_template(
                     if template_sample_mapping is not None:
                         log_message(
                             (
-                                "WARNING: Multiple ##SAMPLE lines found in metadata "
+                                "Multiple ##SAMPLE lines found in metadata "
                                 f"template {normalized_path}; using the last occurrence"
                             ),
                             verbose,
+                            level=logging.WARNING,
                         )
                     template_sample_mapping = OrderedDict(parsed_sample.items())
                     template_serialized_sample = stripped
@@ -400,8 +400,9 @@ def _load_metadata_template(
                     simple_line = vcfpy.SimpleHeaderLine(key, value)
                 except Exception as exc:  # pragma: no cover - defensive logging
                     log_message(
-                        f"WARNING: Failed to parse metadata template line '{sanitized}': {exc}",
+                        f"Failed to parse metadata template line '{sanitized}': {exc}",
                         verbose,
+                        level=logging.WARNING,
                     )
                     continue
 

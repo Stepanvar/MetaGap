@@ -202,6 +202,13 @@ def merge_vcfs(
         if pre != file_path:
             temp_files.append(pre)
 
+    try:
+        unified_header_template = union_headers(valid_files, sample_order=sample_order)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        handle_critical_error(f"Failed to construct unified header: {exc}")
+
     log_message("Merging VCF files with bcftools...", verbose)
     try:
         result = subprocess.run(
@@ -224,9 +231,11 @@ def merge_vcfs(
     except Exception as exc:
         handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
 
+    header_to_apply = unified_header_template.copy()
+
     try:
         header = apply_metadata_to_header(
-            reader.header,
+            header_to_apply,
             sample_header_line=sample_header_line,
             simple_header_lines=simple_header_lines,
             verbose=verbose,
@@ -245,8 +254,13 @@ def merge_vcfs(
         reader.close()
         handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
 
+    target_sample_order = []
+    if hasattr(header, "samples") and hasattr(header.samples, "names"):
+        target_sample_order = list(header.samples.names)
+
     try:
         for record in reader:
+            _pad_record_samples(record, header, target_sample_order)
             writer.write_record(record)
     finally:
         reader.close()
@@ -279,13 +293,18 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
     """Return a merged header with combined metadata from *valid_files*."""
 
     combined_header = None
-    info_ids = set()
-    filter_ids = set()
-    contig_ids = set()
+    info_lines: "OrderedDict[str, vcfpy.header.InfoHeaderLine]" = OrderedDict()
+    filter_lines: "OrderedDict[str, vcfpy.header.FilterHeaderLine]" = OrderedDict()
+    contig_lines: "OrderedDict[str, vcfpy.header.ContigHeaderLine]" = OrderedDict()
+    format_lines: "OrderedDict[str, vcfpy.header.FormatHeaderLine]" = OrderedDict()
     computed_sample_order: List[str] = []
     merged_sample_metadata = None
 
-    initial_sample_names: List[str] = []
+    def _line_mapping(line) -> "OrderedDict[str, str]":
+        mapping = getattr(line, "mapping", None)
+        if isinstance(mapping, dict):
+            return OrderedDict(mapping)
+        return OrderedDict()
 
     for file_path in valid_files:
         preprocessed_file = preprocess_vcf(file_path)
@@ -299,21 +318,20 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                 if hasattr(combined_header, "samples") and hasattr(
                     combined_header.samples, "names"
                 ):
-                    initial_sample_names = list(combined_header.samples.names)
+                    computed_sample_order = list(combined_header.samples.names)
                 for line in combined_header.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
-                        info_ids.add(line.id)
+                        info_lines[line.id] = copy.deepcopy(line)
                     elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                        filter_ids.add(line.id)
+                        filter_lines[line.id] = copy.deepcopy(line)
                     elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                        contig_ids.add(line.id)
+                        contig_lines[line.id] = copy.deepcopy(line)
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                        format_lines[line.id] = copy.deepcopy(line)
                     elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                        mapping = OrderedDict(getattr(line, "mapping", {}))
+                        mapping = _line_mapping(line)
                         if mapping.get("ID"):
                             merged_sample_metadata = OrderedDict(mapping)
-
-                _remove_format_and_sample_definitions(combined_header)
-                computed_sample_order = list(initial_sample_names)
                 continue
 
             if hasattr(header, "samples") and hasattr(header.samples, "names"):
@@ -323,19 +341,65 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
 
             for line in header.lines:
                 if isinstance(line, vcfpy.header.InfoHeaderLine):
-                    if line.id not in info_ids:
+                    existing = info_lines.get(line.id)
+                    if existing is None:
+                        info_lines[line.id] = copy.deepcopy(line)
                         combined_header.add_line(copy.deepcopy(line))
-                        info_ids.add(line.id)
+                        continue
+                    existing_mapping = _line_mapping(existing)
+                    new_mapping = _line_mapping(line)
+                    for key in ("Number", "Type", "Description"):
+                        if existing_mapping.get(key) != new_mapping.get(key):
+                            handle_critical_error(
+                                "INFO header definitions conflict across shards. "
+                                f"Field '{key}' for INFO '{line.id}' differs between shards: "
+                                f"{existing_mapping.get(key)!r} vs {new_mapping.get(key)!r} "
+                                f"(encountered in {file_path})."
+                            )
                 elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                    if line.id not in filter_ids:
+                    existing = filter_lines.get(line.id)
+                    if existing is None:
+                        filter_lines[line.id] = copy.deepcopy(line)
                         combined_header.add_line(copy.deepcopy(line))
-                        filter_ids.add(line.id)
+                        continue
+                    existing_mapping = _line_mapping(existing)
+                    new_mapping = _line_mapping(line)
+                    if existing_mapping.get("Description") != new_mapping.get("Description"):
+                        handle_critical_error(
+                            "FILTER header definitions conflict across shards. "
+                            f"Description for FILTER '{line.id}' differs between shards: "
+                            f"{existing_mapping.get('Description')!r} vs {new_mapping.get('Description')!r} "
+                            f"(encountered in {file_path})."
+                        )
                 elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                    if line.id not in contig_ids:
+                    existing = contig_lines.get(line.id)
+                    if existing is None:
+                        contig_lines[line.id] = copy.deepcopy(line)
                         combined_header.add_line(copy.deepcopy(line))
-                        contig_ids.add(line.id)
+                        continue
+                    if _line_mapping(existing) != _line_mapping(line):
+                        handle_critical_error(
+                            "Contig header definitions conflict across shards. "
+                            f"Contig '{line.id}' differs between shards (conflict in {file_path})."
+                        )
+                elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                    existing = format_lines.get(line.id)
+                    if existing is None:
+                        format_lines[line.id] = copy.deepcopy(line)
+                        combined_header.add_line(copy.deepcopy(line))
+                        continue
+                    existing_mapping = _line_mapping(existing)
+                    new_mapping = _line_mapping(line)
+                    for key in ("Number", "Type", "Description"):
+                        if existing_mapping.get(key) != new_mapping.get(key):
+                            handle_critical_error(
+                                "FORMAT header definitions conflict across shards. "
+                                f"Field '{key}' for FORMAT '{line.id}' differs between shards: "
+                                f"{existing_mapping.get(key)!r} vs {new_mapping.get(key)!r} "
+                                f"(encountered in {file_path})."
+                            )
                 elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                    mapping = OrderedDict(getattr(line, "mapping", {}))
+                    mapping = _line_mapping(line)
                     sample_id = mapping.get("ID")
                     if not sample_id:
                         continue
@@ -363,11 +427,6 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
     samples_attr_present = hasattr(combined_header, "samples") and hasattr(
         combined_header.samples, "names"
     )
-    if target_sample_order and samples_attr_present:
-        combined_header.samples.names = list(target_sample_order)
-
-    _remove_format_and_sample_definitions(combined_header)
-
     if target_sample_order and samples_attr_present:
         combined_header.samples.names = list(target_sample_order)
 

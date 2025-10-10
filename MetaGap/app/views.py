@@ -1,8 +1,10 @@
 """Application views."""
 
 import csv
+import json
 import logging
 import os
+import re
 from typing import Any, Dict, Iterable, Optional, Tuple
 from django.conf import settings
 from django.contrib import messages
@@ -57,9 +59,12 @@ from .models import (
     SampleGroup,
     SampleOrigin,
 )
-from .tables import build_allele_frequency_table, create_dynamic_table
+from .tables import (
+    PRIORITY_METRIC_SUMMARY,
+    build_allele_frequency_table,
+    create_dynamic_table,
+)
 from .services.vcf_importer import VCFImporter
-from .tables import create_dynamic_table
 from .mixins import OrganizationSampleGroupMixin
 
 
@@ -153,6 +158,10 @@ class SearchResultsView(SingleTableMixin, FilterView):
         context.setdefault("filter", getattr(self, "filterset", None))
         if hasattr(self, "filterset"):
             context["filter_form"] = self.filterset.form
+        table = context.get("table")
+        if table is not None:
+            table.attrs.setdefault("id", "allele-frequency-results")
+        context.setdefault("priority_metrics", PRIORITY_METRIC_SUMMARY)
         return context
 
 
@@ -530,15 +539,61 @@ class SampleGroupDetailView(
         allele_qs = self.object.allele_frequencies.all()
         table = table_class(allele_qs)
         RequestConfig(self.request, paginate={"per_page": 25}).configure(table)
+        table.attrs.setdefault("id", "sample-group-variants")
         sample_group = self.object
 
+        def humanize_label(raw_label: Any) -> str:
+            text = str(raw_label or "").strip()
+            if not text:
+                return "Metadata"
+            text = re.sub(r"[_\-]+", " ", text)
+            text = re.sub(r"(?<=[a-z0-9])([A-Z])", r" \1", text)
+            text = re.sub(r"\s+", " ", text).strip()
+            words = []
+            for word in text.split(" "):
+                if len(word) <= 4 and word.isupper():
+                    words.append(word)
+                else:
+                    words.append(word.capitalize())
+            return " ".join(words)
+
+        def format_metadata_value(value: Any) -> Tuple[Any, bool, bool]:
+            is_structured = isinstance(value, (dict, list, tuple))
+            if is_structured:
+                has_value = bool(value)
+                if has_value:
+                    try:
+                        formatted = json.dumps(value, indent=2, default=str)
+                    except (TypeError, ValueError):
+                        formatted = str(value)
+                else:
+                    formatted = ""
+                return formatted, has_value, True
+
+            if value in (None, ""):
+                return "", False, False
+
+            if isinstance(value, bool):
+                return ("Yes" if value else "No"), True, False
+
+            return str(value), True, False
+
         def build_section(title: str, items: Iterable[Tuple[str, Any, Optional[str]]]):
-            section: Dict[str, Any] = {"title": title, "items": []}
+            section: Dict[str, Any] = {
+                "title": title,
+                "items": [],
+            }
             for key, value, item_type in items:
-                label = key
+                label = humanize_label(key)
                 value_key = slugify(key).replace("-", "_")
-                section[value_key] = value
-                item_context = {"label": label, "value": value}
+                formatted_value, has_value, is_structured = format_metadata_value(value)
+                section[value_key] = formatted_value
+                item_context = {
+                    "label": label,
+                    "value": formatted_value,
+                    "has_value": has_value,
+                    "is_structured": is_structured,
+                }
                 if item_type:
                     item_context["type"] = item_type
                 section["items"].append(item_context)
@@ -643,6 +698,7 @@ class SampleGroupDetailView(
         context["metadata_sections"] = metadata_sections
         context["allele_frequency_table"] = table
         context["variant_table"] = table
+        context.setdefault("priority_metrics", PRIORITY_METRIC_SUMMARY)
         return context
 
 

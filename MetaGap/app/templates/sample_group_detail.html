@@ -1,7 +1,19 @@
 {% extends 'base.html' %}
 {% load render_table from django_tables2 %}
+{% load static %}
 
 {% block title %}Sample Group - {{ sample_group.name }} | {{ SITE_NAME }}{% endblock %}
+
+{% block datatable_head %}
+    {{ block.super }}
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.min.css">
+{% endblock %}
+
+{% block datatable_scripts %}
+    {{ block.super }}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
+{% endblock %}
 
 {% block breadcrumbs %}
     {% include 'partials/breadcrumbs.html' with breadcrumb_title=sample_group.name %}
@@ -14,37 +26,122 @@
         <a href="{% url 'profile' %}" class="btn btn-outline-secondary">Back to profile</a>
     </div>
 
-    <div class="row g-4">
+    <div class="accordion mb-4" id="sample-group-metadata">
         {% for section in metadata_sections %}
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h3 class="h5">{{ section.title }}</h3>
-                        <dl class="row mb-0">
-                            {% for item in section.items %}
-                                <dt class="col-sm-5">{{ item.label }}</dt>
-                                <dd class="col-sm-7">
-                                    {% if item.type == 'email' and item.value %}
-                                        <a href="mailto:{{ item.value }}">{{ item.value }}</a>
-                                    {% else %}
-                                        {{ item.value|default:"Not provided" }}
-                                    {% endif %}
-                                </dd>
-                            {% endfor %}
-                        </dl>
+            {% with section_slug=section.title|slugify %}
+                {% with collapse_id=section_slug|default:'section' %}
+                    <div class="accordion-item border-0 shadow-sm mb-3">
+                        <h2 class="accordion-header" id="heading-{{ collapse_id }}-{{ forloop.counter }}">
+                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#collapse-{{ collapse_id }}-{{ forloop.counter }}"
+                                    aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                                    aria-controls="collapse-{{ collapse_id }}-{{ forloop.counter }}">
+                                {{ section.title }}
+                            </button>
+                        </h2>
+                        <div id="collapse-{{ collapse_id }}-{{ forloop.counter }}"
+                             class="accordion-collapse collapse {% if forloop.first %}show{% endif %}"
+                             data-bs-parent="#sample-group-metadata">
+                            <div class="accordion-body">
+                                <dl class="row mb-0">
+                                    {% for item in section.items %}
+                                        <dt class="col-sm-4 col-lg-3">{{ item.label }}</dt>
+                                        <dd class="col-sm-8 col-lg-9">
+                                            {% if item.type == 'email' and item.has_value %}
+                                                <a href="mailto:{{ item.value }}">{{ item.value }}</a>
+                                            {% elif item.is_structured and item.has_value %}
+                                                <pre class="bg-body-tertiary rounded small py-2 px-3 mb-0">{{ item.value }}</pre>
+                                            {% elif item.has_value %}
+                                                {{ item.value|linebreaksbr }}
+                                            {% else %}
+                                                <span class="text-muted fst-italic">Not provided</span>
+                                            {% endif %}
+                                        </dd>
+                                    {% endfor %}
+                                </dl>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
+                {% endwith %}
+            {% endwith %}
         {% endfor %}
     </div>
 
-    <div class="card mt-4">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h3 class="h5 mb-0">Allele frequencies</h3>
-                <span class="text-muted">{{ variant_table.rows|length }} variants</span>
+    <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header py-3 bg-body-tertiary">
+            <div class="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex align-items-center gap-2 text-primary">
+                        <i class="fa-solid fa-dna"></i>
+                        <span class="fw-semibold text-body">Allele frequencies</span>
+                    </div>
+                    <span class="text-muted small">{{ variant_table.rows|length }} variants available</span>
+                    {% if priority_metrics %}
+                        <div class="d-flex flex-wrap gap-3 align-items-center">
+                            <span class="small text-uppercase text-muted fw-semibold">Priority metrics</span>
+                            {% for metric in priority_metrics %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge rounded-pill {{ metric.badge_class }} d-inline-flex align-items-center gap-1"
+                                          title="{{ metric.tooltip }}"
+                                          data-bs-toggle="tooltip">
+                                        {% if metric.icon %}
+                                            <i class="fa-solid {{ metric.icon }}"></i>
+                                        {% endif %}
+                                        {{ metric.abbr }}
+                                    </span>
+                                    <span class="text-muted small">{{ metric.label }}{% if metric.unit %} <span class="opacity-75">({{ metric.unit }})</span>{% endif %}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="d-flex flex-wrap gap-2 align-items-center justify-content-end">
+                    <span class="small text-muted text-uppercase">Export</span>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <a class="btn btn-success"
+                           href="{% url 'sample_group_export' sample_group.pk %}?format=csv">
+                            <i class="fa-solid fa-file-arrow-down me-1"></i>CSV
+                        </a>
+                        <a class="btn btn-outline-success"
+                           href="{% url 'sample_group_export' sample_group.pk %}?format=tsv">
+                            <i class="fa-solid fa-file-arrow-down me-1"></i>TSV
+                        </a>
+                    </div>
+                    <button type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-table-export="csv"
+                            data-table-target="#sample-group-variants"
+                            data-filename="{{ sample_group.name|slugify }}-variants">
+                        <i class="fa-solid fa-file-csv me-1"></i>Quick CSV
+                    </button>
+                </div>
             </div>
+        </div>
+        <div class="card-body">
             {% if variant_table.rows %}
+                <div class="row g-3 align-items-end mb-3">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label small text-uppercase text-muted" for="sample-group-quick-filter">Quick filter</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="fa-solid fa-filter"></i></span>
+                            <input type="search"
+                                   class="form-control form-control-sm"
+                                   id="sample-group-quick-filter"
+                                   placeholder="Type to filter this sample group">
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-lg-2">
+                        <label class="form-label small text-uppercase text-muted" for="sample-group-page-length">Rows per page</label>
+                        <select class="form-select form-select-sm" id="sample-group-page-length">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     {% render_table variant_table %}
                 </div>
@@ -54,4 +151,20 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    {{ block.super }}
+    <script src="{% static 'js/table-toolkit.js' %}"></script>
+    <script>
+        TableToolkit.init({
+            tableSelector: '#sample-group-variants',
+            defaultPageLength: 25,
+            searchInput: '#sample-group-quick-filter',
+            lengthSelect: '#sample-group-page-length',
+            exportButtons: '[data-table-target="#sample-group-variants"]',
+            filename: '{{ sample_group.name|slugify }}-variants',
+            searchPlaceholder: 'Filter sample group variants'
+        });
+    </script>
 {% endblock %}

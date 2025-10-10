@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load django_tables2 %}
+{% load static %}
 
 {% block title %}Search Results - {{ SITE_NAME }}{% endblock %}
 
@@ -162,8 +163,96 @@
         <p class="text-muted">Showing results for "{{ request.GET.query }}"</p>
     {% endif %}
 
-    <div class="table-responsive">
-        {% render_table table %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-header py-3 bg-body-tertiary">
+            <div class="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex align-items-center gap-2 text-primary">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span class="fw-semibold text-body">Variant metrics</span>
+                    </div>
+                    {% if priority_metrics %}
+                        <div class="d-flex flex-wrap gap-3 align-items-center">
+                            <span class="small text-uppercase text-muted fw-semibold">Priority metrics</span>
+                            {% for metric in priority_metrics %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge rounded-pill {{ metric.badge_class }} d-inline-flex align-items-center gap-1"
+                                          title="{{ metric.tooltip }}"
+                                          data-bs-toggle="tooltip">
+                                        {% if metric.icon %}
+                                            <i class="fa-solid {{ metric.icon }}"></i>
+                                        {% endif %}
+                                        {{ metric.abbr }}
+                                    </span>
+                                    <span class="text-muted small">{{ metric.label }}{% if metric.unit %} <span class="opacity-75">({{ metric.unit }})</span>{% endif %}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="d-flex flex-wrap gap-2 align-items-center justify-content-end">
+                    <span class="small text-muted text-uppercase">Export</span>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button"
+                                class="btn btn-outline-success"
+                                data-table-export="csv"
+                                data-table-target="#allele-frequency-results"
+                                data-filename="search-results">
+                            <i class="fa-solid fa-file-csv me-1"></i>CSV
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-success"
+                                data-table-export="tsv"
+                                data-table-target="#allele-frequency-results"
+                                data-filename="search-results">
+                            <i class="fa-solid fa-file-lines me-1"></i>TSV
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end mb-3">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label small text-uppercase text-muted" for="results-quick-filter">Quick filter</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fa-solid fa-filter"></i></span>
+                        <input type="search"
+                               class="form-control form-control-sm"
+                               id="results-quick-filter"
+                               placeholder="Type to refine current results">
+                    </div>
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label small text-uppercase text-muted" for="results-page-length">Rows per page</label>
+                    <select class="form-select form-select-sm" id="results-page-length">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-responsive">
+                {% render_table table %}
+            </div>
+        </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    {{ block.super }}
+    <script src="{% static 'js/table-toolkit.js' %}"></script>
+    <script>
+        TableToolkit.init({
+            tableSelector: '#allele-frequency-results',
+            defaultPageLength: 10,
+            searchInput: '#results-quick-filter',
+            lengthSelect: '#results-page-length',
+            exportButtons: '[data-table-target="#allele-frequency-results"]',
+            filename: 'search-results',
+            searchPlaceholder: 'Filter current results'
+        });
+    </script>
 {% endblock %}

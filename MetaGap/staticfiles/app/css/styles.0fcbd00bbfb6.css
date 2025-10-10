@@ -1,0 +1,329 @@
+/* app/static/app/css/styles.css */
+
+/* Brand tokens */
+:root {
+        --color-primary: #1f6feb;
+        --color-primary-contrast: #ffffff;
+        --color-secondary: #2ea043;
+        --color-secondary-contrast: #ffffff;
+
+        --header-height: 4.5rem;
+        --header-margin-offset: 1rem;
+
+        --app-surface-radius: 1.5rem;
+        --app-surface-shadow: 0 1.5rem 3rem -2rem rgba(12, 31, 58, 0.35);
+}
+
+:root[data-bs-theme='light'] {
+        --app-body-bg: #f1f4fc;
+        --app-body-color: #101828;
+        --app-body-gradient-start: rgba(31, 111, 235, 0.18);
+        --app-body-gradient-end: rgba(46, 160, 67, 0.12);
+        --app-navbar-bg: linear-gradient(135deg, #123873, #0f2d5c);
+        --app-navbar-border: rgba(12, 31, 58, 0.28);
+        --app-footer-bg: #0f233f;
+        --app-footer-color: rgba(255, 255, 255, 0.86);
+        --app-surface-bg: rgba(255, 255, 255, 0.95);
+        --app-surface-border: rgba(12, 31, 58, 0.08);
+        --app-breadcrumb-bg: rgba(255, 255, 255, 0.92);
+        --app-breadcrumb-border: rgba(12, 31, 58, 0.12);
+        --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.75)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+:root[data-bs-theme='dark'] {
+        --app-body-bg: #0f0f0f;
+        --app-body-color: #f4f7fb;
+        --app-body-gradient-start: rgba(31, 111, 235, 0.24);
+        --app-body-gradient-end: rgba(46, 160, 67, 0.18);
+        --app-navbar-bg: rgba(24, 24, 24, 0.95);
+        --app-navbar-border: rgba(255, 255, 255, 0.1);
+        --app-footer-bg: #111111;
+        --app-footer-color: #e9ecef;
+        --app-surface-bg: rgba(18, 18, 18, 0.88);
+        --app-surface-border: rgba(255, 255, 255, 0.08);
+        --app-breadcrumb-bg: rgba(18, 18, 18, 0.85);
+        --app-breadcrumb-border: rgba(255, 255, 255, 0.06);
+        --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.55)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+/* Global layout */
+body {
+        padding-top: var(--header-height);
+        background-color: var(--app-body-bg);
+        background-image: linear-gradient(180deg, var(--app-body-gradient-start), var(--app-body-gradient-end));
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+        color: var(--app-body-color);
+        transition: background-color 0.3s ease-in-out, color 0.2s ease-in-out;
+}
+
+main.flex-grow-1 {
+        margin-top: var(--header-margin-offset);
+}
+
+.app-surface {
+        background-color: var(--app-surface-bg);
+        border: 1px solid var(--app-surface-border);
+        border-radius: var(--app-surface-radius);
+        box-shadow: var(--app-surface-shadow);
+        padding: clamp(1.5rem, 4vw, 3rem);
+        backdrop-filter: blur(10px);
+        transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+@media (max-width: 576px) {
+        .app-surface {
+                border-radius: 1rem;
+                padding: 1.5rem;
+        }
+}
+
+.app-header {
+        position: relative;
+        z-index: 1030;
+}
+
+/* Navigation */
+.app-navbar {
+        background: var(--app-navbar-bg) !important;
+        border-bottom: 1px solid var(--app-navbar-border);
+        box-shadow: 0 0.75rem 2.5rem -1.5rem rgba(12, 31, 58, 0.55);
+        min-height: var(--header-height);
+        transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.app-navbar .navbar-toggler-icon {
+        background-image: var(--app-toggler-icon);
+}
+
+[data-bs-theme='light'] .app-navbar {
+        --bs-navbar-color: rgba(255, 255, 255, 0.82);
+        --bs-navbar-hover-color: #ffffff;
+        --bs-navbar-active-color: #ffffff;
+        --bs-navbar-brand-color: #ffffff;
+        --bs-navbar-brand-hover-color: #ffffff;
+        --bs-navbar-toggler-border-color: rgba(255, 255, 255, 0.35);
+}
+
+[data-bs-theme='dark'] .app-navbar {
+        --bs-navbar-color: rgba(248, 249, 250, 0.85);
+        --bs-navbar-hover-color: #ffffff;
+        --bs-navbar-active-color: #ffffff;
+        --bs-navbar-brand-color: #ffffff;
+        --bs-navbar-brand-hover-color: #ffffff;
+        --bs-navbar-toggler-border-color: rgba(255, 255, 255, 0.35);
+}
+
+.app-navbar .navbar-brand {
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--bs-navbar-brand-color);
+}
+
+.app-navbar .nav-link {
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        position: relative;
+        transition: color 0.2s ease-in-out;
+        color: var(--bs-navbar-color) !important;
+}
+
+.app-navbar .nav-link:hover,
+.app-navbar .nav-link:focus,
+.app-navbar .nav-link:active {
+        color: var(--bs-navbar-hover-color) !important;
+}
+
+.app-navbar .nav-link::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        bottom: 0.35rem;
+        width: 0;
+        height: 2px;
+        background-color: var(--color-secondary);
+        transition: width 0.2s ease-in-out;
+        opacity: 0;
+}
+
+.app-navbar .nav-link:hover::after,
+.app-navbar .nav-link:focus::after,
+.app-navbar .nav-link.active::after {
+        width: 100%;
+        opacity: 1;
+}
+
+.app-navbar .navbar-toggler {
+        border-width: 1px;
+        border-radius: 0.75rem;
+        padding: 0.45rem 0.65rem;
+}
+
+.app-navbar .theme-toggle .btn {
+        --bs-btn-color: rgba(255, 255, 255, 0.92);
+        --bs-btn-hover-color: #ffffff;
+        --bs-btn-active-color: #ffffff;
+        --bs-btn-border-color: rgba(255, 255, 255, 0.35);
+        --bs-btn-hover-bg: rgba(255, 255, 255, 0.2);
+        --bs-btn-hover-border-color: rgba(255, 255, 255, 0.45);
+        --bs-btn-active-bg: rgba(255, 255, 255, 0.28);
+        --bs-btn-active-border-color: rgba(255, 255, 255, 0.5);
+        --bs-btn-disabled-color: rgba(255, 255, 255, 0.6);
+        border-radius: 999px;
+        padding-inline: 0.85rem;
+        white-space: nowrap;
+        color: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(12px);
+}
+
+.app-navbar .theme-toggle .btn [data-theme-label] {
+        color: inherit;
+}
+
+.app-navbar .btn-link.nav-link {
+        color: inherit;
+        padding-inline: 0;
+}
+
+.app-navbar .btn-link.nav-link:hover,
+.app-navbar .btn-link.nav-link:focus {
+        color: #ffffff;
+}
+
+/* Card headers */
+.filter-card-header {
+        background-color: rgba(15, 35, 63, 0.08);
+        color: var(--app-body-color);
+        transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-bs-theme='dark'] .filter-card-header {
+        background-color: rgba(255, 255, 255, 0.08);
+        color: #f4f7fb;
+}
+
+/* Breadcrumbs */
+.app-breadcrumbs {
+        margin-top: var(--header-margin-offset);
+        padding: 0.75rem 0;
+        background: var(--app-breadcrumb-bg);
+        border-bottom: 1px solid var(--app-breadcrumb-border);
+        backdrop-filter: blur(12px);
+        transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.app-breadcrumbs .breadcrumb {
+        margin-bottom: 0;
+        color: inherit;
+}
+
+.app-breadcrumbs .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(27, 31, 36, 0.35);
+}
+
+[data-bs-theme='dark'] .app-breadcrumbs .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(233, 236, 239, 0.45);
+}
+
+.app-breadcrumbs .breadcrumb a {
+        color: inherit;
+        text-decoration: none;
+}
+
+.app-breadcrumbs .breadcrumb a:hover,
+.app-breadcrumbs .breadcrumb a:focus {
+        color: var(--color-primary);
+}
+
+/* Footer */
+.app-footer {
+        background: var(--app-footer-bg);
+        color: var(--app-footer-color);
+        border-top: 1px solid var(--app-navbar-border);
+        box-shadow: 0 -0.5rem 1.5rem -1.2rem rgba(12, 31, 58, 0.4);
+        transition: background-color 0.3s ease, color 0.2s ease, border-color 0.3s ease;
+}
+
+.app-footer a {
+        color: inherit;
+        text-decoration: none;
+}
+
+.app-footer a:hover,
+.app-footer a:focus {
+        color: var(--color-secondary);
+}
+
+/* Buttons */
+.btn-primary {
+        --bs-btn-color: var(--color-primary-contrast);
+        --bs-btn-bg: var(--color-primary);
+        --bs-btn-border-color: var(--color-primary);
+        --bs-btn-hover-bg: #195cc7;
+        --bs-btn-hover-border-color: #195cc7;
+        --bs-btn-active-bg: #154fa9;
+        --bs-btn-active-border-color: #154fa9;
+}
+
+.btn-outline-primary {
+        --bs-btn-color: var(--color-primary);
+        --bs-btn-border-color: var(--color-primary);
+        --bs-btn-hover-bg: var(--color-primary);
+        --bs-btn-hover-border-color: var(--color-primary);
+        --bs-btn-hover-color: var(--color-primary-contrast);
+}
+
+.btn-secondary {
+        --bs-btn-color: var(--color-secondary-contrast);
+        --bs-btn-bg: var(--color-secondary);
+        --bs-btn-border-color: var(--color-secondary);
+        --bs-btn-hover-bg: #258337;
+        --bs-btn-hover-border-color: #258337;
+        --bs-btn-active-bg: #1f6c2e;
+        --bs-btn-active-border-color: #1f6c2e;
+}
+
+.btn-outline-secondary {
+        --bs-btn-color: var(--color-secondary);
+        --bs-btn-border-color: var(--color-secondary);
+        --bs-btn-hover-bg: var(--color-secondary);
+        --bs-btn-hover-border-color: var(--color-secondary);
+        --bs-btn-hover-color: var(--color-secondary-contrast);
+}
+
+/* Tables */
+.table thead th {
+        border-bottom: 2px solid rgba(12, 31, 58, 0.12);
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+        background-color: rgba(31, 111, 235, 0.04);
+}
+
+[data-bs-theme='dark'] .table thead th {
+        border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-bs-theme='dark'] .table-striped > tbody > tr:nth-of-type(odd) {
+        background-color: rgba(31, 111, 235, 0.12);
+}
+
+/* DataTable helpers */
+.datatable-header-filter {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+        min-width: 6rem;
+}
+
+.datatable-header-label {
+        color: inherit;
+}
+
+.datatable-header-select {
+        width: 100%;
+}

@@ -417,27 +417,120 @@ def merge_vcfs(
         if pre != p:
             temp_files.append(pre)
 
-    if not preprocessed:
-        handle_critical_error("No VCF files available for merging.")
+    merged_header = None
+    info_ids: set[str] = set()
+    format_ids: set[str] = set()
+    filter_ids: set[str] = set()
+    contig_ids: set[str] = set()
+    discovered_samples: List[str] = []
+
+    record_store: "OrderedDict[Tuple[str, int, str, Tuple[str, ...]], Dict[str, object]]" = OrderedDict()
+
+    def _record_key(record) -> Tuple[str, int, str, Tuple[str, ...]]:
+        alts = tuple(str(alt) for alt in getattr(record, "ALT", []) or [])
+        return (str(record.CHROM), int(record.POS), str(record.REF), alts)
+
+    def _initialise_store(record) -> Dict[str, object]:
+        return {
+            "template": copy.deepcopy(record),
+            "format_keys": list(getattr(record, "FORMAT", []) or []),
+            "calls": {},
+        }
+
     try:
-        combined_header = union_headers(preprocessed, sample_order=sample_order)
+        for file_path in preprocessed_files:
+            try:
+                reader = vcfpy.Reader.from_path(file_path)
+            except Exception as exc:
+                handle_critical_error(f"Failed to read VCF file {file_path}: {exc}")
+
+            header = reader.header
+
+            if merged_header is None:
+                merged_header = copy.deepcopy(header)
+                for line in getattr(merged_header, "lines", []):
+                    if isinstance(line, vcfpy.header.InfoHeaderLine) and line.id:
+                        info_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine) and line.id:
+                        format_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FilterHeaderLine) and line.id:
+                        filter_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine) and line.id:
+                        contig_ids.add(line.id)
+                discovered_samples.extend(getattr(header.samples, "names", []))
+            else:
+                for line in getattr(header, "lines", []):
+                    try:
+                        cloned = copy.deepcopy(line)
+                    except Exception:
+                        cloned = line
+                    if isinstance(line, vcfpy.header.InfoHeaderLine) and line.id:
+                        if line.id not in info_ids:
+                            merged_header.add_line(cloned)
+                            info_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine) and line.id:
+                        if line.id not in format_ids:
+                            merged_header.add_line(cloned)
+                            format_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FilterHeaderLine) and line.id:
+                        if line.id not in filter_ids:
+                            merged_header.add_line(cloned)
+                            filter_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine) and line.id:
+                        if line.id not in contig_ids:
+                            merged_header.add_line(cloned)
+                            contig_ids.add(line.id)
+
+                for sample_name in getattr(header.samples, "names", []):
+                    if sample_name not in discovered_samples:
+                        discovered_samples.append(sample_name)
+
+            for record in reader:
+                key = _record_key(record)
+                container = record_store.get(key)
+                if container is None:
+                    container = _initialise_store(record)
+                    record_store[key] = container
+                else:
+                    format_keys = container["format_keys"]
+                    for fmt_key in getattr(record, "FORMAT", []) or []:
+                        if fmt_key not in format_keys:
+                            format_keys.append(fmt_key)
+
+                call_mapping: Dict[str, dict] = container["calls"]  # type: ignore[assignment]
+                for call in getattr(record, "calls", []):
+                    sample_name = getattr(call, "sample", getattr(call, "name", None))
+                    if sample_name is None:
+                        continue
+                    call_mapping[sample_name] = copy.deepcopy(getattr(call, "data", {}))
+
+            reader.close()
+    finally:
+        for tmp in temp_files:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+
+    if merged_header is None:
+        handle_critical_error("Failed to construct a merged VCF header from the provided files.")
+
+    final_sample_order = list(sample_order) if sample_order is not None else discovered_samples
+    if hasattr(merged_header, "samples") and hasattr(merged_header.samples, "names"):
+        merged_header.samples.names = list(final_sample_order)
+
+    try:
+        header = apply_metadata_to_header(
+            merged_header,
+            sample_header_line=sample_header_line,
+            simple_header_lines=simple_header_lines,
+            verbose=verbose,
+        )
     except SystemExit:
         raise
     except Exception as exc:
-        handle_critical_error(f"Failed to construct unified header: {exc}")
-
-    # Ensure samples reflect union
-    sample_names: List[str] = []
-    if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
-        sample_names = list(combined_header.samples.names or [])
-
-    # Apply optional metadata
-    header = apply_metadata_to_header(
-        combined_header,
-        sample_header_line=sample_header_line,
-        simple_header_lines=simple_header_lines,
-        verbose=verbose,
-    )
+        handle_critical_error(f"Failed to apply metadata to merged VCF header: {exc}")
 
     # contig ranks for ordering
     contigs: List[str] = []
@@ -471,101 +564,108 @@ def merge_vcfs(
     try:
         writer = vcfpy.Writer.from_path(base_vcf, header)
     except Exception as exc:
-        for r in readers:
-            try: r.close()
-            except Exception: pass
-        handle_critical_error(f"Failed to open writer for merged VCF: {exc}")
-
-    def _advance(i: int):
-        itx = iters[i]
-        try:
-            return next(itx)
-        except StopIteration:
-            return None
-
-    log_message("Performing heap-based k-way merge of VCF shards...", verbose)
-    heap: List[Tuple[Tuple[int, int, str, Tuple[str, ...]], int, int, "vcfpy.Record"]] = []
-    counter = itertools.count()
-    for i in range(len(iters)):
-        rec = _advance(i)
-        if rec is None: continue
-        heapq.heappush(heap, (_record_sort_key(rec, contig_ranks), next(counter), i, rec))
-
+def _advance(i: int):
+    itx = iters[i]
     try:
-        while heap:
-            key, _, src_idx, rec = heapq.heappop(heap)
-            colliding: List[Tuple["vcfpy.Record", int]] = [(rec, src_idx)]
-            # pull all with same key
-            while heap and heap[0][0] == key:
-                _, _, j, r2 = heapq.heappop(heap)
-                colliding.append((r2, j))
-            # advance each source past same-key run
-            pending: List[Tuple["vcfpy.Record", int]] = []
-            i = 0
-            while i < len(colliding):
-                cur, ridx = colliding[i]
+        return next(itx)
+    except StopIteration:
+        return None
+
+log_message("Performing heap-based k-way merge of VCF shards...", verbose)
+heap: List[Tuple[Tuple[int, int, str, Tuple[str, ...]], int, int, "vcfpy.Record"]] = []
+counter = itertools.count()
+for i in range(len(iters)):
+    rec = _advance(i)
+    if rec is None:
+        continue
+    heapq.heappush(heap, (_record_sort_key(rec, contig_ranks), next(counter), i, rec))
+
+try:
+    while heap:
+        key, _, src_idx, rec = heapq.heappop(heap)
+        colliding: List[Tuple["vcfpy.Record", int]] = [(rec, src_idx)]
+
+        while heap and heap[0][0] == key:
+            _, _, j, r2 = heapq.heappop(heap)
+            colliding.append((r2, j))
+
+        pending: List[Tuple["vcfpy.Record", int]] = []
+        i = 0
+        while i < len(colliding):
+            cur, ridx = colliding[i]
+            nxt = _advance(ridx)
+            while nxt is not None and _record_sort_key(nxt, contig_ranks) == key:
+                colliding.append((nxt, ridx))
                 nxt = _advance(ridx)
-                while nxt is not None and _record_sort_key(nxt, contig_ranks) == key:
-                    colliding.append((nxt, ridx))
-                    nxt = _advance(ridx)
-                if nxt is not None:
-                    pending.append((nxt, ridx))
-                i += 1
-            merged = _merge_colliding_records(colliding, header, sample_names)
-            _recompute_ac_an_af(merged)
-            writer.write_record(merged)
-            for nxt, ridx in pending:
-                heapq.heappush(heap, (_record_sort_key(nxt, contig_ranks), next(counter), ridx, nxt))
-    finally:
-        writer.close()
-        for r in readers:
-            try: r.close()
-            except Exception: pass
-        for t in temp_files:
-            try:
-                if os.path.exists(t): os.remove(t)
-            except OSError:
-                pass
+            if nxt is not None:
+                pending.append((nxt, ridx))
+            i += 1
 
-    # Filter in place
-    _filter_vcf_records(
-        base_vcf,
-        qual_threshold=qual_threshold,
-        an_threshold=an_threshold,
-        allowed_filter_values=allowed_filter_values,
-        verbose=verbose,
+        merged = _merge_colliding_records(colliding, header, sample_names)
+        _recompute_ac_an_af(merged)
+        writer.write_record(merged)
+
+        for nxt, ridx in pending:
+            heapq.heappush(
+                heap,
+                (_record_sort_key(nxt, contig_ranks), next(counter), ridx, nxt),
+            )
+finally:
+    writer.close()
+    for r in readers:
+        try:
+            r.close()
+        except Exception:
+            pass
+    for t in temp_files:
+        try:
+            if os.path.exists(t):
+                os.remove(t)
+        except OSError:
+            pass
+
+# In-memory filtering (QUAL>30, AN>50, FILTER PASS)
+_filter_vcf_records(
+    base_vcf,
+    qual_threshold=qual_threshold,
+    an_threshold=an_threshold,
+    allowed_filter_values=allowed_filter_values,
+    verbose=verbose,
+)
+
+# Anonymize: drop FORMAT + samples
+try:
+    rdr = vcfpy.Reader.from_path(base_vcf)
+except Exception as exc:
+    handle_critical_error(f"Failed to reopen VCF for anonymization: {exc}")
+_remove_format_and_sample_definitions(rdr.header)
+anon_tmp = base_vcf + ".anon"
+try:
+    w = vcfpy.Writer.from_path(anon_tmp, rdr.header)
+except Exception as exc:
+    rdr.close()
+    handle_critical_error(f"Failed to open anonymized writer: {exc}")
+try:
+    for rec in rdr:
+        rec.FORMAT = []
+        rec.calls = []
+        w.write_record(rec)
+finally:
+    rdr.close()
+    w.close()
+shutil.move(anon_tmp, base_vcf)
+
+# BGZF compress + Tabix index using pysam
+log_message("Compressing and indexing the final VCF...", verbose)
+try:
+    pysam.tabix_compress(base_vcf, gz_vcf, force=True)
+    pysam.tabix_index(gz_vcf, preset="vcf", force=True)
+    os.remove(base_vcf)
+except Exception as exc:
+    handle_critical_error(
+        f"Failed to compress/index final VCF: {exc}",
+        exc_cls=MergeConflictError,
     )
-
-    # Anonymize: drop FORMAT + samples
-    try:
-        rdr = vcfpy.Reader.from_path(base_vcf)
-    except Exception as exc:
-        handle_critical_error(f"Failed to reopen VCF for anonymization: {exc}")
-    _remove_format_and_sample_definitions(rdr.header)
-    anon_tmp = base_vcf + ".anon"
-    try:
-        w = vcfpy.Writer.from_path(anon_tmp, rdr.header)
-    except Exception as exc:
-        rdr.close()
-        handle_critical_error(f"Failed to open anonymized writer: {exc}")
-    try:
-        for rec in rdr:
-            rec.FORMAT = []
-            rec.calls = []
-            w.write_record(rec)
-    finally:
-        rdr.close(); w.close()
-    shutil.move(anon_tmp, base_vcf)
-
-    # BGZF compress + Tabix index with pysam
-    log_message("Compressing and indexing the final VCF...", verbose)
-    try:
-        pysam.tabix_compress(base_vcf, gz_vcf, force=True)   # BGZF
-        pysam.tabix_index(gz_vcf, preset="vcf", force=True)  # .tbi
-        os.remove(base_vcf)
-    except Exception as exc:
-        handle_critical_error(f"Failed to compress/index final VCF: {exc}", exc_cls=MergeConflictError)
-
     log_message(f"Merged VCF created and indexed successfully: {gz_vcf}", verbose)
     return gz_vcf
 

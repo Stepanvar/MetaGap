@@ -39,29 +39,7 @@
                                 <div class="invalid-feedback d-block">{{ error }}</div>
                             {% endfor %}
                         </div>
-                        <div class="row g-3">
-                            {% for field in advanced_fields %}
-                                <div class="col-sm-6 col-lg-4">
-                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                                    {{ field }}
-                                    {% if field.help_text %}
-                                        <div class="form-text">{{ field.help_text }}</div>
-                                    {% endif %}
-                                    {% for error in field.errors %}
-                                        <div class="invalid-feedback d-block">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endfor %}
-                            <div class="col-sm-6 col-lg-4">
-                                <div class="form-check mt-2">
-                                    {{ form.pass_only }}
-                                    <label class="form-check-label" for="{{ form.pass_only.id_for_label }}">{{ form.pass_only.label }}</label>
-                                    {% for error in form.pass_only.errors %}
-                                        <div class="invalid-feedback d-block">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
+                        <p class="text-muted small mb-0">Need advanced filters? Open the <a href="{% url 'search_results' %}">results page</a> to refine by position, quality, or sample metadata.</p>
                         <div class="d-flex justify-content-between flex-wrap gap-2 mt-4">
                             <button type="submit" class="btn btn-primary">Search</button>
                             <a class="btn btn-link" href="{% url 'search_results' %}">View full catalogue</a>

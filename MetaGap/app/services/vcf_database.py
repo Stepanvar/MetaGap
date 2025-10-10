@@ -322,8 +322,7 @@ class VCFDatabaseWriter:
             if normalized in INFO_FIELD_MAP:
                 mapped_key, field_type = INFO_FIELD_MAP[normalized]
                 coerced = self._coerce_info_value(value, field_type)
-                if coerced is not None:
-                    mapped_fields[mapped_key] = coerced
+                mapped_fields[mapped_key] = coerced
             else:
                 normalized_value = self._normalize_additional_info_value(value)
                 if normalized_value is not None:

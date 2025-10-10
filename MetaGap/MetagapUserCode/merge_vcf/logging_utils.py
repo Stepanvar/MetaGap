@@ -1,51 +1,99 @@
-"""Shared logging helpers for the VCF merging workflow."""
+"""Shared logging helpers for the VCF merging workflow.
 
+The :func:`configure_logging` helper exposes a small, well-documented surface for
+customising how the merger reports progress. Downstream tools can reuse the
+default configuration or redirect logs to a specific location::
+
+    from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
+    configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
+
+The helper is idempotent and clears previously registered handlers so repeated
+configuration does not accumulate duplicate outputs.
+"""
 from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Iterable
 
 LOG_FILE = "script_execution.log"
+LOG_FORMAT = "%(asctime)s : %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
 logger = logging.getLogger("vcf_merger")
-formatter = logging.Formatter(
-    "%(asctime)s : %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
+logger.propagate = False
 
 
-def configure_logging(verbose: bool, log_file: Optional[str] = None) -> None:
-    """(Re)configure the module logger.
-
-    Existing handlers are removed to avoid duplicate log entries. A file handler is
-    always attached, while a ``StreamHandler`` is only added when ``verbose`` is
-    ``True`` to allow optional console echoing.
-    """
-
-    destination = log_file or LOG_FILE
-
-    # Ensure the destination directory exists when a non-empty path is provided.
-    directory = os.path.dirname(destination)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
-
-    for handler in list(logger.handlers):
-        logger.removeHandler(handler)
+def _normalize_level(level: int | str) -> int:
+    """Return a numeric logging level for *level*."""
+    if isinstance(level, str):
+        name = level.upper()
         try:
-            handler.close()
-        except Exception:  # pragma: no cover - defensive cleanup
-            pass
+            return logging._nameToLevel[name]  # type: ignore[attr-defined]
+        except KeyError:
+            raise ValueError(f"Unknown log level: {level}") from None
+    return int(level)
 
-    file_handler = logging.FileHandler(destination)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
 
-    if verbose:
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
+def _clear_handlers(existing: Iterable[logging.Handler]) -> None:
+    for h in list(existing):
+        try:
+            h.close()
+        finally:
+            logger.removeHandler(h)
+
+
+def configure_logging(
+    *,
+    log_level: int | str = logging.INFO,
+    log_file: str | os.PathLike[str] | None = LOG_FILE,
+    enable_file_logging: bool = True,
+    enable_console: bool = True,
+    create_dirs: bool = True,
+    **legacy: object,  # accepts legacy 'verbose='
+) -> None:
+    """Idempotent logger setup for the VCF merger.
+
+    Parameters
+    ----------
+    log_level : int | str
+        e.g. logging.INFO or "WARNING".
+    log_file : str | PathLike | None
+        File path for logs; ignored if enable_file_logging=False or None.
+    enable_file_logging : bool
+        Attach FileHandler when True.
+    enable_console : bool
+        Attach StreamHandler when True.
+    create_dirs : bool
+        Create parent dirs for log_file when needed.
+
+    Notes
+    -----
+    Supports legacy ``verbose=bool`` (maps to enable_console).
+    """
+    if "verbose" in legacy:
+        enable_console = bool(legacy["verbose"])
+
+    level = _normalize_level(log_level)
+    _clear_handlers(logger.handlers)
+    logger.setLevel(level)
+
+    fmt = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+
+    if enable_file_logging and log_file:
+        path = os.fspath(log_file)
+        if create_dirs:
+            d = os.path.dirname(path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+        fh = logging.FileHandler(path)
+        fh.setFormatter(fmt)
+        logger.addHandler(fh)
+
+    if enable_console:
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        logger.addHandler(sh)
 
 
 class MergeVCFError(RuntimeError):
@@ -62,22 +110,18 @@ class MergeConflictError(MergeVCFError):
 
 def log_message(message: str, verbose: bool = False) -> None:
     """Log *message* using the configured handlers."""
-
     logger.info(message)
 
 
-def handle_critical_error(message: str, exc_cls=None) -> None:
+def handle_critical_error(message: str, exc_cls: type[BaseException] | None = None) -> None:
     """Log and raise a fatal error before exiting."""
-
-    log_message("CRITICAL ERROR: " + message)
-    exception_class = exc_cls or MergeVCFError
-    raise exception_class(message)
+    logger.error("CRITICAL ERROR: %s", message)
+    raise (exc_cls or MergeVCFError)(message)
 
 
 def handle_non_critical_error(message: str) -> None:
     """Log a recoverable error."""
-
-    log_message("WARNING: " + message)
+    logger.warning("WARNING: %s", message)
 
 
 __all__ = [
@@ -92,5 +136,5 @@ __all__ = [
     "handle_non_critical_error",
 ]
 
-
-configure_logging(verbose=False)
+# Default configuration: file + console at INFO level.
+configure_logging()

@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from ..models import AlleleFrequency, SampleGroup
@@ -346,19 +345,24 @@ class VCFImporterTests(TestCase):
             ),
         )
 
-    def test_import_raises_for_unknown_metadata_section(self) -> None:
-        path = self._write_vcf(
+    def test_import_collects_unknown_metadata_section(self) -> None:
+        importer, sample_group = self._import(
             self.VCF_WITH_UNKNOWN_METADATA_SECTION,
             filename="unknown_section.vcf",
         )
-        importer = VCFImporter(self.user)
 
-        with self.assertRaisesMessage(
-            ValidationError,
+        self.assertEqual(sample_group.name, "unknown_section")
+        self.assertIsNotNone(sample_group.additional_metadata)
+        assert sample_group.additional_metadata is not None
+        platform_metadata = sample_group.additional_metadata.get("sample_platform")
+        self.assertIsInstance(platform_metadata, dict)
+        assert isinstance(platform_metadata, dict)
+        self.assertEqual(platform_metadata.get("ID"), "BadGroup")
+        self.assertEqual(platform_metadata.get("Description"), "Should fail")
+        self.assertIn(
             "Unsupported metadata section 'SAMPLE_PLATFORM'",
-        ):
-            importer.import_file(str(path))
-        self.assertEqual(importer.warnings, [])
+            importer.warnings,
+        )
 
     def test_import_handles_undefined_info_and_format_fields(self) -> None:
         importer, sample_group = self._import(

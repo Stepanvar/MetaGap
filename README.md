@@ -43,3 +43,20 @@ The production CLI for the MetaGap VCF merging workflow lives in
 compatibility shim that ships with the package (`python -m merge_vcf`).
 Both routes execute the same tested workflow that powers
 `MetagapUserCode.test_merge_vcf`.
+
+### Logging configuration
+
+Shared helpers under ``MetaGap.MetagapUserCode.merge_vcf.logging_utils``
+expose a ``configure_logging`` function so downstream tooling can reuse the
+workflow's log formatting while directing output to a custom destination.
+For example, to record only warnings to a dedicated file:
+
+```python
+from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
+
+configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
+```
+
+The helper clears existing handlers before applying the new configuration, so
+it can be invoked multiple times without creating duplicate console or file
+output streams.

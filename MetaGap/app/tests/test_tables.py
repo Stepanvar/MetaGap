@@ -23,7 +23,7 @@ from ..models import (
     SampleGroup,
     SampleOrigin,
 )
-from ..tables import create_dynamic_table
+from ..tables import build_allele_frequency_table, create_dynamic_table
 from ..views import SampleGroupTableView
 
 
@@ -119,3 +119,55 @@ class SampleGroupTableViewTests(TestCase):
 
         self.assertIn(self.sample_group.name, html)
         self.assertIn(self.reference_genome_build.build_name, html)
+
+
+class AlleleFrequencyTableBuilderTests(TestCase):
+    """Ensure the allele frequency table helper enforces shared defaults."""
+
+    def test_defaults_prioritise_core_columns(self) -> None:
+        table_class = build_allele_frequency_table()
+
+        self.assertTrue(issubclass(table_class, tables.Table))
+
+        expected_prefix = [
+            "chrom",
+            "pos",
+            "ref",
+            "alt",
+            "qual",
+            "filter",
+            "info__af",
+            "info__ac",
+            "info__an",
+            "info__dp",
+            "info__mq",
+        ]
+        self.assertEqual(list(table_class.Meta.fields[: len(expected_prefix)]), expected_prefix)
+        self.assertNotIn("info__additional", table_class.Meta.fields)
+        self.assertNotIn("format__payload", table_class.Meta.fields)
+
+    def test_allows_view_specific_overrides(self) -> None:
+        table_class = build_allele_frequency_table(
+            priority_extra=("variant_id",),
+            exclude_extra=("info__id",),
+        )
+
+        fields = list(table_class.Meta.fields)
+        self.assertEqual(
+            fields[:12],
+            [
+                "chrom",
+                "pos",
+                "ref",
+                "alt",
+                "qual",
+                "filter",
+                "info__af",
+                "info__ac",
+                "info__an",
+                "info__dp",
+                "info__mq",
+                "variant_id",
+            ],
+        )
+        self.assertNotIn("info__id", fields)

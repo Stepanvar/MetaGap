@@ -190,6 +190,18 @@ main.flex-grow-1 {
         color: #ffffff;
 }
 
+/* Card headers */
+.filter-card-header {
+        background-color: rgba(15, 35, 63, 0.08);
+        color: var(--app-body-color);
+        transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-bs-theme='dark'] .filter-card-header {
+        background-color: rgba(255, 255, 255, 0.08);
+        color: #f4f7fb;
+}
+
 /* Breadcrumbs */
 .app-breadcrumbs {
         margin-top: var(--header-margin-offset);

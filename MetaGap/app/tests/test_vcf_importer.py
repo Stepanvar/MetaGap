@@ -103,6 +103,11 @@ class VCFImporterTests(TestCase):
 2\t4444\trsFallback\tT\tC\t42\tPASS\t.\tGT\t0/1
 """
 
+    VCF_WITH_INVALID_NUMERIC = """##fileformat=VCFv4.2
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t7777\trsInvalid\tA\tG\tBAD\tPASS\tAF=N/A;DP=.;MQ=n/a\tGT:GQ\t0/1:35
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -361,3 +366,20 @@ class VCFImporterTests(TestCase):
         )
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Falling back to a text parser", importer.warnings[0])
+
+    @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("invalid numeric"))
+    def test_text_fallback_warns_for_non_numeric_qual(self, mocked_variant_file: mock.Mock) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_INVALID_NUMERIC,
+            filename="invalid_numeric.vcf",
+        )
+
+        self.assertTrue(mocked_variant_file.called)
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertIsNone(allele.qual)
+
+        self.assertTrue(any("Falling back to a text parser" in warning for warning in importer.warnings))
+        self.assertTrue(
+            any("QUAL value" in warning and "not numeric" in warning for warning in importer.warnings)
+        )

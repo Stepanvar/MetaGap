@@ -218,6 +218,7 @@ class VCFImporter:
     INFO_FIELD_STRING = "string"
     INFO_FIELD_INT = "int"
     INFO_FIELD_FLOAT = "float"
+    QUAL_PLACEHOLDER_VALUES = {".", "", "N/A", "n/a", "NA", "na"}
 
     INFO_FIELD_MAP = {
         "aa": ("aa", INFO_FIELD_STRING),
@@ -653,6 +654,8 @@ class VCFImporter:
                     if samples:
                         format_instance, sample_identifier = self._create_format_instance(samples)
 
+                qual_value = self._coerce_text_qual(chrom, pos, qual)
+
                 self._create_allele_frequency(
                     sample_group,
                     chrom=chrom,
@@ -660,12 +663,28 @@ class VCFImporter:
                     variant_id=None if variant_id == "." else variant_id,
                     ref=ref,
                     alt=self._serialize_alt((alt,)),
-                    qual=None if qual in {".", ""} else float(qual),
+                    qual=qual_value,
                     filter_value=self._serialize_filter(filter_value),
                     info=info_instance,
                     format_instance=format_instance,
                     format_sample=sample_identifier,
                 )
+
+    def _coerce_text_qual(
+        self, chrom: str, pos: Any, raw_qual: Any
+    ) -> Optional[float]:
+        if raw_qual in self.QUAL_PLACEHOLDER_VALUES:
+            return None
+
+        try:
+            return float(raw_qual)
+        except (TypeError, ValueError):
+            warning = (
+                f"QUAL value {raw_qual!r} for {chrom}:{pos} is not numeric; storing as empty."
+            )
+            logger.warning("%s", warning)
+            self.warnings.append(warning)
+            return None
 
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}

@@ -213,6 +213,33 @@ class AlleleFrequencyFilterTests(TestCase):
         self.assertNotIn(self.record_chr2, qs)
         self.assertNotIn(placeholder_record, qs)
 
+    def test_search_filter_sanitizes_non_numeric_placeholders(self):
+        placeholder_info = Info.objects.create(
+            af="N/A",
+            dp="n/a",
+            mq="NA",
+            additional=None,
+        )
+        placeholder_record = AlleleFrequency.objects.create(
+            sample_group=self.sample_group,
+            chrom="chrY",
+            pos=22222,
+            variant_id="rsInvalid",
+            ref="T",
+            alt="C",
+            qual=12.0,
+            filter="PASS",
+            info=placeholder_info,
+        )
+
+        qs = filters.AlleleFrequencySearchFilter(
+            {"af_min": 0.2, "dp_min": 20, "mq_min": 50},
+            queryset=AlleleFrequency.objects.all(),
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr3])
+        self.assertNotIn(placeholder_record, qs)
+
     def test_dp_range_filters(self):
         qs = filters.AlleleFrequencyFilter(
             {"dp_min": 50}, queryset=AlleleFrequency.objects.all()

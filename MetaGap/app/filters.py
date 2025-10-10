@@ -5,6 +5,7 @@ from django.db.models import (
     CharField,
     F,
     FloatField,
+    IntegerField,
     Q,
     Value,
 )
@@ -174,6 +175,20 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
             return queryset.filter(filter__iexact="PASS")
         return queryset.exclude(filter__iexact="PASS")
 
+    NUMERIC_PLACEHOLDERS = (".", "", "N/A", "n/a", "NA", "na")
+
+    @classmethod
+    def _sanitize_numeric_expression(cls, expression):
+        """Replace common placeholder strings with ``NULL`` before casting."""
+
+        cleaned = expression
+        for placeholder in cls.NUMERIC_PLACEHOLDERS:
+            cleaned = NullIf(
+                cleaned,
+                Value(placeholder, output_field=CharField()),
+            )
+        return cleaned
+
     def filter_info_numeric(self, queryset, name, value):
         if value is None:
             return queryset
@@ -190,10 +205,7 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
         if expression is None:
             return queryset
         cleaned_expression = Cast(
-            NullIf(
-                NullIf(expression, Value(".", output_field=CharField())),
-                Value("", output_field=CharField()),
-            ),
+            self._sanitize_numeric_expression(expression),
             FloatField(),
         )
         queryset = queryset.annotate(**{alias: cleaned_expression})
@@ -334,8 +346,9 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
         filter_instance = self.filters.get(name)
         field_name = getattr(filter_instance, "field_name", name)
         annotation = f"{name}_cast"
+        sanitized = AlleleFrequencyFilter._sanitize_numeric_expression(F(field_name))
         return queryset.annotate(
-            **{annotation: Cast(F(field_name), FloatField())}
+            **{annotation: Cast(sanitized, FloatField())}
         ).filter(**{f"{annotation}__gte": value})
 
     def filter_info_int(self, queryset, name, value):
@@ -345,8 +358,9 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
         filter_instance = self.filters.get(name)
         field_name = getattr(filter_instance, "field_name", name)
         annotation = f"{name}_cast"
+        sanitized = AlleleFrequencyFilter._sanitize_numeric_expression(F(field_name))
         return queryset.annotate(
-            **{annotation: Cast(F(field_name), IntegerField())}
+            **{annotation: Cast(sanitized, IntegerField())}
         ).filter(**{f"{annotation}__gte": value})
 
     # ------------------------------------------------------------------

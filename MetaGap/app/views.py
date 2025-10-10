@@ -839,7 +839,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     INFO_FIELD_STRING = "string"
     INFO_FIELD_INT = "int"
     INFO_FIELD_FLOAT = "float"
-    INFO_PLACEHOLDER_VALUES = {".", ""}
+    INFO_PLACEHOLDER_VALUES = {".", "", "N/A", "n/a", "NA", "na"}
 
     INFO_FIELD_MAP = {
         "aa": ("aa", INFO_FIELD_STRING),
@@ -1404,6 +1404,20 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                     if samples:
                         format_instance, sample_identifier = self._create_format_instance(samples)
 
+                if qual in self.INFO_PLACEHOLDER_VALUES:
+                    qual_value = None
+                else:
+                    try:
+                        qual_value = float(qual)
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "Non-numeric QUAL value %r for %s:%s; storing as NULL.",
+                            qual,
+                            chrom,
+                            pos,
+                        )
+                        qual_value = None
+
                 self._create_allele_frequency(
                     sample_group,
                     chrom=chrom,
@@ -1411,7 +1425,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                     variant_id=None if variant_id == "." else variant_id,
                     ref=ref,
                     alt=self._serialize_alt((alt,)),
-                    qual=None if qual in {".", ""} else float(qual),
+                    qual=qual_value,
                     filter_value=self._serialize_filter(filter_value),
                     info=info_instance,
                     format_instance=format_instance,

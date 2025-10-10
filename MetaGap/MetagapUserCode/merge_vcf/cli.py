@@ -217,11 +217,19 @@ def main():
             an_threshold=(args.an_threshold if args.an_threshold >= 0 else None)
         )
         # Append sample and simple header metadata (if provided) to the merged VCF
+        metadata_kwargs = dict(
+            sample_header_entries=args.sample_header_entries,
+            header_metadata_lines=args.simple_header_lines,
+            qual_threshold=(args.qual_threshold if args.qual_threshold >= 0 else None),
+            an_threshold=(args.an_threshold if args.an_threshold >= 0 else None),
+            verbose=verbose,
+        )
+        if hasattr(args, "allowed_filter_values"):
+            metadata_kwargs["allowed_filter_values"] = args.allowed_filter_values
+
         final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
             merged_vcf_path,
-            sample_header_entries=args.sample_header_entries,
-            simple_header_lines=args.simple_header_lines,
-            verbose=verbose
+            **metadata_kwargs,
         )
         # Validate the final merged VCF file structure and content
         validation.validate_merged_vcf(final_vcf_path, verbose=verbose)

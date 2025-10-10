@@ -76,16 +76,16 @@ class _StubCall:
 class _StubRecord:
     """Simple record carrying FORMAT/call data for padding tests."""
 
-    def __init__(self, sample: str, genotype, alt: Sequence[str] | None = None):
+    def __init__(self, sample: str, genotype, *, alts=None, format_keys=None):
         self.CHROM = "1"
         self.POS = 100
         self.ID = "."
         self.REF = "A"
-        self.ALT = list(alt) if alt is not None else ["G"]
+        self.ALT = list(alts) if alts is not None else ["G"]
         self.QUAL = "."
         self.FILTER = []
         self.INFO = {}
-        self.FORMAT = ["GT"]
+        self.FORMAT = list(format_keys) if format_keys is not None else ["GT"]
         self.calls = [_StubCall(sample, {"GT": genotype})]
         self.call_for_sample = {sample: self.calls[0]}
 
@@ -426,11 +426,7 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     class _ReaderFactory:
         @staticmethod
         def from_path(path):
-            factory = reader_registry.get(str(path))
-            if factory is None:
-                raise AssertionError(f"No reader registered for {path}")
-            return factory()
-
+            return fake_reader_from_path(path)
     class _WriterFactory:
         @staticmethod
         def from_path(path, header):
@@ -607,6 +603,25 @@ def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path
         rec.message for rec in caplog.records if "Applied variant filter" in rec.message
     ]
     assert summary_messages == ["Applied variant filter: kept 2 of 5."]
+
+
+def test_merge_colliding_records_rewrites_genotypes_for_reordered_alts():
+    header = _header_with_formats(["S1", "S2", "S3"])
+
+    record_a = _StubRecord("S1", "1|0", alts=["G", "T"])
+    record_b = _StubRecord("S2", "1|0", alts=["T", "G"])
+    record_c = _StubRecord("S3", "0/1", alts=["T", "G"])
+
+    merged = merging._merge_colliding_records(
+        [(record_a, 0), (record_b, 1), (record_c, 2)],
+        header,
+        ["S1", "S2", "S3"],
+    )
+
+    assert [alt for alt in merged.ALT] == ["G", "T"]
+    assert merged.call_for_sample["S1"].data["GT"] == "1|0"
+    assert merged.call_for_sample["S2"].data["GT"] == "2|0"
+    assert merged.call_for_sample["S3"].data["GT"] == "0/2"
 
 
 def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):

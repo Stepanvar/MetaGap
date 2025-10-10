@@ -16,6 +16,18 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
+class MergeVCFError(RuntimeError):
+    """Base exception for unrecoverable errors in the merge workflow."""
+
+
+class ValidationError(MergeVCFError):
+    """Raised when validation detects an unrecoverable problem."""
+
+
+class MergeConflictError(MergeVCFError):
+    """Raised when merging fails due to conflicting inputs or tooling errors."""
+
+
 def log_message(message: str, verbose: bool = False) -> None:
     """Log *message* and optionally echo it to stdout."""
 
@@ -24,12 +36,12 @@ def log_message(message: str, verbose: bool = False) -> None:
         print(message)
 
 
-def handle_critical_error(message: str) -> None:
+def handle_critical_error(message: str, exc_cls=None) -> None:
     """Log and raise a fatal error before exiting."""
 
     log_message("CRITICAL ERROR: " + message)
-    print(f"A critical error occurred. Check {LOG_FILE} for details.")
-    raise SystemExit(1)
+    exception_class = exc_cls or MergeVCFError
+    raise exception_class(message)
 
 
 def handle_non_critical_error(message: str) -> None:
@@ -44,5 +56,8 @@ __all__ = [
     "logger",
     "log_message",
     "handle_critical_error",
+    "MergeVCFError",
+    "ValidationError",
+    "MergeConflictError",
     "handle_non_critical_error",
 ]

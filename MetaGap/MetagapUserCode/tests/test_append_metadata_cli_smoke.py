@@ -156,7 +156,7 @@ def test_validate_header_failure_raises(monkeypatch, merge_script_module):
 
     captured = {}
 
-    def fake_handle_error(message):
+    def fake_handle_error(message, **_kwargs):
         captured["message"] = message
         raise RuntimeError("critical failure")
 

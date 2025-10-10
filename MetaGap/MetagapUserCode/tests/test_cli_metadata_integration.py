@@ -11,7 +11,7 @@ _fixture_spec = importlib.util.spec_from_file_location(
 _fixture_module = importlib.util.module_from_spec(_fixture_spec)
 assert _fixture_spec.loader is not None
 _fixture_spec.loader.exec_module(_fixture_module)
-cli_module = _fixture_module.cli_module  # noqa: F401  (re-exported fixture)
+cli_module = getattr(_fixture_module, "cli_module", None)  # noqa: F401  (re-exported fixture)
 
 
 def test_cli_metadata_integration(tmp_path, monkeypatch, cli_module):

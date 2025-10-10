@@ -3,126 +3,130 @@
 
 {% block title %}Dashboard · MetaGaP{% endblock %}
 
-{% block body %}
-<div class="container py-5">
-    <header class="mb-5">
-        <h1 class="h3 mb-1">Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}!</h1>
-        <p class="text-muted mb-0">Track your datasets and latest activity across the MetaGaP platform.</p>
-    </header>
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active" aria-current="page">Dashboard</li>
+{% endblock %}
 
-    <section class="mb-5">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Recent datasets</h2>
-            <a class="btn btn-sm btn-outline-primary" href="{% url 'profile' %}">Manage all</a>
+{% block page_header %}
+<header class="app-page-header">
+        <div>
+                <h1 class="app-page-title">Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}!</h1>
+                <p class="app-page-subtitle">Track your datasets and latest activity across the MetaGaP platform.</p>
         </div>
-        {% if recent_datasets %}
-            <div class="row row-cols-lg-3 row-cols-md-2 row-cols-1 g-4">
-                {% for dataset in recent_datasets %}
-                    <div class="col">
-                        <article class="card h-100 shadow-sm border-0">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex align-items-center mb-3">
-                                    <span class="rounded-circle bg-primary bg-opacity-10 text-primary d-inline-flex align-items-center justify-content-center me-3" style="width:3rem;height:3rem;">
-                                        <i class="fas fa-database"></i>
-                                    </span>
-                                    <div>
-                                        <h3 class="h6 mb-0">{{ dataset.name }}</h3>
-                                        <small class="text-muted">
-                                            {% if dataset.created_by.organization_name %}
-                                                {{ dataset.created_by.organization_name }}
-                                            {% else %}
-                                                {{ dataset.created_by.user.username }}
-                                            {% endif %}
-                                        </small>
-                                    </div>
-                                </div>
-                                <p class="text-muted flex-grow-1 mb-4">
-                                    {% if dataset.comments %}
-                                        {{ dataset.comments|truncatechars:120 }}
-                                    {% elif dataset.total_samples %}
-                                        Contains {{ dataset.total_samples }} samples across uploaded sequencing runs.
-                                    {% else %}
-                                        Recently curated dataset ready for further analysis.
-                                    {% endif %}
-                                </p>
-                                <div class="d-flex justify-content-between align-items-center mt-auto">
-                                    <span class="badge bg-body-secondary text-body">
-                                        {% if dataset.total_samples %}
-                                            {{ dataset.total_samples }} samples
-                                        {% else %}
-                                            Sample count pending
-                                        {% endif %}
-                                    </span>
-                                    <a class="btn btn-sm btn-primary" href="{% url 'sample_group_edit' dataset.pk %}">Open</a>
-                                </div>
-                            </div>
-                        </article>
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="alert alert-info" role="alert">
-                No datasets available yet. Start by <a class="alert-link" href="{% url 'import_data' %}">importing your first dataset</a>.
-            </div>
-        {% endif %}
-    </section>
+</header>
+{% endblock %}
 
-    <section>
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Recent actions</h2>
-        </div>
-        {% if recent_actions %}
-            <div class="row row-cols-lg-3 row-cols-md-2 row-cols-1 g-4">
-                {% for action in recent_actions %}
-                    <div class="col">
-                        <article class="card h-100 shadow-sm border-0">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex align-items-center mb-3">
-                                    <span class="rounded-circle bg-success bg-opacity-10 text-success d-inline-flex align-items-center justify-content-center me-3" style="width:3rem;height:3rem;">
-                                        <i class="fas fa-dna"></i>
-                                    </span>
-                                    <div>
-                                        <h3 class="h6 mb-0">
-                                            {% if action.variant_id %}
-                                                {{ action.variant_id }}
-                                            {% else %}
-                                                {{ action.ref }}→{{ action.alt }}
-                                            {% endif %}
-                                        </h3>
-                                        <small class="text-muted">{{ action.chrom }}:{{ action.pos }}</small>
-                                    </div>
+{% block content %}
+<div class="app-section-stack">
+        <section class="app-section">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <h2 class="h5 mb-0">Recent datasets</h2>
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'profile' %}">Manage all</a>
+                </div>
+                {% if recent_datasets %}
+                <div class="app-card-grid">
+                        {% for dataset in recent_datasets %}
+                        <article class="card app-card h-100">
+                                <div class="card-body d-flex flex-column gap-3">
+                                        <div class="d-flex align-items-center gap-3">
+                                                <span class="app-icon-circle app-icon-circle--primary">
+                                                        <i class="fas fa-database"></i>
+                                                </span>
+                                                <div>
+                                                        <h3 class="h6 mb-1">{{ dataset.name }}</h3>
+                                                        <small class="text-muted">
+                                                                {% if dataset.created_by.organization_name %}
+                                                                {{ dataset.created_by.organization_name }}
+                                                                {% else %}
+                                                                {{ dataset.created_by.user.username }}
+                                                                {% endif %}
+                                                        </small>
+                                                </div>
+                                        </div>
+                                        <p class="text-muted mb-0 flex-grow-1">
+                                                {% if dataset.comments %}
+                                                {{ dataset.comments|truncatechars:120 }}
+                                                {% elif dataset.total_samples %}
+                                                Contains {{ dataset.total_samples }} samples across uploaded sequencing runs.
+                                                {% else %}
+                                                Recently curated dataset ready for further analysis.
+                                                {% endif %}
+                                        </p>
+                                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-auto">
+                                                <span class="badge bg-body-secondary text-body">
+                                                        {% if dataset.total_samples %}
+                                                        {{ dataset.total_samples }} samples
+                                                        {% else %}
+                                                        Sample count pending
+                                                        {% endif %}
+                                                </span>
+                                                <a class="btn btn-sm btn-primary" href="{% url 'sample_group_edit' dataset.pk %}">Open</a>
+                                        </div>
                                 </div>
-                                <p class="text-muted flex-grow-1 mb-4">
-                                    {% if action.sample_group %}
-                                        Linked to <strong>{{ action.sample_group.name }}</strong>.
-                                    {% else %}
-                                        Variant record awaiting dataset assignment.
-                                    {% endif %}
-                                </p>
-                                <div class="d-flex justify-content-between align-items-center mt-auto">
-                                    <span class="badge bg-body-secondary text-body">
-                                        {% if action.qual %}
-                                            Quality {{ action.qual|floatformat:1 }}
-                                        {% else %}
-                                            QC pending
-                                        {% endif %}
-                                    </span>
-                                    {% if action.sample_group %}
-                                        <a class="btn btn-sm btn-outline-success" href="{% url 'sample_group_edit' action.sample_group.pk %}">Review</a>
-                                    {% else %}
-                                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'profile' %}">View profile</a>
-                                    {% endif %}
-                                </div>
-                            </div>
                         </article>
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="alert alert-info" role="alert">
-                No recent actions recorded. Import new sequencing data to start tracking activity.
-            </div>
-        {% endif %}
-    </section>
+                        {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0" role="alert">
+                        No datasets available yet. Start by <a class="alert-link" href="{% url 'import_data' %}">importing your first dataset</a>.
+                </div>
+                {% endif %}
+        </section>
+
+        <section class="app-section">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <h2 class="h5 mb-0">Recent actions</h2>
+                </div>
+                {% if recent_actions %}
+                <div class="app-card-grid">
+                        {% for action in recent_actions %}
+                        <article class="card app-card h-100">
+                                <div class="card-body d-flex flex-column gap-3">
+                                        <div class="d-flex align-items-center gap-3">
+                                                <span class="app-icon-circle app-icon-circle--success">
+                                                        <i class="fas fa-dna"></i>
+                                                </span>
+                                                <div>
+                                                        <h3 class="h6 mb-1">
+                                                                {% if action.variant_id %}
+                                                                {{ action.variant_id }}
+                                                                {% else %}
+                                                                {{ action.ref }}→{{ action.alt }}
+                                                                {% endif %}
+                                                        </h3>
+                                                        <small class="text-muted">{{ action.chrom }}:{{ action.pos }}</small>
+                                                </div>
+                                        </div>
+                                        <p class="text-muted mb-0 flex-grow-1">
+                                                {% if action.sample_group %}
+                                                Linked to <strong>{{ action.sample_group.name }}</strong>.
+                                                {% else %}
+                                                Variant record awaiting dataset assignment.
+                                                {% endif %}
+                                        </p>
+                                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-auto">
+                                                <span class="badge bg-body-secondary text-body">
+                                                        {% if action.qual %}
+                                                        Quality {{ action.qual|floatformat:1 }}
+                                                        {% else %}
+                                                        QC pending
+                                                        {% endif %}
+                                                </span>
+                                                {% if action.sample_group %}
+                                                <a class="btn btn-sm btn-outline-success" href="{% url 'sample_group_edit' action.sample_group.pk %}">Review</a>
+                                                {% else %}
+                                                <a class="btn btn-sm btn-outline-secondary" href="{% url 'profile' %}">View profile</a>
+                                                {% endif %}
+                                        </div>
+                                </div>
+                        </article>
+                        {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0" role="alert">
+                        No recent actions recorded. Import new sequencing data to start tracking activity.
+                </div>
+                {% endif %}
+        </section>
 </div>
 {% endblock %}

@@ -38,83 +38,93 @@
     </script>
 {% endblock %}
 
-{% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Search Results' %}
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active" aria-current="page">Search Results</li>
+{% endblock %}
+
+{% block page_header %}
+<header class="app-page-header">
+    <div>
+        <h1 class="app-page-title">Search results</h1>
+        <p class="app-page-subtitle">Refine genomic variants and compare metadata across your MetaGaP datasets.</p>
+    </div>
+</header>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <h2 class="mb-4">Search Results</h2>
-
+<div class="app-section-stack">
     {% if filter_form %}
-        <form method="get" action="{% url 'search_results' %}" class="mb-4" novalidate>
-            <div class="card border-0 shadow-sm mb-3">
+    <section class="app-section">
+        <h2 class="app-section-heading">Filter variants</h2>
+        <p class="app-section-description">Combine genomic and metadata filters to narrow your search.</p>
+        <form method="get" action="{% url 'search_results' %}" class="app-filter-form" novalidate>
+            <div class="card app-card app-filter-card mb-3">
                 <div class="card-header filter-card-header fw-semibold">Variant filters</div>
                 <div class="card-body">
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-4">
+                        <div class="col-lg-4">
                             <label class="form-label" for="{{ filter_form.query.id_for_label }}">{{ filter_form.query.label }}</label>
                             {{ filter_form.query }}
                             {{ filter_form.query.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.chrom.id_for_label }}">{{ filter_form.chrom.label }}</label>
                             {{ filter_form.chrom }}
                             {{ filter_form.chrom.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.pos_min.id_for_label }}">{{ filter_form.pos_min.label }}</label>
                             {{ filter_form.pos_min }}
                             {{ filter_form.pos_min.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.pos_max.id_for_label }}">{{ filter_form.pos_max.label }}</label>
                             {{ filter_form.pos_max }}
                             {{ filter_form.pos_max.errors }}
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-sm-6 col-lg-1">
                             <label class="form-label" for="{{ filter_form.ref.id_for_label }}">{{ filter_form.ref.label }}</label>
                             {{ filter_form.ref }}
                             {{ filter_form.ref.errors }}
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-sm-6 col-lg-1">
                             <label class="form-label" for="{{ filter_form.alt.id_for_label }}">{{ filter_form.alt.label }}</label>
                             {{ filter_form.alt }}
                             {{ filter_form.alt.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <div class="form-check mt-4">
                                 {{ filter_form.pass_only }}
                                 <label class="form-check-label" for="{{ filter_form.pass_only.id_for_label }}">{{ filter_form.pass_only.label }}</label>
                             </div>
                             {{ filter_form.pass_only.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.qual_min.id_for_label }}">{{ filter_form.qual_min.label }}</label>
                             {{ filter_form.qual_min }}
                             {{ filter_form.qual_min.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.af_min.id_for_label }}">{{ filter_form.af_min.label }}</label>
                             {{ filter_form.af_min }}
                             {{ filter_form.af_min.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.ac_min.id_for_label }}">{{ filter_form.ac_min.label }}</label>
                             {{ filter_form.ac_min }}
                             {{ filter_form.ac_min.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.an_min.id_for_label }}">{{ filter_form.an_min.label }}</label>
                             {{ filter_form.an_min }}
                             {{ filter_form.an_min.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.dp_min.id_for_label }}">{{ filter_form.dp_min.label }}</label>
                             {{ filter_form.dp_min }}
                             {{ filter_form.dp_min.errors }}
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-sm-6 col-lg-2">
                             <label class="form-label" for="{{ filter_form.mq_min.id_for_label }}">{{ filter_form.mq_min.label }}</label>
                             {{ filter_form.mq_min }}
                             {{ filter_form.mq_min.errors }}
@@ -123,26 +133,26 @@
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm mb-3">
+            <div class="card app-card app-filter-card mb-3">
                 <div class="card-header filter-card-header fw-semibold">Metadata filters</div>
                 <div class="card-body">
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-3">
+                        <div class="col-md-6 col-xl-3">
                             <label class="form-label" for="{{ filter_form.sample_group_name.id_for_label }}">{{ filter_form.sample_group_name.label }}</label>
                             {{ filter_form.sample_group_name }}
                             {{ filter_form.sample_group_name.errors }}
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-6 col-xl-3">
                             <label class="form-label" for="{{ filter_form.sample_group_source_lab.id_for_label }}">{{ filter_form.sample_group_source_lab.label }}</label>
                             {{ filter_form.sample_group_source_lab }}
                             {{ filter_form.sample_group_source_lab.errors }}
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-6 col-xl-3">
                             <label class="form-label" for="{{ filter_form.sample_origin_tissue.id_for_label }}">{{ filter_form.sample_origin_tissue.label }}</label>
                             {{ filter_form.sample_origin_tissue }}
                             {{ filter_form.sample_origin_tissue.errors }}
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-6 col-xl-3">
                             <label class="form-label" for="{{ filter_form.variant_calling_tool.id_for_label }}">{{ filter_form.variant_calling_tool.label }}</label>
                             {{ filter_form.variant_calling_tool }}
                             {{ filter_form.variant_calling_tool.errors }}
@@ -151,19 +161,26 @@
                 </div>
             </div>
 
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
                 <button type="submit" class="btn btn-primary">Apply filters</button>
                 <a href="{% url 'search_results' %}" class="btn btn-outline-secondary">Clear</a>
             </div>
         </form>
+    </section>
     {% endif %}
 
-    {% if request.GET.query %}
-        <p class="text-muted">Showing results for "{{ request.GET.query }}"</p>
-    {% endif %}
-
-    <div class="table-responsive">
-        {% render_table table %}
-    </div>
+    <section class="app-section">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <h2 class="app-section-heading mb-0">Results</h2>
+            {% if request.GET.query %}
+            <span class="badge bg-body-secondary text-body">Query: “{{ request.GET.query }}”</span>
+            {% endif %}
+        </div>
+        <div class="app-table-wrapper">
+            <div class="table-responsive">
+                {% render_table table %}
+            </div>
+        </div>
+    </section>
 </div>
 {% endblock %}

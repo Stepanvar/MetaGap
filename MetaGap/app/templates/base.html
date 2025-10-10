@@ -31,7 +31,7 @@
 
 {% block breadcrumbs %}
 <nav aria-label="breadcrumb" class="app-breadcrumbs">
-        <div class="container">
+        <div class="app-container">
                 <ol class="breadcrumb mb-0">
                         <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
                         {% block breadcrumb_items %}{% endblock %}
@@ -40,18 +40,23 @@
 </nav>
 {% endblock %}
 
-<main id="main-content" role="main" class="flex-grow-1 py-5">
-        <div class="container">
-                {% block main_container %}
-                <div class="app-surface">
-                        {% block content %}{% endblock %}
+<main id="main-content" role="main" class="app-main flex-grow-1">
+        <div class="app-container">
+                {% block page_stack %}
+                <div class="app-content-stack">
+                        {% block page_header %}{% endblock %}
+                        {% block main_section %}
+                        <div class="app-surface">
+                                {% block content %}{% endblock %}
+                        </div>
+                        {% endblock %}
                 </div>
                 {% endblock %}
         </div>
 </main>
 
 <footer class="app-footer mt-auto">
-        <div class="container py-4 text-center text-lg-start">
+        <div class="app-container py-4 text-center text-lg-start">
                 <div class="row align-items-center g-3">
                         <div class="col-lg-6 text-lg-start">
                                 <span class="fw-semibold">© {% now "Y" %} {{ SITE_NAME }}</span>

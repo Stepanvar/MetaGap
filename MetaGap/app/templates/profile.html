@@ -2,67 +2,99 @@
 
 {% block title %}Profile - {{ SITE_NAME }}{% endblock %}
 
-{% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Profile' %}
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active" aria-current="page">Profile</li>
+{% endblock %}
+
+{% block page_header %}
+<header class="app-page-header">
+        <div>
+                <h1 class="app-page-title">Your profile</h1>
+                <p class="app-page-subtitle">Manage your account details and keep project collaborators in sync.</p>
+        </div>
+</header>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-        <h2>Your Profile</h2>
-        <p><strong>Username:</strong> {{ user.username }}</p>
-        <p><strong>Email:</strong> {{ user.email }}</p>
-        {% if organization_profile %}
-        <p><strong>Organization:</strong> {{ organization_profile.organization_name|default:"Not provided" }}</p>
-        {% endif %}
-        <hr>
-        <h3>Import Data</h3>
-        {% include 'partials/form.html' with form=import_form submit_button_label="Import" form_action=import_form_action form_enctype=import_form_enctype extra_actions=form_extra_actions|default:'' %}
-        <hr>
-        <h3>Sample Groups</h3>
-        {% if sample_groups %}
-        <ul class="list-group mb-4">
-                {% for group in sample_groups %}
-                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <a class="link-primary text-decoration-none"
-                           href="{% url 'sample_group_detail' group.pk %}">{{ group.name }}</a>
-                        <div class="btn-group btn-group-sm" role="group">
-                                <a class="btn btn-outline-secondary"
-                                   href="{% url 'sample_group_detail' group.pk %}">View</a>
-                                <a class="btn btn-outline-primary"
-                                   href="{% url 'sample_group_edit' group.pk %}">Edit</a>
-                                <a class="btn btn-outline-danger"
-                                   href="{% url 'sample_group_delete' group.pk %}">Delete</a>
+<div class="app-section-stack">
+        <section class="app-section">
+                <h2 class="app-section-heading">Account overview</h2>
+                <p class="app-section-description">Key details that appear across MetaGaP experiences.</p>
+                <dl class="app-definition-grid">
+                        <div>
+                                <dt>Username</dt>
+                                <dd>{{ user.username }}</dd>
                         </div>
-                </li>
-                {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-muted">You haven't added any sample groups yet.</p>
-        {% endif %}
-        <hr>
-        <h3>Export Data</h3>
-        {% if sample_groups %}
-        <div class="list-group mb-4">
-                {% for group in sample_groups %}
-                <div class="list-group-item">
-                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                                <div>
-                                        <strong>{{ group.name }}</strong>
+                        <div>
+                                <dt>Email</dt>
+                                <dd>{{ user.email|default:"Not provided" }}</dd>
+                        </div>
+                        <div>
+                                <dt>Organization</dt>
+                                <dd>
+                                        {% if organization_profile %}
+                                        {{ organization_profile.organization_name|default:"Not provided" }}
+                                        {% else %}
+                                        Not provided
+                                        {% endif %}
+                                </dd>
+                        </div>
+                </dl>
+        </section>
+
+        <section class="app-section">
+                <h2 class="app-section-heading">Import data</h2>
+                <p class="app-section-description">Upload new sample groups or extend existing datasets.</p>
+                <div class="app-form-wrapper">
+                        {% include 'partials/form.html' with form=import_form submit_button_label="Import" form_action=import_form_action form_enctype=import_form_enctype extra_actions=form_extra_actions|default:'' %}
+                </div>
+        </section>
+
+        <section class="app-section">
+                <h2 class="app-section-heading">Sample groups</h2>
+                {% if sample_groups %}
+                <ul class="list-group app-list-group">
+                        {% for group in sample_groups %}
+                        <li class="list-group-item d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
+                                <a class="fw-semibold text-decoration-none" href="{% url 'sample_group_detail' group.pk %}">{{ group.name }}</a>
+                                <div class="btn-group btn-group-sm" role="group">
+                                        <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
+                                        <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                                        <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
                                 </div>
+                        </li>
+                        {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">You haven't added any sample groups yet.</p>
+                {% endif %}
+        </section>
+
+        <section class="app-section">
+                <h2 class="app-section-heading">Export data</h2>
+                {% if sample_groups %}
+                <div class="app-list-group">
+                        {% for group in sample_groups %}
+                        <div class="list-group-item d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
+                                <div class="fw-semibold">{{ group.name }}</div>
                                 <div class="btn-group" role="group" aria-label="Export options for {{ group.name }}">
                                         <a class="btn btn-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=csv">Download CSV</a>
                                         <a class="btn btn-outline-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=tsv">Download TSV</a>
                                 </div>
                         </div>
+                        {% endfor %}
                 </div>
-                {% endfor %}
-        </div>
-        {% else %}
-        <p class="text-muted">Export options will appear once you add sample groups.</p>
-        {% endif %}
-        <hr>
-        <h3>Account Settings</h3>
-        <a href="{% url 'edit_profile' %}" class="btn btn-primary me-2">Edit Profile</a>
-        <a href="{% url 'delete_account' %}" class="btn btn-danger">Delete Account</a>
+                {% else %}
+                <p class="text-muted mb-0">Export options will appear once you add sample groups.</p>
+                {% endif %}
+        </section>
+
+        <section class="app-section">
+                <h2 class="app-section-heading">Account settings</h2>
+                <div class="d-flex flex-wrap gap-2">
+                        <a href="{% url 'edit_profile' %}" class="btn btn-primary">Edit profile</a>
+                        <a href="{% url 'delete_account' %}" class="btn btn-outline-danger">Delete account</a>
+                </div>
+        </section>
 </div>
 {% endblock %}

@@ -2,33 +2,46 @@
 
 {% block title %}Import Data - {{ SITE_NAME }}{% endblock %}
 
-{% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Import Data' %}
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active" aria-current="page">Import Data</li>
+{% endblock %}
+
+{% block page_header %}
+<header class="app-page-header">
+        <div>
+                <h1 class="app-page-title">Import data</h1>
+                <p class="app-page-subtitle">Upload new sample groups to make them available across MetaGaP workflows.</p>
+        </div>
+</header>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-        {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' extra_actions=form_extra_actions|default:'' %}
+<div class="app-section-stack">
+        <section class="app-section">
+                <h2 class="app-section-heading">Upload dataset</h2>
+                <div class="app-form-wrapper">
+                        {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' extra_actions=form_extra_actions|default:'' %}
+                </div>
+        </section>
 
-        <hr class="my-4">
-        <h3>Imported Sample Groups</h3>
-        {% if sample_groups %}
-        <ul class="list-group mb-0">
-                {% for group in sample_groups %}
-                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="me-2">
-                                <strong>{{ group.name }}</strong>
-                        </div>
-                        <div class="btn-group btn-group-sm" role="group">
-                                <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
-                                <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
-                                <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
-                        </div>
-                </li>
-                {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-muted">You haven't imported any datasets yet.</p>
-        {% endif %}
+        <section class="app-section">
+                <h2 class="app-section-heading">Imported sample groups</h2>
+                {% if sample_groups %}
+                <ul class="list-group app-list-group">
+                        {% for group in sample_groups %}
+                        <li class="list-group-item d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
+                                <div class="fw-semibold">{{ group.name }}</div>
+                                <div class="btn-group btn-group-sm" role="group">
+                                        <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
+                                        <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                                        <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
+                                </div>
+                        </li>
+                        {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">You haven't imported any datasets yet.</p>
+                {% endif %}
+        </section>
 </div>
 {% endblock %}

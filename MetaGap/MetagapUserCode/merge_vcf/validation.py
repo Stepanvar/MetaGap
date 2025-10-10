@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - exercised when dependency is missing
 
 from . import VCFPY_AVAILABLE, vcfpy
 from .logging_utils import (
+    ValidationError,
     handle_critical_error,
     handle_non_critical_error,
     log_message,
@@ -402,6 +403,11 @@ def validate_all_vcfs(
 ):
     valid_vcfs: List[str] = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
+    all_candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
+    log_message(
+        f"Discovered {len(all_candidates)} VCF shard(s) prior to validation.",
+        verbose,
+    )
     reference_samples: List[str] = []
     reference_contigs: "OrderedDict[str, dict]" | None = None
     reference_info_defs: "OrderedDict[str, dict]" | None = None
@@ -448,7 +454,8 @@ def validate_all_vcfs(
                 reader = vcfpy.Reader.from_path(preprocessed_file)
             except Exception as exc:
                 handle_critical_error(
-                    f"Failed to reopen {file_path} after validation: {exc}."
+                    f"Failed to reopen {file_path} after validation: {exc}.",
+                    exc_cls=ValidationError,
                 )
             try:
                 header = reader.header
@@ -484,6 +491,30 @@ def validate_all_vcfs(
                         handle_non_critical_error(
                             f"File {file_path} is missing sample columns {missing_samples}. "
                             "These entries will be filled with missing ('.') values during merge."
+                        )
+                    if current_contigs != reference_contigs:
+                        handle_critical_error(
+                            "Contig definitions differ between VCF shards. MetaGap assumes vertical "
+                            "concatenation of shards, so headers must match across shards. "
+                            f"Expected contigs: {list(reference_contigs.keys())}; found in {file_path}: "
+                            f"{list(current_contigs.keys())}.",
+                            exc_cls=ValidationError,
+                        )
+                    if current_info_defs != reference_info_defs:
+                        handle_critical_error(
+                            "INFO field definitions differ between VCF shards. MetaGap assumes "
+                            "vertical concatenation of shards, so headers must match across shards. "
+                            f"Expected INFO IDs: {list(reference_info_defs.keys())}; found in {file_path}: "
+                            f"{list(current_info_defs.keys())}.",
+                            exc_cls=ValidationError,
+                        )
+                    if current_format_defs != reference_format_defs:
+                        handle_critical_error(
+                            "FORMAT field definitions differ between VCF shards. MetaGap assumes "
+                            "vertical concatenation of shards, so headers must match across shards. "
+                            f"Expected FORMAT IDs: {list(reference_format_defs.keys())}; found in {file_path}: "
+                            f"{list(current_format_defs.keys())}.",
+                            exc_cls=ValidationError,
                         )
                     if reference_contigs is None:
                         reference_contigs = OrderedDict()
@@ -555,7 +586,8 @@ def validate_all_vcfs(
                         if chrom not in contig_order:
                             handle_critical_error(
                                 f"Encountered unknown contig '{chrom}' in {file_path}. MetaGap assumes vertical "
-                                "concatenation of shards with consistent headers."
+                                "concatenation of shards with consistent headers.",
+                                exc_cls=ValidationError,
                             )
                         contig_index = contig_order[chrom]
                         if last_contig_index is None:
@@ -570,7 +602,8 @@ def validate_all_vcfs(
                             handle_critical_error(
                                 f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
                                 f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
-                                "so input shards must already be sorted."
+                                "so input shards must already be sorted.",
+                                exc_cls=ValidationError,
                             )
 
                         last_contig_index = contig_index
@@ -585,7 +618,8 @@ def validate_all_vcfs(
                                 handle_critical_error(
                                     f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
                                     f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
-                                    "so input shards must already be sorted."
+                                    "so input shards must already be sorted.",
+                                    exc_cls=ValidationError,
                                 )
                         else:
                             last_contig_name = chrom
@@ -610,8 +644,15 @@ def validate_all_vcfs(
         else:
             log_message(f"File {file_path} failed validation and is skipped.", verbose)
     if not valid_vcfs:
-        handle_critical_error("No valid VCF files remain after validation. Aborting.")
+        handle_critical_error(
+            "No valid VCF files remain after validation. Aborting.",
+            exc_cls=ValidationError,
+        )
     log_message("Validation completed. Valid VCF files: " + ", ".join(valid_vcfs), verbose)
+    log_message(
+        f"Validation summary: {len(valid_vcfs)} of {len(all_candidates)} shard(s) passed.",
+        verbose,
+    )
     return valid_vcfs, reference_samples
 
 
@@ -698,11 +739,15 @@ def _read_vcf_without_vcfpy(file_path: str):
                 if line.strip():
                     records.append(line)
     except OSError as exc:
-        handle_critical_error(f"Could not open {file_path}: {exc}.")
+        handle_critical_error(
+            f"Could not open {file_path}: {exc}.",
+            exc_cls=ValidationError,
+        )
 
     if not column_header_seen:
         handle_critical_error(
-            f"Could not open {file_path}: Missing #CHROM header line."
+            f"Could not open {file_path}: Missing #CHROM header line.",
+            exc_cls=ValidationError,
         )
 
     return header_lines, records
@@ -716,11 +761,13 @@ def _validate_merged_vcf_without_vcfpy(merged_vcf: str, verbose: bool = False):
     normalized_headers = [line.lower() for line in header_lines]
     if not any(line.startswith("##fileformat=") for line in normalized_headers):
         handle_critical_error(
-            f"Missing required meta-information: ##fileformat in {merged_vcf} header."
+            f"Missing required meta-information: ##fileformat in {merged_vcf} header.",
+            exc_cls=ValidationError,
         )
     if not any(line.startswith("##reference=") for line in normalized_headers):
         handle_critical_error(
-            f"Missing required meta-information: ##reference in {merged_vcf} header."
+            f"Missing required meta-information: ##reference in {merged_vcf} header.",
+            exc_cls=ValidationError,
         )
 
     info_definitions = {}
@@ -791,7 +838,10 @@ def _validate_merged_vcf_without_vcfpy(merged_vcf: str, verbose: bool = False):
 def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
-        handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
+        handle_critical_error(
+            f"Merged VCF file {merged_vcf} does not exist.",
+            exc_cls=ValidationError,
+        )
 
     if not VCFPY_AVAILABLE:
         _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=verbose)
@@ -810,13 +860,20 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
                 if gz_stream is not None:
                     gz_stream.close()
                 handle_critical_error(
-                    f"Could not open {merged_vcf}: {gzip_exc}."
+                    f"Could not open {merged_vcf}: {gzip_exc}.",
+                    exc_cls=ValidationError,
                 )
         else:
-            handle_critical_error(f"Could not open {merged_vcf}: {exc}.")
+            handle_critical_error(
+                f"Could not open {merged_vcf}: {exc}.",
+                exc_cls=ValidationError,
+            )
 
     if reader is None:
-        handle_critical_error(f"Could not open {merged_vcf}: Unknown error.")
+        handle_critical_error(
+            f"Could not open {merged_vcf}: Unknown error.",
+            exc_cls=ValidationError,
+        )
 
     header = reader.header
     required_meta = ["fileformat", "reference"]
@@ -828,7 +885,8 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
                 break
         if not found:
             handle_critical_error(
-                f"Missing required meta-information: ##{meta} in {merged_vcf} header."
+                f"Missing required meta-information: ##{meta} in {merged_vcf} header.",
+                exc_cls=ValidationError,
             )
 
     defined_info_ids = OrderedDict()

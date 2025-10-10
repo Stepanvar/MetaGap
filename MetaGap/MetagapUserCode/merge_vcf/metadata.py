@@ -11,7 +11,12 @@ from collections import OrderedDict
 from typing import List, Optional, Tuple
 
 from . import VCFPY_AVAILABLE, vcfpy
-from .logging_utils import handle_critical_error, log_message
+from .logging_utils import (
+    MergeConflictError,
+    ValidationError,
+    handle_critical_error,
+    log_message,
+)
 
 
 STANDARD_INFO_DEFINITIONS = OrderedDict(
@@ -312,11 +317,13 @@ def _load_metadata_template(
     normalized_path = os.path.abspath(template_path)
     if not os.path.exists(normalized_path):
         handle_critical_error(
-            f"Metadata template header file does not exist: {template_path}"
+            f"Metadata template header file does not exist: {template_path}",
+            exc_cls=ValidationError,
         )
     if not os.path.isfile(normalized_path):
         handle_critical_error(
-            f"Metadata template header path is not a file: {template_path}"
+            f"Metadata template header path is not a file: {template_path}",
+            exc_cls=ValidationError,
         )
 
     template_sample_mapping: Optional["OrderedDict[str, str]"] = None
@@ -349,7 +356,8 @@ def _load_metadata_template(
                     except ValueError as exc:
                         handle_critical_error(
                             "Invalid SAMPLE metadata line in template "
-                            f"{normalized_path} line {line_number}: {exc}"
+                            f"{normalized_path} line {line_number}: {exc}",
+                            exc_cls=ValidationError,
                         )
                     if template_sample_mapping is not None:
                         log_message(
@@ -367,7 +375,8 @@ def _load_metadata_template(
                 if not parsed:
                     handle_critical_error(
                         "Metadata template lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}"
+                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}",
+                        exc_cls=ValidationError,
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -391,7 +400,8 @@ def _load_metadata_template(
                 existing_simple.add(identifier)
     except OSError as exc:
         handle_critical_error(
-            f"Unable to read metadata template header file {template_path}: {exc}"
+            f"Unable to read metadata template header file {template_path}: {exc}",
+            exc_cls=ValidationError,
         )
 
     log_message(
@@ -421,13 +431,22 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
     """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
     if not metadata_file:
-        handle_critical_error("A metadata file path must be provided.")
+        handle_critical_error(
+            "A metadata file path must be provided.",
+            exc_cls=ValidationError,
+        )
 
     normalized_path = os.path.abspath(metadata_file)
     if not os.path.exists(normalized_path):
-        handle_critical_error(f"Metadata file does not exist: {metadata_file}")
+        handle_critical_error(
+            f"Metadata file does not exist: {metadata_file}",
+            exc_cls=ValidationError,
+        )
     if not os.path.isfile(normalized_path):
-        handle_critical_error(f"Metadata file path is not a file: {metadata_file}")
+        handle_critical_error(
+            f"Metadata file path is not a file: {metadata_file}",
+            exc_cls=ValidationError,
+        )
 
     sanitized_lines: List[str] = []
     seen_lines = set()
@@ -444,7 +463,8 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                 if not parsed:
                     handle_critical_error(
                         "Metadata file lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
+                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}",
+                        exc_cls=ValidationError,
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -453,7 +473,10 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                 sanitized_lines.append(sanitized)
                 seen_lines.add(sanitized)
     except OSError as exc:
-        handle_critical_error(f"Unable to read metadata file {metadata_file}: {exc}")
+        handle_critical_error(
+            f"Unable to read metadata file {metadata_file}: {exc}",
+            exc_cls=ValidationError,
+        )
 
     log_message(
         f"Loaded {len(sanitized_lines)} metadata header line(s) from {normalized_path}",
@@ -520,7 +543,8 @@ def _validate_anonymized_vcf_header(final_vcf_path: str, ensure_for_uncompressed
         )
     except (subprocess.CalledProcessError, OSError) as exc:
         handle_critical_error(
-            f"Failed to read header from anonymized VCF using bcftools: {exc}"
+            f"Failed to read header from anonymized VCF using bcftools: {exc}",
+            exc_cls=MergeConflictError,
         )
 
 
@@ -593,7 +617,8 @@ def append_metadata_to_merged_vcf(
     except (subprocess.CalledProcessError, OSError) as exc:
         _cleanup_temp_files()
         handle_critical_error(
-            f"Failed to recalculate INFO tags with bcftools +fill-tags: {exc}"
+            f"Failed to recalculate INFO tags with bcftools +fill-tags: {exc}",
+            exc_cls=MergeConflictError,
         )
 
     log_message("Applying quality filters to remove low-confidence variants...", verbose)
@@ -615,7 +640,8 @@ def append_metadata_to_merged_vcf(
     except (subprocess.CalledProcessError, OSError) as exc:
         _cleanup_temp_files()
         handle_critical_error(
-            f"Failed to apply bcftools filtering to merged VCF: {exc}"
+            f"Failed to apply bcftools filtering to merged VCF: {exc}",
+            exc_cls=MergeConflictError,
         )
 
     log_message("Removing individual sample genotype columns (anonymizing data)...", verbose)
@@ -650,7 +676,8 @@ def append_metadata_to_merged_vcf(
     except (subprocess.CalledProcessError, OSError) as exc:
         _cleanup_temp_files()
         handle_critical_error(
-            f"Failed to anonymize merged VCF columns using bcftools: {exc}"
+            f"Failed to anonymize merged VCF columns using bcftools: {exc}",
+            exc_cls=MergeConflictError,
         )
 
     log_message("Combining custom metadata header with VCF header...", verbose)
@@ -696,7 +723,7 @@ def append_metadata_to_merged_vcf(
                     existing_header_lines.add(serialized_line)
             except ValueError as exc:
                 _cleanup_temp_files()
-                handle_critical_error(str(exc))
+                handle_critical_error(str(exc), exc_cls=ValidationError)
 
         for metadata_line in header_metadata_lines:
             normalized = metadata_line.strip()
@@ -720,6 +747,12 @@ def append_metadata_to_merged_vcf(
             for line in body_handle:
                 body_lines.append(line.rstrip("\n"))
 
+        variants_retained = len(body_lines)
+        log_message(
+            f"Retained {variants_retained} variant(s) after quality filtering.",
+            verbose,
+        )
+
         if not final_plain_vcf:
             base, ext = os.path.splitext(merged_vcf)
             if not ext:
@@ -740,7 +773,8 @@ def append_metadata_to_merged_vcf(
             except Exception:
                 pass
         handle_critical_error(
-            f"Failed to assemble final anonymized VCF contents: {exc}"
+            f"Failed to assemble final anonymized VCF contents: {exc}",
+            exc_cls=MergeConflictError,
         )
 
     if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
@@ -763,7 +797,8 @@ def append_metadata_to_merged_vcf(
                 except Exception:
                     pass
             handle_critical_error(
-                f"Failed to compress or index anonymized VCF: {exc}"
+                f"Failed to compress or index anonymized VCF: {exc}",
+                exc_cls=MergeConflictError,
             )
         finally:
             if os.path.exists(final_plain_vcf):
@@ -795,7 +830,8 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
             reader = vcfpy.Reader.from_path(vcf_path)
         except Exception as exc:
             handle_critical_error(
-                f"Failed to open {vcf_path} for AC/AN/AF recalculation: {exc}"
+                f"Failed to open {vcf_path} for AC/AN/AF recalculation: {exc}",
+                exc_cls=MergeConflictError,
             )
 
         records = []
@@ -852,7 +888,10 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
         try:
             writer = vcfpy.Writer.from_path(vcf_path, header)
         except Exception as exc:
-            handle_critical_error(f"Failed to reopen {vcf_path} for writing: {exc}")
+            handle_critical_error(
+                f"Failed to reopen {vcf_path} for writing: {exc}",
+                exc_cls=MergeConflictError,
+            )
 
         try:
             for record in records:
@@ -870,7 +909,10 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
         with opener(vcf_path, "rt", encoding="utf-8") as handle:
             lines = [line.rstrip("\n") for line in handle]
     except OSError as exc:
-        handle_critical_error(f"Failed to open {vcf_path}: {exc}")
+        handle_critical_error(
+            f"Failed to open {vcf_path}: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
     header_lines = []
     records = []
@@ -889,7 +931,8 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
 
     if column_header is None:
         handle_critical_error(
-            f"Failed to parse {vcf_path}: Missing #CHROM header line."
+            f"Failed to parse {vcf_path}: Missing #CHROM header line.",
+            exc_cls=MergeConflictError,
         )
 
     updated_records = []
@@ -984,7 +1027,10 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
             for line in updated_records:
                 handle.write(line + "\n")
     except OSError as exc:
-        handle_critical_error(f"Failed to rewrite {vcf_path}: {exc}")
+        handle_critical_error(
+            f"Failed to rewrite {vcf_path}: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
 
 __all__ = [

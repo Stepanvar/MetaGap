@@ -12,7 +12,11 @@ from collections import OrderedDict
 from typing import Callable, List, Optional, Sequence
 
 from . import vcfpy
-from .logging_utils import handle_critical_error, log_message
+from .logging_utils import (
+    MergeConflictError,
+    handle_critical_error,
+    log_message,
+)
 from .metadata import (
     _parse_sample_metadata_line,
     apply_metadata_to_header,
@@ -183,7 +187,7 @@ def merge_vcfs(
 
     file_count = len(valid_files)
     log_message(
-        f"Found {file_count} VCF files. Merging them into a combined VCF...",
+        f"Discovered {file_count} validated VCF shard(s) for merging.",
         verbose,
     )
 
@@ -193,7 +197,10 @@ def merge_vcfs(
         try:
             pre = preprocess_vcf(file_path)
         except Exception as exc:
-            handle_critical_error(f"Failed to preprocess {file_path}: {exc}")
+            handle_critical_error(
+                f"Failed to preprocess {file_path}: {exc}",
+                exc_cls=MergeConflictError,
+            )
         preprocessed_files.append(pre)
         if pre != file_path:
             temp_files.append(pre)
@@ -213,12 +220,18 @@ def merge_vcfs(
             except OSError:
                 pass
     if result.returncode != 0:
-        handle_critical_error((result.stderr or "bcftools merge failed").strip())
+        handle_critical_error(
+            (result.stderr or "bcftools merge failed").strip(),
+            exc_cls=MergeConflictError,
+        )
 
     try:
         reader = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
-        handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
+        handle_critical_error(
+            f"Failed to open merged VCF for post-processing: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
     try:
         header = apply_metadata_to_header(
@@ -232,23 +245,36 @@ def merge_vcfs(
         raise
     except Exception as exc:
         reader.close()
-        handle_critical_error(f"Failed to apply metadata to merged VCF: {exc}")
+        handle_critical_error(
+            f"Failed to apply metadata to merged VCF: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
     tmp_out = base_vcf + ".tmp"
     try:
         writer = vcfpy.Writer.from_path(tmp_out, header)
     except Exception as exc:
         reader.close()
-        handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
+        handle_critical_error(
+            f"Failed to open temporary writer for merged VCF: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
+    variant_count = 0
     try:
         for record in reader:
             writer.write_record(record)
+            variant_count += 1
     finally:
         reader.close()
         writer.close()
 
     shutil.move(tmp_out, base_vcf)
+
+    log_message(
+        f"Merged {variant_count} variant record(s) prior to cohort filtering.",
+        verbose,
+    )
 
     log_message("Recomputing AC, AN, AF with bcftools +fill-tags...", verbose)
     res2 = subprocess.run(
@@ -257,7 +283,10 @@ def merge_vcfs(
         text=True,
     )
     if res2.returncode != 0:
-        handle_critical_error((res2.stderr or "bcftools +fill-tags failed").strip())
+        handle_critical_error(
+            (res2.stderr or "bcftools +fill-tags failed").strip(),
+            exc_cls=MergeConflictError,
+        )
     shutil.move(filled_vcf, base_vcf)
 
     log_message("Compressing and indexing the final VCF...", verbose)
@@ -265,7 +294,10 @@ def merge_vcfs(
         subprocess.run(["bgzip", "-f", base_vcf], check=True)
         subprocess.run(["tabix", "-p", "vcf", "-f", gz_vcf], check=True)
     except subprocess.CalledProcessError as exc:
-        handle_critical_error(f"Failed to compress or index merged VCF ({base_vcf}): {exc}")
+        handle_critical_error(
+            f"Failed to compress or index merged VCF ({base_vcf}): {exc}",
+            exc_cls=MergeConflictError,
+        )
 
     log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)
     return gz_vcf
@@ -342,7 +374,10 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         if key not in merged_sample_metadata or not merged_sample_metadata[key]:
                             merged_sample_metadata[key] = value
         except Exception as exc:
-            handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}")
+            handle_critical_error(
+                f"Failed to read VCF header from {file_path}: {exc}",
+                exc_cls=MergeConflictError,
+            )
         finally:
             if reader is not None:
                 try:
@@ -353,7 +388,10 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                 os.remove(preprocessed_file)
 
     if combined_header is None:
-        handle_critical_error("Unable to construct a merged VCF header.")
+        handle_critical_error(
+            "Unable to construct a merged VCF header.",
+            exc_cls=MergeConflictError,
+        )
 
     target_sample_order = sample_order if sample_order is not None else computed_sample_order
     samples_attr_present = hasattr(combined_header, "samples") and hasattr(

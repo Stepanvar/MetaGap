@@ -7,7 +7,9 @@ import logging
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from typing import Sequence
 
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -60,12 +62,12 @@ class _StubCall:
 class _StubRecord:
     """Simple record carrying FORMAT/call data for padding tests."""
 
-    def __init__(self, sample: str, genotype):
+    def __init__(self, sample: str, genotype, alt: Sequence[str] | None = None):
         self.CHROM = "1"
         self.POS = 100
         self.ID = "."
         self.REF = "A"
-        self.ALT = ["G"]
+        self.ALT = list(alt) if alt is not None else ["G"]
         self.QUAL = "."
         self.FILTER = []
         self.INFO = {}
@@ -96,6 +98,45 @@ class _StubRecord:
         self.call_for_sample = {call.sample: call for call in self.calls}
 
 
+class _CollidingRecord:
+    """Stub VCF record with configurable ALT order and multiple samples."""
+
+    def __init__(self, alt: Sequence[str], genotypes: dict[str, str]):
+        self.CHROM = "1"
+        self.POS = 100
+        self.ID = "."
+        self.REF = "A"
+        self.ALT = list(alt)
+        self.QUAL = "."
+        self.FILTER = []
+        self.INFO = {}
+        self.FORMAT = ["GT"]
+        self.calls = [_StubCall(sample, {"GT": gt}) for sample, gt in genotypes.items()]
+        self.call_for_sample = {call.sample: call for call in self.calls}
+
+    def copy(self) -> "_CollidingRecord":
+        duplicate = _CollidingRecord.__new__(_CollidingRecord)
+        duplicate.CHROM = self.CHROM
+        duplicate.POS = self.POS
+        duplicate.ID = self.ID
+        duplicate.REF = self.REF
+        duplicate.ALT = list(self.ALT)
+        duplicate.QUAL = self.QUAL
+        duplicate.FILTER = list(self.FILTER)
+        duplicate.INFO = dict(self.INFO)
+        duplicate.FORMAT = list(self.FORMAT)
+        duplicate.calls = [call.copy() for call in self.calls]
+        duplicate.call_for_sample = {call.sample: call for call in duplicate.calls}
+        return duplicate
+
+    def __deepcopy__(self, memo) -> "_CollidingRecord":  # pragma: no cover - delegation
+        return self.copy()
+
+    def update_calls(self, updated_calls):
+        self.calls = [call for call in updated_calls]
+        self.call_for_sample = {call.sample: call for call in self.calls}
+
+
 def _header_with_formats(sample_names):
     header = SimpleNamespace()
     header.samples = SimpleNamespace(names=list(sample_names))
@@ -110,6 +151,40 @@ def _header_with_formats(sample_names):
     header.get_format_field_info = _get_format_field_info
     header.copy = lambda: _header_with_formats(header.samples.names)
     return header
+
+
+def test_merge_colliding_records_recomputes_allele_metrics(monkeypatch):
+    header = _header_with_formats(["S1", "S2"])
+    sample_order = ["S1", "S2"]
+
+    monkeypatch.setattr(merging.vcfpy, "Call", _StubCall)
+
+    record_a = _StubRecord("S1", "0/1")
+    record_a.INFO.update({"AC": [99], "AN": 99, "AF": [0.99]})
+
+    record_b = _StubRecord("S2", "1/1")
+    record_b.INFO.update({"AC": [1], "AN": 2, "AF": [0.5]})
+
+    merged = merging._merge_colliding_records(
+        [(record_a, 0), (record_b, 1)], header, sample_order
+    )
+
+    merging._recompute_ac_an_af(merged)
+
+    assert merged.INFO["AC"] == [3]
+    assert merged.INFO["AN"] == 4
+    assert merged.INFO["AF"] == [pytest.approx(0.75)]
+
+    zero_alt = merged.copy()
+    zero_alt.INFO.update({"AC": [7], "AN": 8, "AF": [1.0]})
+    for call in zero_alt.calls:
+        call.data["GT"] = "./."
+
+    merging._recompute_ac_an_af(zero_alt)
+
+    assert zero_alt.INFO["AC"] == [0]
+    assert zero_alt.INFO["AN"] == 0
+    assert zero_alt.INFO["AF"] == [0.0]
 
 
 def test_pad_record_samples_adds_missing_calls(monkeypatch):
@@ -145,6 +220,24 @@ def test_pad_record_samples_normalizes_blank_genotypes():
     merging._pad_record_samples(record, header, ["S1"])
 
     assert record.call_for_sample["S1"].data["GT"] == "./."
+
+
+def test_merge_colliding_records_rewrites_genotypes_for_consistent_alt_order():
+    header = _header_with_formats(["A", "B", "C"])
+
+    record_a = _CollidingRecord(["G", "T"], {"A": "1|0"})
+    record_b = _CollidingRecord(["T", "G"], {"B": "1|0", "C": "1/0"})
+
+    merged = merging._merge_colliding_records(
+        [(record_a, 0), (record_b, 1)], header, ["A", "B", "C"]
+    )
+
+    assert [merging._alt_value(alt) for alt in merged.ALT] == ["G", "T"]
+
+    calls = merged.call_for_sample
+    assert calls["A"].data["GT"] == "1|0"
+    assert calls["B"].data["GT"] == "2|0"
+    assert calls["C"].data["GT"] == "2/0"
 
 
 def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):

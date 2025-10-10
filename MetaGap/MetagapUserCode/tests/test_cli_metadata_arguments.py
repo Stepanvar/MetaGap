@@ -1,23 +1,34 @@
-import sys
-from pathlib import Path
 import importlib
+import sys
 import types
+from collections import OrderedDict
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 
-def _install_vcfpy_stub():
-    if "vcfpy" in sys.modules:
-        return
+class CriticalMetadataError(Exception):
+    """Raised when metadata parsing hits a critical error in tests."""
+
+
+@pytest.fixture
+def metadata_module(monkeypatch):
+    """Return the metadata module with a stubbed ``vcfpy`` dependency."""
+
+    sys.modules.pop("vcfpy", None)
+    sys.modules.pop("MetagapUserCode.merge_vcf.metadata", None)
 
     stub = types.ModuleType("vcfpy")
 
     class SampleHeaderLine:
         def __init__(self, mapping=None):
             self.key = "SAMPLE"
-            self.mapping = dict(mapping or {})
+            self.mapping = OrderedDict(mapping or {})
 
         @classmethod
         def from_mapping(cls, mapping):
@@ -31,42 +42,109 @@ def _install_vcfpy_stub():
     stub.SampleHeaderLine = SampleHeaderLine
     stub.SimpleHeaderLine = SimpleHeaderLine
     stub.header = types.SimpleNamespace(InfoHeaderLine=type("InfoHeaderLine", (), {}))
-
     sys.modules["vcfpy"] = stub
 
+    module = importlib.import_module("MetagapUserCode.merge_vcf.metadata")
 
-_install_vcfpy_stub()
+    monkeypatch.setattr(module, "template_sample_mapping", None, raising=False)
+    monkeypatch.setattr(module, "template_simple_lines", [], raising=False)
+    monkeypatch.setattr(module, "template_header_lines", [], raising=False)
+    monkeypatch.setattr(module, "template_serialized_sample", None, raising=False)
 
-cli = importlib.import_module("MetagapUserCode.merge_vcf.cli")
-metadata = importlib.import_module("MetagapUserCode.merge_vcf.metadata")
+    def raise_critical(message):
+        raise CriticalMetadataError(message)
+
+    monkeypatch.setattr(module, "handle_critical_error", raise_critical, raising=False)
+
+    return module
 
 
-def test_parse_arguments_honors_legacy_meta_flag(monkeypatch):
-    argv = [
-        "merge_vcf",
-        "--input-dir",
-        "/tmp/input",
-        "--meta",
-        "ID=legacy",
-        "--meta",
-        "Sex=Female",
+def test_parse_metadata_arguments_combines_multiple_sources(metadata_module):
+    module = metadata_module
+
+    module.template_sample_mapping = OrderedDict(
+        [("ID", "TEMPLATE"), ("Description", "Template Provided")]
+    )
+    module.template_serialized_sample = (
+        "##SAMPLE=<ID=TEMPLATE,Description=Template Provided>"
+    )
+    module.template_simple_lines = [
+        module.vcfpy.SimpleHeaderLine("reference", "GRCh37")
     ]
-    monkeypatch.setattr(sys, "argv", argv)
+    module.template_header_lines = ["##reference=GRCh37"]
 
-    args = cli.parse_arguments()
+    args = SimpleNamespace(
+        sample_metadata_entries=["", "ID=cli-id", "Description=CLI Provided", "  "],
+        meta=["Status=Legacy", "ID=Legacy"],
+        header_metadata_lines=[
+            "##contact=ResearchLab",
+            "  ",
+            "Quality=High",
+            "##reference=GRCh37",
+        ],
+    )
+
     (
         sample_header_line,
         simple_header_lines,
-        sample_metadata_entries,
+        sample_mapping,
         sanitized_header_lines,
         serialized_sample_line,
-    ) = metadata.parse_metadata_arguments(args, verbose=False)
+    ) = module.parse_metadata_arguments(args, verbose=False)
 
-    assert serialized_sample_line == "##SAMPLE=<ID=legacy,Sex=Female>"
-    assert list(sample_metadata_entries.items()) == [
-        ("ID", "legacy"),
-        ("Sex", "Female"),
+    assert isinstance(sample_header_line, module.vcfpy.SampleHeaderLine)
+    assert list(sample_header_line.mapping.items()) == [
+        ("ID", "Legacy"),
+        ("Description", "CLI Provided"),
+        ("Status", "Legacy"),
     ]
-    assert sample_header_line is not None
-    assert simple_header_lines == []
-    assert sanitized_header_lines == []
+    assert [
+        (line.key, line.value) for line in simple_header_lines
+    ] == [
+        ("reference", "GRCh37"),
+        ("contact", "ResearchLab"),
+        ("Quality", "High"),
+    ]
+    assert list(sample_mapping.items()) == [
+        ("ID", "Legacy"),
+        ("Description", "CLI Provided"),
+        ("Status", "Legacy"),
+    ]
+    assert sanitized_header_lines == [
+        "##reference=GRCh37",
+        "##contact=ResearchLab",
+        "##Quality=High",
+    ]
+    assert serialized_sample_line == (
+        '##SAMPLE=<ID=Legacy,Description="CLI Provided",Status=Legacy>'
+    )
+
+
+def test_parse_metadata_arguments_requires_id(metadata_module):
+    module = metadata_module
+
+    args = SimpleNamespace(
+        sample_metadata_entries=["Description=Missing"],
+        meta=[],
+        header_metadata_lines=[],
+    )
+
+    with pytest.raises(CriticalMetadataError) as excinfo:
+        module.parse_metadata_arguments(args, verbose=False)
+
+    assert "non-empty ID" in str(excinfo.value)
+
+
+def test_parse_metadata_arguments_rejects_malformed_header_line(metadata_module):
+    module = metadata_module
+
+    args = SimpleNamespace(
+        sample_metadata_entries=["ID=S1"],
+        meta=[],
+        header_metadata_lines=["Invalid header"],
+    )
+
+    with pytest.raises(CriticalMetadataError) as excinfo:
+        module.parse_metadata_arguments(args, verbose=False)
+
+    assert "##key=value" in str(excinfo.value)

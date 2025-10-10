@@ -1,5 +1,4 @@
 import gzip
-import importlib.util
 from pathlib import Path
 
 
@@ -12,18 +11,10 @@ def _parse_info_field(info_field):
         entries[key] = value
     return entries
 
-MODULE_PATH = Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
-
-
-def load_user_module():
-    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_validate_merged_vcf_missing_info_is_tolerated(tmp_path, capsys):
-    module = load_user_module()
+def test_validate_merged_vcf_missing_info_is_tolerated(
+    tmp_path, capsys, merge_script_module
+):
+    module = merge_script_module
 
     vcf_content = """##fileformat=VCFv4.2
 ##reference=GRCh38
@@ -40,8 +31,10 @@ def test_validate_merged_vcf_missing_info_is_tolerated(tmp_path, capsys):
     assert "Validation completed successfully" in captured.out
 
 
-def test_validate_merged_vcf_supports_bgzipped_input(tmp_path, capsys):
-    module = load_user_module()
+def test_validate_merged_vcf_supports_bgzipped_input(
+    tmp_path, capsys, merge_script_module
+):
+    module = merge_script_module
 
     vcf_content = """##fileformat=VCFv4.2
 ##reference=GRCh38
@@ -61,8 +54,8 @@ def test_validate_merged_vcf_supports_bgzipped_input(tmp_path, capsys):
     assert "Validation completed successfully" in captured.out
 
 
-def test_recalculate_cohort_info_tags_populates_ac_an_af(tmp_path):
-    module = load_user_module()
+def test_recalculate_cohort_info_tags_populates_ac_an_af(tmp_path, merge_script_module):
+    module = merge_script_module
 
     vcf_content = """##fileformat=VCFv4.2
 ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes">

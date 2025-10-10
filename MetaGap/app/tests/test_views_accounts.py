@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
@@ -65,6 +66,38 @@ class UserRegistrationViewTests(TestCase):
         self.assertIn("form", response.context)
         self.assertIsInstance(response.context["form"], CustomUserCreationForm)
         self.assertContains(response, "<h2>Sign Up</h2>", html=True)
+
+    def test_signup_flow_creates_user_and_profile(self) -> None:
+        User = get_user_model()
+        unique_suffix = uuid4().hex[:8]
+        form_payload = {
+            "username": f"testuser_{unique_suffix}",
+            "email": f"test{unique_suffix}@example.com",
+            "organization_name": "Test Organization",
+            "password1": "StrongPass123!",
+            "password2": "StrongPass123!",
+        }
+
+        response = self.client.post(
+            reverse("signup"),
+            form_payload,
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain, [(reverse("login"), 302)])
+        self.assertTemplateUsed(response, "login.html")
+
+        try:
+            created_user = User.objects.get(username=form_payload["username"])
+            self.assertEqual(created_user.email, form_payload["email"])
+            self.assertTrue(hasattr(created_user, "organization_profile"))
+            self.assertEqual(
+                created_user.organization_profile.organization_name,
+                form_payload["organization_name"],
+            )
+        finally:
+            User.objects.filter(username=form_payload["username"]).delete()
 
 
 class StaticPageViewTests(TestCase):

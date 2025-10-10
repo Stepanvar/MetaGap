@@ -111,3 +111,87 @@ def test_inconsistent_contig_definitions_are_reported(
 
     assert not is_valid
     assert any("contig header" in message for message in messages)
+
+
+def test_union_headers_detects_conflicting_info_definitions(
+    tmp_path, merge_script_module
+):
+    module = merge_script_module
+
+    vcf_one = tmp_path / "one.vcf"
+    vcf_two = tmp_path / "two.vcf"
+
+    vcf_one.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "##reference=GRCh38",
+                '##INFO=<ID=DP,Number=1,Type=Integer,Description="Depth">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+                "1\t1\t.\tA\tC\t.\tPASS\tDP=10",
+            ]
+        )
+        + "\n"
+    )
+
+    vcf_two.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "##reference=GRCh38",
+                '##INFO=<ID=DP,Number=.,Type=Integer,Description="Depth array">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+                "1\t2\t.\tG\tT\t.\tPASS\tDP=10",
+            ]
+        )
+        + "\n"
+    )
+
+    with pytest.raises(SystemExit):
+        module.union_headers([str(vcf_one), str(vcf_two)])
+
+
+def test_validate_all_vcfs_detects_conflicting_format_definitions(
+    tmp_path, merge_script_module
+):
+    module = merge_script_module
+
+    vcf_one = tmp_path / "one.vcf"
+    vcf_two = tmp_path / "two.vcf"
+
+    common_lines = [
+        "##fileformat=VCFv4.2",
+        "##reference=GRCh38",
+        "##contig=<ID=1,length=1000>",
+    ]
+
+    vcf_one.write_text(
+        "\n".join(
+            common_lines
+            + [
+                '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1",
+                "1\t10\t.\tA\tC\t.\tPASS\t.\tAD\t10,5",
+            ]
+        )
+        + "\n"
+    )
+
+    vcf_two.write_text(
+        "\n".join(
+            common_lines
+            + [
+                '##FORMAT=<ID=AD,Number=1,Type=Integer,Description="Total depth">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS2",
+                "1\t20\t.\tG\tT\t.\tPASS\t.\tAD\t15",
+            ]
+        )
+        + "\n"
+    )
+
+    with pytest.raises(SystemExit):
+        module.validate_all_vcfs(
+            str(tmp_path),
+            ref_genome="GRCh38",
+            vcf_version="VCFv4.2",
+        )

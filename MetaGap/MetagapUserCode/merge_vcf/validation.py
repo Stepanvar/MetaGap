@@ -232,9 +232,10 @@ def validate_all_vcfs(
     valid_vcfs: List[str] = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
     reference_samples: List[str] = []
-    reference_contigs = None
-    reference_info_defs = None
-    reference_format_defs = None
+    reference_contigs: "OrderedDict[str, dict]" | None = None
+    reference_info_defs: "OrderedDict[str, dict]" | None = None
+    reference_filter_defs: "OrderedDict[str, dict]" | None = None
+    reference_format_defs: "OrderedDict[str, dict]" | None = None
     for file_path in glob.glob(os.path.join(input_dir, "*.vcf")):
         try:
             with open(file_path, "r", encoding="utf-8") as raw_vcf:
@@ -276,12 +277,14 @@ def validate_all_vcfs(
 
                 current_samples = list(header.samples.names)
                 current_contigs = _extract_header_definitions(header, "contig")
+                current_filter_defs = _extract_header_definitions(header, "FILTER")
                 current_info_defs = _extract_header_definitions(header, "INFO")
                 current_format_defs = _extract_header_definitions(header, "FORMAT")
 
                 if not reference_samples:
                     reference_samples = list(current_samples)
                     reference_contigs = current_contigs
+                    reference_filter_defs = current_filter_defs
                     reference_info_defs = current_info_defs
                     reference_format_defs = current_format_defs
                 else:
@@ -304,27 +307,64 @@ def validate_all_vcfs(
                             f"File {file_path} is missing sample columns {missing_samples}. "
                             "These entries will be filled with missing ('.') values during merge."
                         )
-                    if current_contigs != reference_contigs:
-                        handle_critical_error(
-                            "Contig definitions differ between VCF shards. MetaGap assumes vertical "
-                            "concatenation of shards, so headers must match across shards. "
-                            f"Expected contigs: {list(reference_contigs.keys())}; found in {file_path}: "
-                            f"{list(current_contigs.keys())}."
-                        )
-                    if current_info_defs != reference_info_defs:
-                        handle_critical_error(
-                            "INFO field definitions differ between VCF shards. MetaGap assumes "
-                            "vertical concatenation of shards, so headers must match across shards. "
-                            f"Expected INFO IDs: {list(reference_info_defs.keys())}; found in {file_path}: "
-                            f"{list(current_info_defs.keys())}."
-                        )
-                    if current_format_defs != reference_format_defs:
-                        handle_critical_error(
-                            "FORMAT field definitions differ between VCF shards. MetaGap assumes "
-                            "vertical concatenation of shards, so headers must match across shards. "
-                            f"Expected FORMAT IDs: {list(reference_format_defs.keys())}; found in {file_path}: "
-                            f"{list(current_format_defs.keys())}."
-                        )
+                    if reference_contigs is None:
+                        reference_contigs = OrderedDict()
+                    for contig_id, mapping in current_contigs.items():
+                        existing = reference_contigs.get(contig_id)
+                        if existing is None:
+                            reference_contigs[contig_id] = mapping
+                            continue
+                        if existing != mapping:
+                            handle_critical_error(
+                                "Contig header definitions conflict across shards. "
+                                f"For contig '{contig_id}', previous definition was {existing!r} "
+                                f"but {file_path} defines {mapping!r}."
+                            )
+
+                    if reference_filter_defs is None:
+                        reference_filter_defs = OrderedDict()
+                    for filter_id, mapping in current_filter_defs.items():
+                        existing = reference_filter_defs.get(filter_id)
+                        if existing is None:
+                            reference_filter_defs[filter_id] = mapping
+                            continue
+                        if existing.get("Description") != mapping.get("Description"):
+                            handle_critical_error(
+                                "FILTER header definitions conflict across shards. "
+                                f"For filter '{filter_id}', previous Description was "
+                                f"{existing.get('Description')!r} but {file_path} defines "
+                                f"{mapping.get('Description')!r}."
+                            )
+
+                    if reference_info_defs is None:
+                        reference_info_defs = OrderedDict()
+                    for info_id, mapping in current_info_defs.items():
+                        existing = reference_info_defs.get(info_id)
+                        if existing is None:
+                            reference_info_defs[info_id] = mapping
+                            continue
+                        for key in ("Number", "Type", "Description"):
+                            if existing.get(key) != mapping.get(key):
+                                handle_critical_error(
+                                    "INFO header definitions conflict across shards. "
+                                    f"For INFO '{info_id}', field '{key}' differed: "
+                                    f"{existing.get(key)!r} vs {mapping.get(key)!r} in {file_path}."
+                                )
+
+                    if reference_format_defs is None:
+                        reference_format_defs = OrderedDict()
+                    for format_id, mapping in current_format_defs.items():
+                        existing = reference_format_defs.get(format_id)
+                        if existing is None:
+                            reference_format_defs[format_id] = mapping
+                            continue
+                        for key in ("Number", "Type", "Description"):
+                            if existing.get(key) != mapping.get(key):
+                                handle_critical_error(
+                                    "FORMAT header definitions conflict across shards. "
+                                    f"For FORMAT '{format_id}', field '{key}' differed: "
+                                    f"{existing.get(key)!r} vs {mapping.get(key)!r} in {file_path}."
+                                )
 
                 contig_order = {name: idx for idx, name in enumerate(current_contigs.keys())}
                 last_contig_index = None

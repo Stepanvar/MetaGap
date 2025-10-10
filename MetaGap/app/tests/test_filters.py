@@ -72,10 +72,10 @@ class AlleleFrequencyFilterTests(TestCase):
             additional={"QD": "15.0", "FS": "0.4", "SOR": "1.5"},
         )
         self.info_chr2 = Info.objects.create(
-            af=".",
-            dp="",
-            mq=".",
-            additional={"QD": ".", "FS": "", "SOR": "."},
+            af=None,
+            dp=None,
+            mq=None,
+            additional=None,
         )
         self.info_chr3 = Info.objects.create(
             af="0.45",
@@ -187,12 +187,31 @@ class AlleleFrequencyFilterTests(TestCase):
         self.assertEqual(list(qs_max), [self.record_chr2])
 
     def test_af_range_filters_handle_placeholder_values(self):
+        placeholder_info = Info.objects.create(
+            af=".",
+            dp=".",
+            mq=".",
+            additional={"QD": ".", "FS": ".", "SOR": "."},
+        )
+        placeholder_record = AlleleFrequency.objects.create(
+            sample_group=self.sample_group,
+            chrom="chrX",
+            pos=11111,
+            variant_id="rsPlaceholder",
+            ref="A",
+            alt="G",
+            qual=5.0,
+            filter="PASS",
+            info=placeholder_info,
+        )
+
         qs = filters.AlleleFrequencyFilter(
             {"af_min": 0.1, "af_max": 0.2}, queryset=AlleleFrequency.objects.all()
         ).qs
 
         self.assertEqual(list(qs), [self.record_chr1])
         self.assertNotIn(self.record_chr2, qs)
+        self.assertNotIn(placeholder_record, qs)
 
     def test_dp_range_filters(self):
         qs = filters.AlleleFrequencyFilter(

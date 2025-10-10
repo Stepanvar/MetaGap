@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import logging
+import os
+import shutil
+import tempfile
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pysam
@@ -54,42 +58,55 @@ class VCFImporter:
 
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None
+        temp_paths: list[str] = []
         with transaction.atomic():
             try:
                 try:
-                    with pysam.VariantFile(file_path) as vcf_in:
-                        metadata = self.extract_sample_group_metadata(vcf_in)
-                        sample_group = self._create_sample_group(
-                            metadata, file_path, organization_profile
-                        )
-                        self._populate_sample_group_from_pysam(vcf_in, sample_group)
-                except (OSError, ValueError, NotImplementedError) as exc:
-                    warning = (
-                        f"Could not parse VCF metadata with pysam: {exc}. "
-                        "Falling back to a text parser."
+                    metadata, sample_group = self._import_with_pysam(
+                        file_path,
+                        organization_profile,
+                        original_file_path=file_path,
                     )
-                    logger.warning("%s", warning)
-                    self.warnings.append(warning)
-                    if sample_group is not None:
-                        sample_group.delete()
-                    try:
-                        metadata = self._extract_metadata_text_fallback(file_path)
-                        sample_group = self._create_sample_group(
-                            metadata, file_path, organization_profile
+                except (OSError, ValueError, NotImplementedError) as exc:
+                    retry_exc: BaseException = exc
+                    if self._should_retry_with_inflated_copy(file_path, exc):
+                        inflated_path = self._inflate_gzip_to_temp(file_path)
+                        temp_paths.append(inflated_path)
+                        try:
+                            metadata, sample_group = self._import_with_pysam(
+                                inflated_path,
+                                organization_profile,
+                                original_file_path=file_path,
+                            )
+                        except (OSError, ValueError, NotImplementedError) as inflated_exc:
+                            retry_exc = inflated_exc
+                    if sample_group is None:
+                        warning = (
+                            f"Could not parse VCF metadata with pysam: {retry_exc}. "
+                            "Falling back to a text parser."
                         )
-                        parse_vcf_text_fallback(
-                            file_path,
-                            sample_group,
-                            self.database_writer,
-                            warnings=self.warnings,
-                        )
-                    except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
+                        logger.warning("%s", warning)
+                        self.warnings.append(warning)
                         if sample_group is not None:
                             sample_group.delete()
-                        raise ValidationError(
-                            "The uploaded VCF file appears to be invalid or corrupted. "
-                            "Please verify the file contents and try again."
-                        ) from fallback_exc
+                        try:
+                            metadata = self._extract_metadata_text_fallback(file_path)
+                            sample_group = self._create_sample_group(
+                                metadata, file_path, organization_profile
+                            )
+                            parse_vcf_text_fallback(
+                                file_path,
+                                sample_group,
+                                self.database_writer,
+                                warnings=self.warnings,
+                            )
+                        except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
+                            if sample_group is not None:
+                                sample_group.delete()
+                            raise ValidationError(
+                                "The uploaded VCF file appears to be invalid or corrupted. "
+                                "Please verify the file contents and try again."
+                            ) from fallback_exc
             except ImporterError:
                 raise
             except ValidationError as exc:
@@ -99,13 +116,16 @@ class VCFImporter:
             except (TypeError, ValueError) as exc:
                 message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
                 raise ImporterValidationError(message) from exc
-                self._populate_sample_group_from_pysam(vcf_in, sample_group)
-            except (OSError, ValueError) as exc:
-                warning = (
-                    f"Could not parse VCF metadata with pysam: {exc}. "
-                    "Falling back to a text parser."
-                )
-                raise ImporterValidationError(message) from exc
+            finally:
+                for temp_path in temp_paths:
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        logger.debug(
+                            "Failed to remove temporary VCF created during import: %s",
+                            temp_path,
+                            exc_info=True,
+                        )
 
         assert sample_group is not None
         return sample_group
@@ -191,3 +211,45 @@ class VCFImporter:
         self, vcf_in: pysam.VariantFile
     ) -> Dict[str, Any]:
         return self.metadata_parser.extract_sample_group_metadata(vcf_in)
+
+    def _import_with_pysam(
+        self,
+        file_path: str,
+        organization_profile: Any,
+        *,
+        original_file_path: Optional[str] = None,
+    ) -> Tuple[Dict[str, Any], SampleGroup]:
+        with pysam.VariantFile(file_path) as vcf_in:
+            metadata = self.extract_sample_group_metadata(vcf_in)
+            sample_group = self._create_sample_group(
+                metadata,
+                original_file_path or file_path,
+                organization_profile,
+            )
+            self._populate_sample_group_from_pysam(vcf_in, sample_group)
+        return metadata, sample_group
+
+    @staticmethod
+    def _should_retry_with_inflated_copy(file_path: str, exc: BaseException) -> bool:
+        message = str(exc).lower()
+        if not file_path.lower().endswith(".gz"):
+            return False
+        return "bgzf" in message or "bgzip" in message or isinstance(exc, NotImplementedError)
+
+    def _inflate_gzip_to_temp(self, file_path: str) -> str:
+        temp_file = tempfile.NamedTemporaryFile(suffix=".vcf", delete=False)
+        temp_file.close()
+        try:
+            with gzip.open(file_path, "rb") as compressed, open(temp_file.name, "wb") as destination:
+                shutil.copyfileobj(compressed, destination)
+        except Exception:
+            try:
+                os.remove(temp_file.name)
+            except OSError:
+                logger.debug(
+                    "Failed to clean up temporary file after inflate error: %s",
+                    temp_file.name,
+                    exc_info=True,
+                )
+            raise
+        return temp_file.name

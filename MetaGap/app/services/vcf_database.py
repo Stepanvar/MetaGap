@@ -229,9 +229,21 @@ class VCFDatabaseWriter:
             _dedupe_append(alias_candidates, normalized_alias)
 
         candidate_order: list[str] = []
+
+        section_variants: list[str] = []
         for section_variant in (section, normalized_section):
-            if not section_variant:
-                continue
+            if section_variant:
+                _dedupe_append(section_variants, section_variant)
+
+        collapsed_variants: list[str] = []
+        for section_variant in section_variants:
+            collapsed = section_variant.replace("_", "")
+            if collapsed and collapsed != section_variant:
+                _dedupe_append(collapsed_variants, collapsed)
+
+        section_variants.extend(collapsed_variants)
+
+        for section_variant in section_variants:
             for alias_candidate in alias_candidates:
                 _dedupe_append(
                     candidate_order, f"{section_variant}_{alias_candidate}"
@@ -245,14 +257,25 @@ class VCFDatabaseWriter:
                 return candidate
 
         normalized_lookup: Dict[str, str] = {}
+
+        def _register_lookup(normalized_key: str, original_key: str) -> None:
+            if normalized_key and normalized_key not in normalized_lookup:
+                normalized_lookup[normalized_key] = original_key
+
         for key in metadata.keys():
             normalized_key = normalize_metadata_key(key)
-            if normalized_key not in normalized_lookup:
-                normalized_lookup[normalized_key] = key
+            _register_lookup(normalized_key, key)
+            collapsed_key = normalized_key.replace("_", "")
+            _register_lookup(collapsed_key, key)
 
         for candidate in candidate_order:
             normalized_candidate = normalize_metadata_key(candidate)
             mapped_key = normalized_lookup.get(normalized_candidate)
+            if mapped_key is not None:
+                return mapped_key
+
+            collapsed_candidate = normalized_candidate.replace("_", "")
+            mapped_key = normalized_lookup.get(collapsed_candidate)
             if mapped_key is not None:
                 return mapped_key
 

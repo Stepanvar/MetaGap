@@ -210,7 +210,9 @@ class ImportDataViewTests(TestCase):
             "Something went wrong while processing the upload. Check the error above for details.",
             messages,
         )
-        self.assertIn("data_file", response.context["form"].errors)
+        form_errors = response.context["form"].errors
+        self.assertIn("data_file", form_errors)
+        self.assertIn("boom", form_errors["data_file"][0])
 
     def test_missing_organization_profile_displays_validation_message(self) -> None:
         """Users without a profile receive a helpful validation message."""

@@ -667,6 +667,11 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             return self.form_invalid(form)
         except Exception as exc:  # pragma: no cover - defensive feedback channel
             logger.exception("VCF import failed", exc_info=exc)
+
+            exc_message = str(exc).strip()
+            if exc_message:
+                form.add_error("data_file", exc_message)
+
             form.add_error(
                 "data_file",
                 "An unexpected error occurred while importing the file. Please review the file and try again.",

@@ -5,12 +5,82 @@
 {% block breadcrumbs %}{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-      <h1>Welcome to {{ SITE_NAME }}</h1>
-	<p>Manage allele frequencies and sample group metadata with ease.</p>
-	{% url 'search_results' as search_action %}
-        {% with form_title="Search" form_method="get" form_action=search_action submit_button_label="Search" extra_actions=form_extra_actions|default:'' %}
-        {% include 'partials/form.html' %}
-        {% endwith %}
+<div class="container py-5">
+    <section class="row align-items-center mb-5 g-5">
+        <div class="col-lg-7">
+            <h1 class="display-5 fw-semibold mb-3">A unified workspace for variant frequency data</h1>
+            <p class="lead text-muted">{{ SITE_NAME }} helps laboratories curate sample metadata, compare allele frequencies across cohorts, and keep sequencing provenance transparent.</p>
+            <div class="d-flex flex-wrap gap-3 mt-4">
+                <a class="btn btn-primary btn-lg" href="{% url 'import_data' %}">Import your VCF</a>
+                <a class="btn btn-outline-primary btn-lg" href="{% url 'about' %}">Learn more</a>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Search the catalogue</h2>
+                    <p class="text-muted">Query by variant ID, genomic coordinates, or metadata keywords to surface relevant cohorts instantly.</p>
+                    {% url 'search_results' as search_action %}
+                    {% with form_title="" form_method="get" form_action=search_action submit_button_label="Search" form_class="needs-validation" %}
+                        {% include 'partials/form.html' %}
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="row g-4 mb-5">
+        <div class="col-md-4">
+            <article class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h5">Guided imports</h2>
+                    <p class="text-muted mb-0">Upload compressed or uncompressed VCF files with immediate validation. MetaGaP surfaces unsupported metadata keys and highlights missing fields so you can fix issues before data is published.</p>
+                </div>
+            </article>
+        </div>
+        <div class="col-md-4">
+            <article class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h5">Rich sample context</h2>
+                    <p class="text-muted mb-0">Track tissue origin, extraction quality metrics, sequencing instruments, and downstream pipelines for every dataset in one dashboard.</p>
+                </div>
+            </article>
+        </div>
+        <div class="col-md-4">
+            <article class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h5">Actionable results</h2>
+                    <p class="text-muted mb-0">Interactive tables expose allele frequencies, counts, and QC statistics with filtering, pagination, and export options tailored for cross-study comparisons.</p>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="card border-0 shadow-sm mb-5">
+        <div class="card-body p-4 p-lg-5">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-8">
+                    <h2 class="h4">Import data in three easy steps</h2>
+                    <ol class="mb-0 ps-3">
+                        <li>Generate a VCF/BCF file with complete header metadata describing your cohort.</li>
+                        <li>Upload the file via the <a href="{% url 'import_data' %}">Import Data</a> page and review any warnings.</li>
+                        <li>Explore new variants immediately in the dashboard and share curated sample groups with collaborators.</li>
+                    </ol>
+                </div>
+                <div class="col-lg-4">
+                    <div class="bg-body-secondary rounded-3 p-4 text-center h-100 d-flex flex-column justify-content-center">
+                        <span class="display-6 text-primary mb-2"><i class="fas fa-chart-line"></i></span>
+                        <p class="text-muted mb-0">Need an example dataset? Import the bundled demo VCF from your profile page to see the workflow end to end.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="text-center">
+        <h2 class="h4 mb-3">Ready to get started?</h2>
+        <p class="text-muted mb-4">Create an account, upload your first dataset, and uncover insights across your cohorts.</p>
+        <a class="btn btn-success btn-lg" href="{% url 'signup' %}">Create an account</a>
+    </section>
 </div>
 {% endblock %}

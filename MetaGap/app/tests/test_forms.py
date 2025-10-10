@@ -30,6 +30,36 @@ class ImportDataFormTests(SimpleTestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("data_file", form.errors)
 
+    def test_rejects_unsupported_extension(self):
+        form = forms.ImportDataForm(
+            files={"data_file": SimpleUploadedFile("variants.txt", b"content")}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("Unsupported file type", form.errors["data_file"][0])
+
+    @override_settings(METAGAP_MAX_UPLOAD_SIZE_MB=0.0001)
+    def test_rejects_files_exceeding_size_limit(self):
+        content = b"A" * 2048
+        form = forms.ImportDataForm(
+            files={"data_file": SimpleUploadedFile("variants.vcf", content)}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("larger than", form.errors["data_file"][0])
+
+    def test_rejects_unexpected_content_type(self):
+        form = forms.ImportDataForm(
+            files={
+                "data_file": SimpleUploadedFile(
+                    "variants.vcf", b"##fileformat=VCF\n", content_type="application/pdf"
+                )
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("does not look like a VCF/BCF file", form.errors["data_file"][0])
+
 
 @override_settings(MIGRATION_MODULES={"app": None})
 class CustomUserCreationFormTests(TestCase):
@@ -61,6 +91,25 @@ class CustomUserCreationFormTests(TestCase):
         profile = OrganizationProfile.objects.get(user=user)
         self.assertEqual(profile.organization_name, "New Org")
         self.assertFalse(hasattr(form, "_pending_organization_name"))
+
+    def test_duplicate_email_fails_validation(self):
+        User.objects.create_user(
+            username="existing",
+            email="duplicate@example.com",
+            password="complex-pass-123",
+        )
+
+        form = forms.CustomUserCreationForm(
+            data={
+                "username": "new-user",
+                "email": "duplicate@example.com",
+                "password1": "complex-pass-123",
+                "password2": "complex-pass-123",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("already exists", form.errors["email"][0])
 
 
 @override_settings(MIGRATION_MODULES={"app": None})
@@ -101,6 +150,27 @@ class EditProfileFormTests(TestCase):
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.organization_name, "Updated Org")
         self.assertFalse(hasattr(form, "_pending_organization_name"))
+
+    def test_duplicate_email_is_rejected(self):
+        User.objects.create_user(
+            username="other",
+            email="duplicate@example.com",
+            password="secret-pass",
+        )
+
+        form = forms.EditProfileForm(
+            data={
+                "username": "existing",
+                "email": "duplicate@example.com",
+                "first_name": "Updated",
+                "last_name": "User",
+                "organization_name": "Updated Org",
+            },
+            instance=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("already using", form.errors["email"][0])
 class SampleGroupFormTests(TestCase):
     """Tests for :class:`app.forms.SampleGroupForm`."""
 
@@ -198,6 +268,26 @@ class SampleGroupFormTests(TestCase):
         self.assertEqual(updated_group.sample_origin.collection_method, "Surgical")
         self.assertEqual(updated_group.sample_origin.storage_conditions, "Ambient")
         self.assertIsNone(updated_group.sample_origin.time_stored)
+
+    def test_negative_total_samples_is_invalid(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        form = forms.SampleGroupForm(
+            data={"name": "Invalid", "total_samples": -5},
+            user=user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("positive", form.errors["total_samples"][0])
+
+    def test_contact_phone_requires_digits(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        form = forms.SampleGroupForm(
+            data={"name": "Invalid", "contact_phone": "invalid@@"},
+            user=user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone number", form.errors["contact_phone"][0])
 
     def test_creatable_metadata_fields_allow_new_entries(self):
         user = User.objects.create_user("creator", "creator@example.com", "secret")

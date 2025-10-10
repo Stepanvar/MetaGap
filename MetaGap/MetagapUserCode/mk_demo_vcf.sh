@@ -2,23 +2,102 @@
 # mk_demo_vcfs.sh
 set -euo pipefail
 
-SAMPLE_COUNT=${SAMPLE_COUNT:-${1:-4}}
-if [[ $# -gt 0 ]]; then
-  shift
+usage() {
+  cat <<'USAGE'
+Usage: mk_demo_vcf.sh [OPTIONS] [START_POS [STEP]]
+
+Generate a set of single-sample VCFs for exercising the merge pipeline.
+
+Options:
+  --mode MODE      Generation mode. Supported values:
+                     shared  - Every file contains the same variants (default).
+                     partial - Files share some variants but also contain
+                                sample-specific or subset-only records.
+  --start-pos POS  Override the starting position for the first variant.
+  --step STEP      Override the distance between consecutive variants.
+  -h, --help       Display this help message and exit.
+
+The legacy positional arguments START_POS and STEP are still accepted for
+compatibility. Environment variables START_POS, STEP, MODE, and VARS_PER_FILE
+may also be set prior to invocation.
+USAGE
+}
+
+START_POS=${START_POS:-14370}
+STEP=${STEP:-50}
+
+if [[ -z "${VARS_PER_FILE+x}" ]]; then
+  VARS_PER_FILE=3
+  VARS_PER_FILE_WAS_DEFAULT=1
+else
+  VARS_PER_FILE_WAS_DEFAULT=0
 fi
 
-START_POS=${START_POS:-${1:-14370}}
-if [[ $# -gt 0 ]]; then
-  shift
-fi
-
-STEP=${STEP:-${1:-50}}
-if [[ $# -gt 0 ]]; then
-  shift
-fi
-
-VARS_PER_FILE=${VARS_PER_FILE:-3}
+MODE=${MODE:-shared}
 CHROM=20
+
+declare -a POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      [[ $# -ge 2 ]] || { echo "--mode requires an argument" >&2; exit 1; }
+      MODE=$2
+      shift 2
+      ;;
+    --start-pos)
+      [[ $# -ge 2 ]] || { echo "--start-pos requires an argument" >&2; exit 1; }
+      START_POS=$2
+      shift 2
+      ;;
+    --step)
+      [[ $# -ge 2 ]] || { echo "--step requires an argument" >&2; exit 1; }
+      STEP=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      POSITIONAL_ARGS+=("$@")
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#POSITIONAL_ARGS[@]} -gt 0 ]]; then
+  START_POS=${POSITIONAL_ARGS[0]}
+fi
+
+if [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
+  STEP=${POSITIONAL_ARGS[1]}
+fi
+
+if [[ ${#POSITIONAL_ARGS[@]} -gt 2 ]]; then
+  echo "Too many positional arguments" >&2
+  usage >&2
+  exit 1
+fi
+
+case "$MODE" in
+  shared|partial)
+    ;;
+  *)
+    echo "Unsupported mode: $MODE" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p demo_vcfs
 
@@ -37,6 +116,12 @@ mk() {
   printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s\n' "$sample" >> "$out"
 }
 
+write_variants() {
+  local out=$1 sample=$2 recs_name=$3
+  local -n recs=$recs_name
+  if [[ ${#recs[@]} -gt VARS_PER_FILE ]]; then
+    echo "Expected at most ${VARS_PER_FILE} records for $sample but found ${#recs[@]}" >&2
+    exit 1
 generate_variant_fields() {
   local sample_idx=$1 variant_idx=$2
 
@@ -70,6 +155,10 @@ write_variants() {
 
   mk "$out" "$sample"
   for ((i = 0; i < VARS_PER_FILE; i++)); do
+    local rec="${recs[$i]-}"
+    if [[ -z "$rec" ]]; then
+      continue
+    fi
     local pos=$((START_POS + i * STEP))
     IFS=$'\t' read -r id ref alt qual filter info format sample_data <<<"$(generate_variant_fields "$sample_idx" "$i")"
     printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

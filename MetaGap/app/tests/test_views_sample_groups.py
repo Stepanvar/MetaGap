@@ -20,7 +20,7 @@ from ..views import (
     SampleGroupDetailView,
     SampleGroupUpdateView,
 )
-from .sample_group_test_mixins import SampleGroupTestDataMixin
+from .sample_group_test_mixins import SampleGroupViewMatrixMixin
 
 
 class OrganizationSampleGroupMixinTests(TestCase):
@@ -89,23 +89,8 @@ class OrganizationSampleGroupMixinTests(TestCase):
         )
 
 
-class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
+class SampleGroupDetailViewTests(SampleGroupViewMatrixMixin, TestCase):
     """Exercise the sample group detail view and its access controls."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        User = get_user_model()
-        self.owner = User.objects.create_user(
-            username="detail_owner",
-            password="detail-pass",
-            email="owner@example.com",
-        )
-        self.other_user = User.objects.create_user(
-            username="detail_other",
-            password="detail-pass",
-            email="other@example.com",
-        )
-        self.sample_group, self.allele = self.create_sample_group_with_variant(self.owner)
 
     def detail_url(self) -> str:
         for name in (

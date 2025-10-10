@@ -1,26 +1,11 @@
-import importlib.util
 from pathlib import Path
 
 import pytest
 
-
-MODULE_PATH = (
-    Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
-)
-
-
-def load_user_module():
-    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_MODULE_FOR_SKIP = load_user_module()
-pytestmark = pytest.mark.skipif(
-    not getattr(_MODULE_FOR_SKIP, "VCFPY_AVAILABLE", True),
-    reason="vcfpy dependency is required for header union tests",
-)
+@pytest.fixture(autouse=True)
+def _skip_without_vcfpy(merge_script_module):
+    if not getattr(merge_script_module, "VCFPY_AVAILABLE", True):
+        pytest.skip("vcfpy dependency is required for header union tests")
 
 
 def _write_vcf(path, sample_line):
@@ -44,8 +29,8 @@ def _write_vcf_with_samples(path, samples):
     path.write_text(content)
 
 
-def test_union_headers_merges_sample_metadata(tmp_path):
-    module = load_user_module()
+def test_union_headers_merges_sample_metadata(tmp_path, merge_script_module):
+    module = merge_script_module
 
     sample_one = (
         '##SAMPLE=<ID=S1,Description="Primary sample",Meta="{\\"foo\\": \\"bar,baz\\"}">' 
@@ -71,8 +56,8 @@ def test_union_headers_merges_sample_metadata(tmp_path):
     assert mapping["Extra"] == "42"
 
 
-def test_union_headers_preserves_sample_order(tmp_path):
-    module = load_user_module()
+def test_union_headers_preserves_sample_order(tmp_path, merge_script_module):
+    module = merge_script_module
 
     vcf_one = tmp_path / "one.vcf"
     vcf_two = tmp_path / "two.vcf"

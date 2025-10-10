@@ -7,28 +7,69 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-        {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' extra_actions=form_extra_actions|default:'' %}
+<div class="container py-5">
+    <header class="mb-4">
+        <h1 class="h3 mb-1">Import sequencing cohorts</h1>
+        <p class="text-muted mb-0">Upload VCF or BCF files and MetaGaP will validate the metadata, populate sample groups, and surface any issues that require your attention.</p>
+    </header>
 
-        <hr class="my-4">
-        <h3>Imported Sample Groups</h3>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' submit_button_label='Upload and import' extra_actions=form_extra_actions|default:'' %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <aside class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted mb-3">Upload checklist</h2>
+                    <ul class="list-unstyled small mb-4">
+                        <li class="mb-2"><i class="fas fa-file-medical text-primary me-2"></i>Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</code>, <code>.bcf</code> up to {{ form.max_upload_size_mb }}&nbsp;MB.</li>
+                        <li class="mb-2"><i class="fas fa-tags text-primary me-2"></i>Include <code>SAMPLE_GROUP</code> metadata in the header so we can build cohort profiles automatically.</li>
+                        <li class="mb-2"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Warnings highlight unsupported keys—resubmit after updating your header comments.</li>
+                        <li class="mb-0"><i class="fas fa-shield-alt text-success me-2"></i>Your upload is stored temporarily for processing and removed immediately after import.</li>
+                    </ul>
+                    <p class="small text-muted mb-0">Need a template? Download the demo VCF from your profile to view a fully annotated header.</p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <section class="mt-5">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <h2 class="h4 mb-0">Imported sample groups</h2>
+            <span class="badge bg-primary bg-opacity-10 text-primary">{{ sample_groups|length }} total</span>
+        </div>
         {% if sample_groups %}
-        <ul class="list-group mb-0">
-                {% for group in sample_groups %}
-                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="me-2">
-                                <strong>{{ group.name }}</strong>
-                        </div>
-                        <div class="btn-group btn-group-sm" role="group">
+            <div class="card border-0 shadow-sm">
+                <ul class="list-group list-group-flush">
+                    {% for group in sample_groups %}
+                        <li class="list-group-item d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                            <div class="flex-grow-1">
+                                <h3 class="h6 mb-1">{{ group.name }}</h3>
+                                <p class="text-muted small mb-0">
+                                    {% if group.total_samples %}
+                                        {{ group.total_samples }} samples
+                                    {% else %}
+                                        Sample count pending
+                                    {% endif %}
+                                    · Owner: {% if group.created_by.organization_name %}{{ group.created_by.organization_name }}{% else %}{{ group.created_by.user.username }}{% endif %}
+                                </p>
+                            </div>
+                            <div class="btn-group btn-group-sm" role="group">
                                 <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
                                 <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
                                 <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
-                        </div>
-                </li>
-                {% endfor %}
-        </ul>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
         {% else %}
-        <p class="text-muted">You haven't imported any datasets yet.</p>
+            <div class="alert alert-info" role="status">No cohorts imported yet. Upload your first VCF to populate this list.</div>
         {% endif %}
+    </section>
 </div>
 {% endblock %}

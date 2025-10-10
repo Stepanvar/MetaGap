@@ -61,8 +61,13 @@ class ImportDataViewTests(TestCase):
             )
             response = self.client.post(reverse("import_data"), {"data_file": upload})
 
-        self.assertRedirects(response, reverse("profile"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "import_data.html")
         importer_instance.import_file.assert_called_once()
 
         messages = [message.message for message in response.wsgi_request._messages]
-        self.assertIn("An error occurred: boom", messages)
+        self.assertIn(
+            "Something went wrong while processing the upload. Check the error above for details.",
+            messages,
+        )
+        self.assertIn("data_file", response.context["form"].errors)

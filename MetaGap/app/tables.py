@@ -165,10 +165,48 @@ def build_allele_frequency_table(
     if exclude_extra:
         exclude_fields.extend(exclude_extra)
 
-    return create_dynamic_table(
+    table_class = create_dynamic_table(
         AlleleFrequency,
         table_name=table_name,
         include_related=include_related,
         priority_fields=priority_fields,
         exclude_fields=exclude_fields,
     )
+
+    friendly_names = {
+        "chrom": "Chromosome",
+        "pos": "Position (bp)",
+        "ref": "Reference allele",
+        "alt": "Alternate allele",
+        "qual": "QUAL",
+        "filter": "Filter status",
+        "info__af": "Allele frequency (AF)",
+        "info__ac": "Allele count (AC)",
+        "info__an": "Alleles analysed (AN)",
+        "info__dp": "Read depth (DP)",
+        "info__mq": "Mapping quality (MQ)",
+    }
+    highlight_columns = {"chrom", "pos", "ref", "alt", "info__af"}
+
+    for column_name, column in table_class.base_columns.items():
+        if column_name in friendly_names:
+            column.verbose_name = friendly_names[column_name]
+
+        attrs = column.attrs or {}
+        th_classes = attrs.setdefault("th", {}).get("class", "")
+        th_class_list = [cls for cls in th_classes.split() if cls and cls != "fw-bold"]
+
+        if column_name in highlight_columns:
+            th_class_list.extend(["text-uppercase", "small", "fw-semibold"])
+        else:
+            th_class_list.append("fw-semibold")
+
+        deduped = []
+        for cls in th_class_list:
+            if cls not in deduped:
+                deduped.append(cls)
+        attrs["th"]["class"] = " ".join(deduped)
+
+        column.attrs = attrs
+
+    return table_class

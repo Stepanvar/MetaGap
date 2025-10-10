@@ -103,6 +103,11 @@ class SearchResultsView(SingleTableMixin, FilterView):
     # Dynamically create a table class prioritising variant descriptors first.
     table_class = build_allele_frequency_table()
 
+    def get_table_pagination(self, table):
+        """Disable django-tables2 pagination so DataTables can handle it client-side."""
+
+        return False
+
     def get_queryset(self):
         base_queryset = (
             AlleleFrequency.objects.select_related(

@@ -21,6 +21,12 @@ from .logging_utils import (
     log_message,
 )
 
+DEFAULT_QUAL_THRESHOLD = 30.0
+"""Minimum QUAL value required for a record to pass default filtering."""
+
+DEFAULT_AN_THRESHOLD = 50.0
+"""Minimum allele number required for a record to pass default filtering."""
+
 try:  # pragma: no cover - optional dependency
     import pysam
 except ImportError:  # pragma: no cover - exercised in environments without pysam
@@ -703,10 +709,12 @@ def append_metadata_to_merged_vcf(
         return an
 
     def _record_passes_filters(record, allele_number: int) -> bool:
+        """Return whether a record satisfies the default QUAL and AN thresholds."""
+
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
-        if qual_value is None or qual_value <= 30:
+        if qual_value is None or qual_value <= DEFAULT_QUAL_THRESHOLD:
             return False
-        if allele_number <= 50:
+        if allele_number <= DEFAULT_AN_THRESHOLD:
             return False
         filters = getattr(record, "FILTER", None)
         filter_text = _normalize_filter(filters)

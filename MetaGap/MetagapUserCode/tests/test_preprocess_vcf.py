@@ -10,6 +10,25 @@ def vcf_header() -> str:
     return "##fileformat=VCFv4.2\n"
 
 
+@pytest.fixture(params=(".vcf", ".vcf.gz"))
+def pre_tabbed_vcf(tmp_path: pathlib.Path, vcf_header: str, request) -> tuple[pathlib.Path, str]:
+    extension = request.param
+    vcf_path = tmp_path / f"pre_tabbed{extension}"
+    text = (
+        vcf_header
+        + "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+        + "chr1\t1\t.\tA\tT\t.\tPASS\t.\n"
+    )
+
+    if extension.endswith(".gz"):
+        with gzip.open(vcf_path, "wt", encoding="utf-8") as handle:
+            handle.write(text)
+    else:
+        vcf_path.write_text(text, encoding="utf-8")
+
+    return vcf_path, text
+
+
 def _load_preprocess_vcf():
     module = importlib.import_module("MetagapUserCode.merge_vcf.merging")
     return getattr(module, "preprocess_vcf")
@@ -44,7 +63,6 @@ def test_preprocess_vcf_preserves_pre_tabbed(
     vcf_path, expected_content = pre_tabbed_vcf
 
     result = preprocess_vcf(str(vcf_path))
-
     assert result == str(vcf_path)
 
     if vcf_path.suffix == ".gz":
@@ -53,6 +71,7 @@ def test_preprocess_vcf_preserves_pre_tabbed(
     else:
         assert vcf_path.read_text(encoding="utf-8") == expected_content
 
+    # no temp files left behind
     assert not list(tmp_path.glob("*.tmp"))
 
 

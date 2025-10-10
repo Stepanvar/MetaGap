@@ -16,14 +16,15 @@ from .models import AlleleFrequency, SampleGroup
 
 class AlleleFrequencyFilter(django_filters.FilterSet):
     query = django_filters.CharFilter(method="universal_search", label="Search")
-    chrom = django_filters.CharFilter(
-        field_name="chrom", lookup_expr="iexact", label="Chrom"
-    )
+    chrom = django_filters.CharFilter(method="filter_chrom", label="Chrom")
     pos_min = django_filters.NumberFilter(
         field_name="pos", lookup_expr="gte", label="Position (min)"
     )
     pos_max = django_filters.NumberFilter(
         field_name="pos", lookup_expr="lte", label="Position (max)"
+    )
+    pos = django_filters.NumberFilter(
+        field_name="pos", lookup_expr="exact", label="Position"
     )
     ref = django_filters.CharFilter(
         field_name="ref", lookup_expr="iexact", label="Reference"
@@ -116,6 +117,7 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
     field_order = [
         "query",
         "chrom",
+        "pos",
         "pos_min",
         "pos_max",
         "ref",
@@ -165,6 +167,21 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
                 filters_q |= Q(pos=int(value))
             return queryset.filter(filters_q)
         return queryset
+
+    @staticmethod
+    def _normalize_chrom(value):
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+        return normalized.upper()
+
+    def filter_chrom(self, queryset, name, value):
+        normalized = self._normalize_chrom(value)
+        if not normalized:
+            return queryset
+        return queryset.filter(chrom__iexact=normalized)
 
     def filter_pass_status(self, queryset, name, value):
         if value is None:

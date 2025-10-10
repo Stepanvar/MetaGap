@@ -156,7 +156,7 @@ class SearchResultsViewTests(TestCase):
                 "chrom": "1",
                 "pos_min": 100,
                 "pos_max": 400,
-                "pass_only": "on",
+                "pass_only": "True",
                 "af_min": 0.1,
                 "mq_min": 55,
                 "sample_group_source_lab": "Lab One",
@@ -172,13 +172,21 @@ class SearchResultsViewTests(TestCase):
     def test_pass_only_filter_excludes_non_pass_variants(self) -> None:
         response = self.client.get(
             reverse("search_results"),
-            {"pass_only": "on"},
+            {"pass_only": "True"},
         )
 
         self.assertEqual(response.status_code, 200)
         table = response.context["table"]
         records = [row.record for row in table.rows]
         self.assertEqual(records, [self.kidney_variant_pass, self.liver_variant])
+
+    def test_search_results_use_advanced_filters_toggle(self) -> None:
+        response = self.client.get(reverse("search_results"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-bs-target=\"#advancedFiltersCollapse\"")
+        self.assertContains(response, "Advanced filters")
+        self.assertNotContains(response, "filter-card-header")
 
 
 class DashboardViewTests(TestCase):

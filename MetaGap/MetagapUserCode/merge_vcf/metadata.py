@@ -8,12 +8,13 @@ import gzip
 import os
 import re
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import logging
 import subprocess
 
 from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
+from .filtering import DEFAULT_ALLOWED_FILTER_VALUES, prepare_allowed_filter_set
 from .logging_utils import (
     MergeConflictError,
     ValidationError,
@@ -69,6 +70,45 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
 INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
 FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
 CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
+
+
+def _metadata_record_passes_filters(
+    record,
+    allele_number,
+    qual_threshold: Optional[float],
+    an_threshold: Optional[float],
+    allowed_filter_values: Optional[Sequence[str]],
+) -> bool:
+    """Mirror merging._record_passes_filters using recalculated allele counts."""
+
+    if qual_threshold is not None:
+        q = getattr(record, "QUAL", None)
+        try:
+            if q is None or float(q) <= qual_threshold:
+                return False
+        except (TypeError, ValueError):
+            return False
+
+    if an_threshold is not None:
+        an_val = allele_number
+        if isinstance(an_val, list):
+            an_val = an_val[0] if an_val else None
+        try:
+            if an_val is None or float(an_val) <= an_threshold:
+                return False
+        except (TypeError, ValueError):
+            return False
+
+    filters_field = getattr(record, "FILTER", None)
+    filters = filters_field or []
+    if not isinstance(filters, (list, tuple)):
+        filters = [filters]
+    vals = [f for f in filters if f not in {None, "", "."}]
+    if not vals:
+        return True
+
+    allowed_set = prepare_allowed_filter_set(allowed_filter_values)
+    return bool(allowed_set) and all(value in allowed_set for value in vals)
 
 
 def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:
@@ -573,7 +613,13 @@ def append_metadata_to_merged_vcf(
     sample_metadata_entries=None,
     header_metadata_lines=None,
     serialized_sample_line=None,
+    sample_header_entries=None,
+    simple_header_lines=None,
     verbose: bool = False,
+    *,
+    qual_threshold: Optional[float] = 30.0,
+    an_threshold: Optional[float] = 50.0,
+    allowed_filter_values: Optional[Sequence[str]] = None,
 ):
     """Finalize the merged VCF by applying in-Python processing and metadata."""
 
@@ -582,7 +628,15 @@ def append_metadata_to_merged_vcf(
             "vcfpy and pysam must be available to finalize the merged VCF output."
         )
 
+    if sample_metadata_entries is None and sample_header_entries is not None:
+        sample_metadata_entries = sample_header_entries
+    if header_metadata_lines is None and simple_header_lines is not None:
+        header_metadata_lines = simple_header_lines
+
     header_metadata_lines = header_metadata_lines or []
+    effective_allowed_filters: Sequence[str] = (
+        allowed_filter_values if allowed_filter_values is not None else DEFAULT_ALLOWED_FILTER_VALUES
+    )
     joint_temp = f"{merged_vcf}.joint.temp.vcf"
     filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
 
@@ -702,16 +756,6 @@ def append_metadata_to_merged_vcf(
         record.INFO = info
         return an
 
-    def _record_passes_filters(record, allele_number: int) -> bool:
-        qual_value = _normalize_quality(getattr(record, "QUAL", None))
-        if qual_value is None or qual_value <= 30:
-            return False
-        if allele_number <= 50:
-            return False
-        filters = getattr(record, "FILTER", None)
-        filter_text = _normalize_filter(filters)
-        return filter_text == "PASS"
-
     def _serialize_record(record) -> str:
         alt_field = (
             ",".join(str(alt) for alt in getattr(record, "ALT", []) or [])
@@ -807,7 +851,13 @@ def append_metadata_to_merged_vcf(
         reader = vcfpy.Reader.from_stream(stream)
         for record in reader:
             allele_number = _recalculate_info_fields(record)
-            if not _record_passes_filters(record, allele_number):
+            if not _metadata_record_passes_filters(
+                record,
+                allele_number,
+                qual_threshold,
+                an_threshold,
+                effective_allowed_filters,
+            ):
                 continue
             body_lines.append(_serialize_record(record))
         reader.close()

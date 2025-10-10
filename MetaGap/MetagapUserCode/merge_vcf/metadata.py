@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import logging
-import copy
+import collections
+from collections.abc import MutableMapping
 import gzip
+import logging
 import os
 import re
-from collections import OrderedDict
-from typing import List, Optional, Tuple
-
-import logging
-import subprocess
 
 from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
 from .logging_utils import (
@@ -27,11 +23,11 @@ except ImportError:  # pragma: no cover - exercised in environments without pysa
     pysam = None
 
 
-STANDARD_INFO_DEFINITIONS = OrderedDict(
+STANDARD_INFO_DEFINITIONS = collections.OrderedDict(
     [
         (
             "AC",
-            OrderedDict(
+            collections.OrderedDict(
                 [
                     ("Number", "A"),
                     ("Type", "Integer"),
@@ -44,7 +40,7 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
         ),
         (
             "AN",
-            OrderedDict(
+            collections.OrderedDict(
                 [
                     ("Number", "1"),
                     ("Type", "Integer"),
@@ -54,7 +50,7 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
         ),
         (
             "AF",
-            OrderedDict(
+            collections.OrderedDict(
                 [
                     ("Number", "A"),
                     ("Type", "Float"),
@@ -71,7 +67,9 @@ FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
 CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
-def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:
+def _format_info_definition(
+    info_id: str, definition_mapping: collections.OrderedDict[str, object]
+) -> str:
     parts = [f"ID={info_id}"]
     for key, value in definition_mapping.items():
         if value is None:
@@ -103,7 +101,7 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
         if info_id in existing_ids:
             continue
 
-        mapping = OrderedDict([("ID", info_id)])
+        mapping = collections.OrderedDict([("ID", info_id)])
         mapping.update(definition)
 
         try:
@@ -189,7 +187,7 @@ def _format_sample_metadata_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
+def build_sample_metadata_line(entries: collections.OrderedDict[str, str]) -> str:
     """Serialize an ordered mapping into a single ``##SAMPLE`` metadata line."""
 
     id_value = entries.get("ID", "").strip()
@@ -209,7 +207,7 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
-def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
+def _parse_sample_metadata_line(serialized: str) -> collections.OrderedDict[str, str]:
     """Return an ordered mapping extracted from a serialized ``##SAMPLE`` line."""
 
     if not isinstance(serialized, str):
@@ -222,10 +220,10 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
         raise ValueError("Serialized sample metadata must be in '##SAMPLE=<...>' format.")
 
     body = text[len(prefix) : -len(suffix)]
-    entries = OrderedDict()
+    entries = collections.OrderedDict()
 
-    token: List[str] = []
-    stack: List[str] = []
+    token: list[str] = []
+    stack: list[str] = []
     in_quotes = False
     escape = False
 
@@ -243,7 +241,7 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
             raise ValueError("SAMPLE metadata keys cannot be empty.")
         if len(value) >= 2 and value[0] == value[-1] == '"':
             inner = value[1:-1]
-            unescaped: List[str] = []
+            unescaped: list[str] = []
             i = 0
             while i < len(inner):
                 ch = inner[i]
@@ -308,7 +306,7 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
     return entries
 
 
-def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
+def _parse_simple_metadata_line(line: str) -> tuple[str, str] | None:
     stripped = line.strip()
     if not stripped.startswith("##") or "=" not in stripped:
         return None
@@ -321,8 +319,8 @@ def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
 
 
 def _load_metadata_template(
-    template_path: Optional[str], verbose: bool = False
-) -> Tuple[Optional["OrderedDict[str, str]"], List, List[str], Optional[str]]:
+    template_path: str | None, verbose: bool = False
+) -> tuple[collections.OrderedDict[str, str] | None, list, list[str], str | None]:
     """Return metadata derived from a user-supplied template header file."""
 
     if not template_path:
@@ -340,9 +338,9 @@ def _load_metadata_template(
             exc_cls=ValidationError,
         )
 
-    template_sample_mapping: Optional["OrderedDict[str, str]"] = None
-    template_serialized_sample: Optional[str] = None
-    sanitized_lines: List[str] = []
+    template_sample_mapping: collections.OrderedDict[str, str] | None = None
+    template_serialized_sample: str | None = None
+    sanitized_lines: list[str] = []
     simple_header_lines = []
     existing_simple = set()
     existing_sanitized = set()
@@ -383,7 +381,7 @@ def _load_metadata_template(
                             verbose,
                             level=logging.WARNING,
                         )
-                    template_sample_mapping = OrderedDict(parsed_sample.items())
+                    template_sample_mapping = collections.OrderedDict(parsed_sample.items())
                     template_serialized_sample = stripped
                     continue
 
@@ -447,7 +445,7 @@ def _load_metadata_template(
     )
 
 
-def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
+def load_metadata_lines(metadata_file: str, verbose: bool = False) -> list[str]:
     """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
     if not metadata_file:
@@ -468,7 +466,7 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
             exc_cls=ValidationError,
         )
 
-    sanitized_lines: List[str] = []
+    sanitized_lines: list[str] = []
     seen_lines = set()
 
     try:
@@ -587,8 +585,8 @@ def append_metadata_to_merged_vcf(
     filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
 
     expects_gzip = merged_vcf.endswith(".gz")
-    final_plain_vcf: Optional[str]
-    final_vcf: Optional[str]
+    final_plain_vcf: str | None
+    final_vcf: str | None
 
     if merged_vcf.endswith(".vcf.gz"):
         base_path = merged_vcf[: -len(".vcf.gz")]
@@ -611,8 +609,8 @@ def append_metadata_to_merged_vcf(
     def _open_vcf(path):
         return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, "r", encoding="utf-8")
 
-    def _read_header_lines(path: str) -> List[str]:
-        header_lines: List[str] = []
+    def _read_header_lines(path: str) -> list[str]:
+        header_lines: list[str] = []
         with _open_vcf(path) as handle:
             for raw in handle:
                 if not raw.startswith("#"):
@@ -627,7 +625,7 @@ def append_metadata_to_merged_vcf(
             return ("%g" % value)
         return str(value)
 
-    def _serialize_info(info: OrderedDict) -> str:
+    def _serialize_info(info: MutableMapping[str, object]) -> str:
         entries = []
         for key, value in info.items():
             if value is None:
@@ -657,7 +655,7 @@ def append_metadata_to_merged_vcf(
         except (TypeError, ValueError):
             return None
 
-    def _extract_called_alleles(gt_value) -> List[int]:
+    def _extract_called_alleles(gt_value) -> list[int]:
         if gt_value is None:
             return []
         if isinstance(gt_value, (list, tuple)):
@@ -668,7 +666,7 @@ def append_metadata_to_merged_vcf(
                 tokens.extend(str(item).replace("|", "/").split("/"))
         else:
             tokens = str(gt_value).replace("|", "/").split("/")
-        allele_indices: List[int] = []
+        allele_indices: list[int] = []
         for token in tokens:
             cleaned = token.strip()
             if not cleaned or cleaned == ".":
@@ -695,7 +693,7 @@ def append_metadata_to_merged_vcf(
                     an += 1
                 if 1 <= allele <= alt_count:
                     ac[allele - 1] += 1
-        info = getattr(record, "INFO", OrderedDict())
+        info = getattr(record, "INFO", collections.OrderedDict())
         info["AC"] = ac if alt_count else []
         info["AN"] = an
         info["AF"] = [count / an for count in ac] if an else []
@@ -720,7 +718,9 @@ def append_metadata_to_merged_vcf(
         )
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
         qual_field = _format_scalar(qual_value) if qual_value is not None else "."
-        info_field = _serialize_info(getattr(record, "INFO", OrderedDict()))
+        info_field = _serialize_info(
+            getattr(record, "INFO", collections.OrderedDict())
+        )
         filter_field = _normalize_filter(getattr(record, "FILTER", None))
         record_id = getattr(record, "ID", None)
         if isinstance(record_id, list):
@@ -748,7 +748,7 @@ def append_metadata_to_merged_vcf(
 
     header_lines = _read_header_lines(merged_vcf)
     fileformat_line = None
-    remaining_header_lines: List[str] = []
+    remaining_header_lines: list[str] = []
     for line in header_lines:
         stripped = line.strip()
         if not stripped:
@@ -762,7 +762,7 @@ def append_metadata_to_merged_vcf(
             continue
         remaining_header_lines.append(stripped)
 
-    final_header_lines: List[str] = []
+    final_header_lines: list[str] = []
     if fileformat_line is not None:
         final_header_lines.append(fileformat_line)
     final_header_lines.extend(remaining_header_lines)
@@ -802,7 +802,7 @@ def append_metadata_to_merged_vcf(
 
     final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
 
-    body_lines: List[str] = []
+    body_lines: list[str] = []
     with _open_vcf(merged_vcf) as stream:
         reader = vcfpy.Reader.from_stream(stream)
         for record in reader:

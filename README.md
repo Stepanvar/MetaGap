@@ -25,6 +25,18 @@ After loading the data you can sign in with either demo account and visit the pr
 - Run checks with `python manage.py check` and execute the test suite using `python manage.py test`.
 - Static files are served from the `static/` directory; new assets should be collected with `python manage.py collectstatic` in production environments.
 
+### Logging format for the VCF merger
+
+The `MetaGap.MetagapUserCode.merge_vcf` workflow logs to both `script_execution.log`
+and the console using the format:
+
+```
+YYYY-MM-DD HH:MM:SS | LEVEL | vcf_merger | module | message
+```
+
+The shared formatter ensures severity and module details are visible across file and
+console handlers so operational logs can be correlated easily.
+
 ### Continuous integration expectations
 
 - Every pull request and push to `main` runs the Django test suite (`python manage.py test`) under coverage on GitHub Actions.
@@ -43,3 +55,20 @@ The production CLI for the MetaGap VCF merging workflow lives in
 compatibility shim that ships with the package (`python -m merge_vcf`).
 Both routes execute the same tested workflow that powers
 `MetagapUserCode.test_merge_vcf`.
+
+### Logging configuration
+
+Shared helpers under ``MetaGap.MetagapUserCode.merge_vcf.logging_utils``
+expose a ``configure_logging`` function so downstream tooling can reuse the
+workflow's log formatting while directing output to a custom destination.
+For example, to record only warnings to a dedicated file:
+
+```python
+from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
+
+configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
+```
+
+The helper clears existing handlers before applying the new configuration, so
+it can be invoked multiple times without creating duplicate console or file
+output streams.

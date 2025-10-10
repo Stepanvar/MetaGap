@@ -246,6 +246,44 @@ class ImportDataViewTests(TestCase):
             messages,
         )
 
+    @patch("app.services.vcf_importer.pysam.VariantFile", side_effect=ValueError("bad header"))
+    def test_fallback_parsing_error_displays_validation_message(
+        self, mock_variant_file: Mock
+    ) -> None:
+        """Fallback parsing failures surface a user friendly validation message."""
+
+        invalid_vcf_content = """##fileformat=VCFv4.2
+##SAMPLE=<ID=GroupFallback,Description=Broken fallback sample>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
+1\tnot_a_number\trsTest\tA\tT\t.\tPASS\tAF=0.5
+"""
+
+        response = self.client.post(
+            reverse("import_data"), {"data_file": self.build_upload(invalid_vcf_content)}
+        )
+
+        mock_variant_file.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "import_data.html")
+        self.assertEqual(SampleGroup.objects.count(), 0)
+
+        form_errors = response.context["form"].errors
+        self.assertIn("data_file", form_errors)
+        self.assertIn(
+            "The uploaded VCF file appears to be invalid or corrupted.",
+            form_errors["data_file"][0],
+        )
+
+        messages = [message.message for message in response.wsgi_request._messages]
+        self.assertIn(
+            "We could not import the file because some required metadata was missing or invalid.",
+            messages,
+        )
+        self.assertNotIn(
+            "Something went wrong while processing the upload. Check the error above for details.",
+            messages,
+        )
+
 
 class ImportDataPageTests(TestCase):
     """Verify the import page lists previously uploaded sample groups."""

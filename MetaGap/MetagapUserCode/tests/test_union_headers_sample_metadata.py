@@ -68,3 +68,52 @@ def test_union_headers_preserves_sample_order(tmp_path, merge_script_module):
     header = module.union_headers([str(vcf_one), str(vcf_two)])
 
     assert header.samples.names == ["Alpha", "Beta", "Gamma"]
+
+
+def test_union_headers_merges_format_and_filter_definitions(
+    tmp_path, merge_script_module
+):
+    module = merge_script_module
+
+    vcf_one = tmp_path / "one.vcf"
+    vcf_two = tmp_path / "two.vcf"
+
+    vcf_one.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "##reference=GRCh38",
+                "##contig=<ID=1,length=1000>",
+                '##FILTER=<ID=q10,Description="Low quality">',
+                '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1",
+                "1\t100\t.\tA\tC\t.\tPASS\t.\tGT\t0/1",
+            ]
+        )
+        + "\n"
+    )
+
+    vcf_two.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "##reference=GRCh38",
+                "##contig=<ID=2,length=2000>",
+                '##FILTER=<ID=fs,Description="Fisher strand">',
+                '##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS2",
+                "2\t150\t.\tG\tT\t.\tPASS\t.\tGQ\t99",
+            ]
+        )
+        + "\n"
+    )
+
+    header = module.union_headers([str(vcf_one), str(vcf_two)])
+
+    format_ids = {line.id for line in header.get_lines("FORMAT")}
+    filter_ids = {line.id for line in header.get_lines("FILTER")}
+    contig_ids = {line.id for line in header.get_lines("contig")}
+
+    assert format_ids == {"GT", "GQ"}
+    assert {"q10", "fs"}.issubset(filter_ids)
+    assert contig_ids == {"1", "2"}

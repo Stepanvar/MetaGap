@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -247,6 +248,100 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     assert merged_record.call_for_sample["S2"].data["GT"] == "./."
     assert merged_record.call_for_sample["S1"].data["GT"] == "0/1"
     assert result_path.endswith(".gz")
+
+
+def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path, caplog):
+    class _Variant:
+        def __init__(self, qual, an, filters):
+            self.QUAL = qual
+            self.INFO = {"AN": an} if an is not None else {}
+            self.FILTER = list(filters)
+
+    records = [
+        _Variant(qual=60, an=120, filters=[]),
+        _Variant(qual=10, an=200, filters=["PASS"]),
+        _Variant(qual=80, an=20, filters=["PASS"]),
+        _Variant(qual=70, an=200, filters=["q10"]),
+        _Variant(qual=90, an=200, filters=["q10", "LowQual"]),
+    ]
+
+    input_path = tmp_path / "variants.vcf"
+    input_path.write_text("placeholder")
+
+    reader_instances = []
+    writer_instances = []
+
+    class _FakeReader:
+        def __init__(self, path):
+            assert str(path) == str(input_path)
+            self.header = SimpleNamespace()
+            self.closed = False
+
+        def __iter__(self):
+            for record in records:
+                yield record
+
+        def close(self):
+            self.closed = True
+
+    class _ReaderFactory:
+        @staticmethod
+        def from_path(path):
+            reader = _FakeReader(path)
+            reader_instances.append(reader)
+            return reader
+
+    class _FakeWriter:
+        def __init__(self, path, header):
+            assert path.endswith(".filtered")
+            self.path = Path(path)
+            self.header = header
+            self.records = []
+            self.closed = False
+            self._handle = self.path.open("w", encoding="utf-8")
+
+        def write_record(self, record):
+            self.records.append(record)
+            self._handle.write("record\n")
+
+        def close(self):
+            if not self.closed:
+                self._handle.close()
+                self.closed = True
+
+    class _WriterFactory:
+        @staticmethod
+        def from_path(path, header):
+            writer = _FakeWriter(path, header)
+            writer_instances.append(writer)
+            return writer
+
+    monkeypatch.setattr(merging.vcfpy, "Reader", _ReaderFactory)
+    monkeypatch.setattr(merging.vcfpy, "Writer", _WriterFactory)
+
+    with caplog.at_level(logging.INFO, logger="vcf_merger"):
+        merging._filter_vcf_records(
+            str(input_path),
+            qual_threshold=20,
+            an_threshold=50,
+            allowed_filter_values=("PASS", "q10"),
+            verbose=False,
+        )
+
+    reader = reader_instances[0]
+    writer = writer_instances[0]
+
+    assert reader.closed
+    assert writer.closed
+    assert writer.records == [records[0], records[3]]
+
+    final_lines = input_path.read_text().splitlines()
+    assert len(final_lines) == 2
+
+    summary_messages = [
+        rec.message for rec in caplog.records if "Applied variant filter" in rec.message
+    ]
+    assert summary_messages == ["Applied variant filter: kept 2 of 5."]
 
 
 def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):

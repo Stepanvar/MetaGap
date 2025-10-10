@@ -71,11 +71,11 @@ class VCFImporter:
                     metadata, file_path, organization_profile
                 )
                 self._populate_sample_group_from_pysam(vcf_in, sample_group)
-        except (OSError, ValueError) as exc:
-            warning = (
-                f"Could not parse VCF metadata with pysam: {exc}. "
-                "Falling back to a text parser."
-            )
+            except (OSError, ValueError) as exc:
+                warning = (
+                    f"Could not parse VCF metadata with pysam: {exc}. "
+                    "Falling back to a text parser."
+                )
             logger.warning("%s", warning)
             self.warnings.append(warning)
             if sample_group is not None:

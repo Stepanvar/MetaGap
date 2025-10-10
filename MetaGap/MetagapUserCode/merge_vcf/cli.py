@@ -49,6 +49,24 @@ def parse_arguments():
         action="store_true",
         help="Enable verbose console logging in addition to the log file.",
     )
+    parser.add_argument(
+        "--qual-threshold",
+        type=float,
+        default=30.0,
+        help=(
+            "Minimum QUAL value required to keep a variant after merging. "
+            "Set to a negative value to disable the filter."
+        ),
+    )
+    parser.add_argument(
+        "--an-threshold",
+        type=float,
+        default=50.0,
+        help=(
+            "Minimum INFO/AN value required to keep a variant after tag recalculation. "
+            "Set to a negative value to disable the filter."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -137,6 +155,8 @@ def main():
         output_dir,
         verbose,
         sample_order=sample_order,
+        qual_threshold=args.qual_threshold if args.qual_threshold >= 0 else None,
+        an_threshold=args.an_threshold if args.an_threshold >= 0 else None,
     )
 
     final_vcf = append_metadata_to_merged_vcf(

@@ -30,8 +30,8 @@ def _normalize_level(level: int | str) -> int:
         name = level.upper()
         try:
             return logging._nameToLevel[name]  # type: ignore[attr-defined]
-        except KeyError:
-            raise ValueError(f"Unknown log level: {level}") from None
+        except KeyError as exc:
+            raise ValueError(f"Unknown log level: {level}") from exc
     return int(level)
 
 
@@ -54,21 +54,6 @@ def configure_logging(
 ) -> None:
     """Idempotent logger setup for the VCF merger.
 
-    Parameters
-    ----------
-    log_level : int | str
-        e.g. logging.INFO or "WARNING".
-    log_file : str | PathLike | None
-        File path for logs; ignored if enable_file_logging=False or None.
-    enable_file_logging : bool
-        Attach FileHandler when True.
-    enable_console : bool
-        Attach StreamHandler when True.
-    create_dirs : bool
-        Create parent dirs for log_file when needed.
-
-    Notes
-    -----
     Supports legacy ``verbose=bool`` (maps to enable_console).
     """
     if "verbose" in legacy:

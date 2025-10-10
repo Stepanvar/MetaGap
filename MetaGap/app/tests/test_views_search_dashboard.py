@@ -180,6 +180,29 @@ class SearchResultsViewTests(TestCase):
         records = [row.record for row in table.rows]
         self.assertEqual(records, [self.kidney_variant_pass, self.liver_variant])
 
+    def test_search_results_render_full_queryset_for_datatables(self) -> None:
+        # Create more variants than the default django-tables2 page size to ensure
+        # that pagination is disabled and the full queryset is rendered.
+        for index in range(12):
+            info = Info.objects.create(af=str(0.2 + index / 100))
+            AlleleFrequency.objects.create(
+                sample_group=self.kidney_group,
+                chrom="5",
+                pos=1000 + index,
+                ref="A",
+                alt="T",
+                qual=50 + index,
+                filter="PASS",
+                info=info,
+                format=self.format,
+            )
+
+        response = self.client.get(reverse("search_results"))
+
+        self.assertEqual(response.status_code, 200)
+        table = response.context["table"]
+        self.assertEqual(len(table.rows), AlleleFrequency.objects.count())
+
     def test_search_results_use_advanced_filters_toggle(self) -> None:
         response = self.client.get(reverse("search_results"))
 

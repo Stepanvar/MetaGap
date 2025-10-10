@@ -87,6 +87,17 @@ class LibraryConstruction(models.Model):
         return f"Kit: {self.kit}, Fragmentation: {self.fragmentation}"
 
 
+def _format_attributes(*attributes: tuple[str, Any]) -> str:
+    """Return a comma separated list of populated attribute labels."""
+
+    parts = []
+    for label, value in attributes:
+        if value not in (None, ""):
+            parts.append(f"{label}: {value}" if label else str(value))
+
+    return ", ".join(parts) if parts else "Not provided"
+
+
 class SequencingInstrument(models.Model):
     """Base model representing sequencing instrument-related details."""
 
@@ -106,7 +117,13 @@ class IlluminaSeq(SequencingInstrument):
     qc_software = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Illumina - {self.instrument}, Flow Cell: {self.flow_cell}"
+        return _format_attributes(
+            ("", self.instrument),
+            ("Flow Cell", self.flow_cell),
+            ("Channel method", self.channel_method),
+            ("Cluster density", self.cluster_density),
+            ("QC software", self.qc_software),
+        )
 
 
 class OntSeq(SequencingInstrument):
@@ -117,7 +134,12 @@ class OntSeq(SequencingInstrument):
     bias_voltage = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"ONT - {self.instrument}, Flow Cell Version: {self.flow_cell_version}"
+        return _format_attributes(
+            ("", self.instrument),
+            ("Flow Cell Version", self.flow_cell_version),
+            ("Pore type", self.pore_type),
+            ("Bias voltage", self.bias_voltage),
+        )
 
 
 class PacBioSeq(SequencingInstrument):
@@ -127,7 +149,11 @@ class PacBioSeq(SequencingInstrument):
     zmw_density = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"PacBio - {self.instrument}, SMRT Cell Type: {self.smrt_cell_type}"
+        return _format_attributes(
+            ("", self.instrument),
+            ("SMRT Cell Type", self.smrt_cell_type),
+            ("ZMW density", self.zmw_density),
+        )
 
 
 class IonTorrentSeq(SequencingInstrument):
@@ -139,7 +165,13 @@ class IonTorrentSeq(SequencingInstrument):
     ion_sphere_metrics = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Ion Torrent - {self.instrument}, Chip Type: {self.chip_type}"
+        return _format_attributes(
+            ("", self.instrument),
+            ("Chip Type", self.chip_type),
+            ("pH calibration", self.ph_calibration),
+            ("Flow order", self.flow_order),
+            ("Ion sphere metrics", self.ion_sphere_metrics),
+        )
 
 
 class BioinfoAlignment(models.Model):
@@ -151,8 +183,12 @@ class BioinfoAlignment(models.Model):
     recalibration_settings = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self) -> str:
-        label = self.tool or "Unknown"
-        return f"Tool: {label}, Ref Genome Version: {self.ref_genome_version}"
+        return _format_attributes(
+            ("Tool", self.tool or "Unknown"),
+            ("Parameters", self.params),
+            ("Ref Genome Version", self.ref_genome_version),
+            ("Recalibration settings", self.recalibration_settings),
+        )
 
 
 class BioinfoVariantCalling(models.Model):
@@ -165,7 +201,13 @@ class BioinfoVariantCalling(models.Model):
     mq = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Tool: {self.tool}, Version: {self.version}"
+        return _format_attributes(
+            ("Tool", self.tool),
+            ("Version", self.version),
+            ("Filtering thresholds", self.filtering_thresholds),
+            ("Duplicate handling", self.duplicate_handling),
+            ("MQ", self.mq),
+        )
 
 
 class BioinfoPostProc(models.Model):
@@ -175,7 +217,10 @@ class BioinfoPostProc(models.Model):
     harmonization = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Normalization: {self.normalization}, Harmonization: {self.harmonization}"
+        return _format_attributes(
+            ("Normalization", self.normalization),
+            ("Harmonization", self.harmonization),
+        )
 
 
 class InputQuality(models.Model):

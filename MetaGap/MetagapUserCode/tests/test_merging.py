@@ -7,6 +7,7 @@ from typing import Callable
 import datetime
 import gzip
 import logging
+from collections import OrderedDict
 from pathlib import Path
 import time
 import sys
@@ -881,6 +882,92 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
     assert data_lines == [SAMPLE_BODY_TRIMMED.strip()]
     assert all(len(line.split("\t")) == 8 for line in data_lines)
 
+def test_append_metadata_cleanup_on_compression_failure(monkeypatch, tmp_path):
+    import gzip
+    import pytest
+    from pathlib import Path
+    from types import SimpleNamespace
+    from collections import OrderedDict
+
+    merged_vcf = tmp_path / "merged.vcf.gz"
+    input_lines = [
+        "##fileformat=VCFv4.2",
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+        "1\t10\t.\tA\tG\t99\tPASS\t.",
+    ]
+    with gzip.open(merged_vcf, "wt", encoding="utf-8") as handle:
+        handle.write("\n".join(input_lines) + "\n")
+
+    record = SimpleNamespace(
+        CHROM="1",
+        POS=10,
+        ID=".",
+        REF="A",
+        ALT=["G"],
+        QUAL=99,
+        FILTER=["PASS"],
+        INFO=OrderedDict(),
+        calls=[SimpleNamespace(data={"GT": "0/1"})],
+    )
+
+    class _StubReader:
+        def __init__(self, entries):
+            self._entries = entries
+            self.header = SimpleNamespace()
+
+        def __iter__(self):
+            return iter(self._entries)
+
+        def close(self):
+            pass
+
+    class _ReaderFactory:
+        @classmethod
+        def from_stream(cls, stream):
+            return _StubReader([record])
+
+    fake_vcfpy = SimpleNamespace(Reader=_ReaderFactory)
+    monkeypatch.setattr(metadata_module, "vcfpy", fake_vcfpy, raising=False)
+    monkeypatch.setattr(metadata_module, "VCFPY_AVAILABLE", True, raising=False)
+
+    class _FailingPysam:
+        @staticmethod
+        def bgzip(*_args, **_kwargs):
+            raise OSError("bgzip failed")
+
+        @staticmethod
+        def tabix_index(*_args, **_kwargs):
+            raise AssertionError("tabix_index should not be called")
+
+    monkeypatch.setattr(metadata_module, "pysam", _FailingPysam, raising=False)
+    monkeypatch.setattr(metadata_module, "PYSAM_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(metadata_module, "log_message", lambda *a, **k: None, raising=False)
+
+    joint_temp = Path(f"{merged_vcf}.joint.temp.vcf")
+    filtered_temp = Path(f"{merged_vcf}.filtered.temp.vcf")
+    joint_temp.write_text("joint", encoding="utf-8")
+    filtered_temp.write_text("filtered", encoding="utf-8")
+
+    captured = {}
+
+    def _fake_handle(message, **_kwargs):
+        captured["message"] = message
+        raise RuntimeError("critical failure")
+
+    monkeypatch.setattr(metadata_module, "handle_critical_error", _fake_handle, raising=False)
+
+    with pytest.raises(RuntimeError):
+        metadata_module.append_metadata_to_merged_vcf(str(merged_vcf))
+
+    assert "Failed to compress or index anonymized VCF" in captured["message"]
+    assert not joint_temp.exists()
+    assert not filtered_temp.exists()
+
+    final_plain = tmp_path / "merged.anonymized.vcf"
+    final_gzip = Path(str(final_plain) + ".gz")
+    assert not final_plain.exists()
+    assert not final_gzip.exists()
+
 
 def test_merge_vcfs_handles_many_shards_with_cleanup(tmp_path):
     import time
@@ -914,7 +1001,7 @@ def test_merge_vcfs_handles_many_shards_with_cleanup(tmp_path):
         shard_paths.append(str(shard_path))
 
     try:
-        import psutil  # optional
+        import psutil
         process = psutil.Process()
         start_mem = process.memory_info().rss
     except Exception:  # pragma: no cover
@@ -968,7 +1055,7 @@ def test_merge_vcfs_emits_anonymized_gzip(tmp_path, monkeypatch):
         compressed["dest"] = Path(dest)
 
     def fake_tabix_index(path, preset="vcf", force=True):
-        idx = Path(f"{path}.tbi")
+        idx = Path(f"{path}.tbi}")
         idx.write_text("stub-index", encoding="utf-8")
         compressed["index"] = idx
 
@@ -1013,6 +1100,5 @@ def test_merge_vcfs_emits_anonymized_gzip(tmp_path, monkeypatch):
     assert data_lines
     assert all(len(ln.split("\t")) == 8 for ln in data_lines)
 
-    base_vcf_path = Path(str(result_path)[:-3])  # strip ".gz" -> ".vcf"
+    base_vcf_path = Path(str(result_path)[:-3])
     assert not base_vcf_path.exists()
-

@@ -135,6 +135,7 @@ def handle_non_critical_error(message: str) -> None:
     """Log and print a recoverable error."""
 
     log_message(message, level=logging.WARNING)
+    print(message)
 
 
 __all__ = [

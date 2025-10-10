@@ -24,6 +24,7 @@ from django.views.generic import (
     TemplateView,
     UpdateView,
 )
+import pysam
 from django_filters.views import FilterView
 from django_tables2 import RequestConfig
 from django_tables2.views import SingleTableMixin

@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 from collections import OrderedDict
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, Iterable, List, Optional, Sequence
 
 from . import vcfpy
 from .logging_utils import handle_critical_error, log_message
@@ -108,6 +108,129 @@ def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable
     return factory
 
 
+def _ensure_info_header_lines(header) -> None:
+    """Ensure standard AC/AN/AF INFO definitions exist on *header*."""
+
+    info_definitions = (
+        (
+            "AC",
+            OrderedDict(
+                (
+                    ("ID", "AC"),
+                    ("Number", "A"),
+                    ("Type", "Integer"),
+                    (
+                        "Description",
+                        "Alternate allele count in genotypes, for each ALT allele",
+                    ),
+                )
+            ),
+        ),
+        (
+            "AN",
+            OrderedDict(
+                (
+                    ("ID", "AN"),
+                    ("Number", "1"),
+                    ("Type", "Integer"),
+                    ("Description", "Total number of alleles in called genotypes"),
+                )
+            ),
+        ),
+        (
+            "AF",
+            OrderedDict(
+                (
+                    ("ID", "AF"),
+                    ("Number", "A"),
+                    ("Type", "Float"),
+                    (
+                        "Description",
+                        "Allele frequency, for each ALT allele",
+                    ),
+                )
+            ),
+        ),
+    )
+
+    for key, mapping in info_definitions:
+        try:
+            existing = header.get_info_field_info(key)
+        except Exception:
+            existing = None
+        if existing is None:
+            header.add_info_line(mapping)
+
+
+def _iter_called_genotype_alleles(value) -> Iterable[int]:
+    """Yield allele indices from a genotype value, skipping missing alleles."""
+
+    if value is None:
+        return
+
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _iter_called_genotype_alleles(item)
+        return
+
+    if isinstance(value, int):
+        yield value
+        return
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or stripped == ".":
+            return
+
+        if "/" in stripped or "|" in stripped:
+            parts = re.split(r"[\\/|]", stripped)
+        else:
+            parts = [stripped]
+
+        for part in parts:
+            token = part.strip()
+            if not token or token == ".":
+                continue
+            try:
+                yield int(token)
+            except ValueError:
+                continue
+        return
+
+    try:
+        yield int(value)
+    except (TypeError, ValueError):
+        return
+
+
+def _recompute_ac_an_af(record) -> None:
+    """Recompute AC/AN/AF INFO fields for a record based on genotype calls."""
+
+    alt_allele_count = len(getattr(record, "ALT", []) or [])
+    ac = [0] * alt_allele_count
+    an = 0
+
+    calls = getattr(record, "calls", None) or []
+    for call in calls:
+        data = getattr(call, "data", {})
+        genotype_value = data.get("GT")
+        for allele_index in _iter_called_genotype_alleles(genotype_value):
+            if isinstance(allele_index, bool):
+                continue
+            an += 1
+            if allele_index is None or allele_index <= 0:
+                continue
+            if 1 <= allele_index <= alt_allele_count:
+                ac[allele_index - 1] += 1
+
+    record.INFO["AC"] = ac
+    record.INFO["AN"] = an
+    if an > 0:
+        record.INFO["AF"] = [count / an for count in ac]
+    else:
+        record.INFO["AF"] = [0.0] * alt_allele_count
+
+
 def _remove_format_and_sample_definitions(header) -> None:
     """Strip FORMAT definitions and sample columns from a VCF header."""
 
@@ -178,7 +301,6 @@ def merge_vcfs(
 ) -> str:
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
-    filled_vcf = base_vcf + ".filled.vcf"
     gz_vcf = base_vcf + ".gz"
 
     file_count = len(valid_files)
@@ -235,6 +357,8 @@ def merge_vcfs(
         handle_critical_error(f"Failed to apply metadata to merged VCF: {exc}")
 
     tmp_out = base_vcf + ".tmp"
+    _ensure_info_header_lines(header)
+
     try:
         writer = vcfpy.Writer.from_path(tmp_out, header)
     except Exception as exc:
@@ -242,23 +366,15 @@ def merge_vcfs(
         handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
 
     try:
+        log_message("Recomputing AC, AN, AF from genotype calls...", verbose)
         for record in reader:
+            _recompute_ac_an_af(record)
             writer.write_record(record)
     finally:
         reader.close()
         writer.close()
 
     shutil.move(tmp_out, base_vcf)
-
-    log_message("Recomputing AC, AN, AF with bcftools +fill-tags...", verbose)
-    res2 = subprocess.run(
-        ["bcftools", "+fill-tags", base_vcf, "-Ov", "-o", filled_vcf, "--", "-t", "AC,AN,AF"],
-        capture_output=True,
-        text=True,
-    )
-    if res2.returncode != 0:
-        handle_critical_error((res2.stderr or "bcftools +fill-tags failed").strip())
-    shutil.move(filled_vcf, base_vcf)
 
     log_message("Compressing and indexing the final VCF...", verbose)
     try:

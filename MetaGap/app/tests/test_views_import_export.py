@@ -212,6 +212,38 @@ class ImportDataViewTests(TestCase):
         )
         self.assertIn("data_file", response.context["form"].errors)
 
+    def test_missing_organization_profile_displays_validation_message(self) -> None:
+        """Users without a profile receive a helpful validation message."""
+
+        # Simulate a user whose profile has not been completed/created yet.
+        self.user.organization_profile.delete()
+        self.user.refresh_from_db()
+
+        response = self.client.post(
+            reverse("import_data"),
+            {"data_file": self.build_upload("##fileformat=VCFv4.2\n")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "import_data.html")
+
+        form = response.context["form"]
+        self.assertIn("data_file", form.errors)
+        self.assertIn(
+            "Please complete your organization profile before importing data.",
+            form.errors["data_file"],
+        )
+
+        messages = [message.message for message in response.wsgi_request._messages]
+        self.assertIn(
+            "We could not import the file because some required metadata was missing or invalid.",
+            messages,
+        )
+        self.assertNotIn(
+            "Something went wrong while processing the upload. Check the error above for details.",
+            messages,
+        )
+
 
 class ImportDataPageTests(TestCase):
     """Verify the import page lists previously uploaded sample groups."""

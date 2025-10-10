@@ -7,7 +7,53 @@
 {% endblock %}
 
 {% block content %}
-<h2>{{ title }}.</h2>
-<h3>{{ message }}</h3>
-<p>Use this area to provide additional information.</p>
+<div class="container py-5">
+  <header class="text-center mb-4">
+    <h1 class="display-5">{{ SITE_NAME }}</h1>
+    <p class="lead">MetaGaP — веб-платформа для объединения, агрегирования и просмотра вариативности из VCF/gVCF.</p>
+  </header>
+
+  <section class="mb-5">
+    <h2>Что умеет платформа</h2>
+    <ul class="list-unstyled ps-3">
+      <li>Импорт и базовая валидация VCF/gVCF; поддержка сборок GRCh37 и GRCh38.</li>
+      <li>Объединение нескольких VCF в когортный файл и пересчёт AC/AN/AF через <code>bcftools +fill-tags</code>.</li>
+      <li>Фильтрация (QUAL, PASS и др.) и деидентификация при экспорте (удаление столбцов генотипов).</li>
+      <li>Таблицы и фильтры (django-tables2, django-filter) для удобного просмотра и навигации.</li>
+    </ul>
+  </section>
+
+  <section class="mb-5">
+    <h2>Как это работает</h2>
+    <ol class="ps-3">
+      <li>Все входные VCF приводятся к <code>bgzip + tabix</code> и проверяются на читаемость и корректный заголовок.</li>
+      <li>Когортное объединение выполняется командой <code>bcftools merge -m all</code>, затем пересчитываются теги сводной информации (AC/AN/AF).</li>
+      <li>Применяются заданные фильтры; при необходимости генотипы удаляются (<code>bcftools view -G</code>). Формируется итоговый VCF и индекс.</li>
+    </ol>
+  </section>
+
+  <section class="mb-5">
+    <h2>Надёжность и контроль качества</h2>
+    <ul class="list-unstyled ps-3">
+      <li>Проверки форматов и логирование ошибок внешних инструментов (bcftools, bgzip, tabix).</li>
+      <li>Автоматические тесты покрывают ключевые сценарии объединения и импорта; принимаются регрессионные тесты от сообщества.</li>
+    </ul>
+  </section>
+
+  <section class="mb-5">
+    <h2>Ограничения и отказ от ответственности</h2>
+    <p>Платформа предназначена только для исследовательского использования и не является медицинским устройством. Не загружайте персональные или клинические геномные данные; используйте синтетические примеры или деперсонифицированные метаданные.</p>
+  </section>
+
+  <section class="mb-5">
+    <h2>Технологический стек</h2>
+    <p>Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-bootstrap5, django-tables2, django-filter; БД — SQLite / PostgreSQL.</p>
+  </section>
+
+  <section>
+    <h2>Участие и обратная связь</h2>
+    <p>Репозиторий: <a href="https://github.com/Stepanvar/MetaGap" target="_blank" rel="noopener">github.com/Stepanvar/MetaGap</a>. Принимаются pull-request’ы с улучшениями пайплайна, тестами и доработками интерфейса.</p>
+  </section>
+</div>
 {% endblock %}
+

@@ -51,6 +51,78 @@ def _record_sort_key(record, contig_ranks: dict) -> Tuple[int, int, str, Tuple[s
     return (rank, pos, ref, _normalized_alt_key(record))
 
 
+def _sort_record_alts(record) -> None:
+    """Sort the ALT alleles of *record* lexicographically in-place."""
+
+    if record is None:
+        return
+
+    alts = getattr(record, "ALT", None) or []
+    if len(alts) <= 1:
+        return
+
+    sorted_alts = sorted(alts, key=_alt_value)
+    if list(alts) != sorted_alts:
+        record.ALT = list(sorted_alts)
+
+
+def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
+    """Ensure *header* preserves *contig_order* for contig definitions."""
+
+    if header is None or not contig_order:
+        return
+
+    contig_lines = [
+        line
+        for line in getattr(header, "lines", [])
+        if isinstance(line, vcfpy.header.ContigHeaderLine)
+    ]
+    if not contig_lines:
+        return
+
+    contig_lookup: "OrderedDict[str, object]" = OrderedDict()
+    for line in contig_lines:
+        identifier = getattr(line, "id", None)
+        if identifier is None:
+            continue
+        if identifier not in contig_lookup:
+            contig_lookup[identifier] = line
+
+    ordered_ids: List[str] = []
+    for name in contig_order:
+        if name in contig_lookup:
+            ordered_ids.append(name)
+    for name in contig_lookup:
+        if name not in ordered_ids:
+            ordered_ids.append(name)
+
+    ordered_lines = [contig_lookup[name] for name in ordered_ids]
+    iterator = iter(ordered_lines)
+    new_lines: List[object] = []
+    for line in getattr(header, "lines", []):
+        if isinstance(line, vcfpy.header.ContigHeaderLine):
+            new_lines.append(next(iterator))
+        else:
+            new_lines.append(line)
+    header.lines = new_lines
+
+    contigs_attr = getattr(header, "contigs", None)
+    if contigs_attr:
+        reordered = OrderedDict()
+        for name in ordered_ids:
+            if name in contigs_attr:
+                reordered[name] = contigs_attr[name]
+        for name, value in contigs_attr.items():
+            if name not in reordered:
+                reordered[name] = value
+        try:
+            header.contigs = reordered
+        except Exception:
+            pass
+
+    setattr(header, "_metagap_contig_order", list(ordered_ids))
+
+
 def _remap_genotype(value: Optional[str], allele_map: dict) -> Optional[str]:
     """Return ``value`` with allele indices remapped according to ``allele_map``."""
 
@@ -596,6 +668,10 @@ def merge_vcfs(
     except Exception as exc:
         handle_critical_error(f"Failed to construct unified VCF header: {exc}")
 
+    contig_order: List[str] = list(
+        getattr(combined_header, "_metagap_contig_order", []) or []
+    )
+
     # Ensure combined header includes all samples observed across inputs.
     sample_names: List[str] = []
     if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
@@ -647,10 +723,13 @@ def merge_vcfs(
         verbose=verbose,
     )
 
+    if contig_order:
+        _apply_contig_order(header, contig_order)
+
     if hasattr(header, "samples") and hasattr(header.samples, "names"):
         sample_names = list(header.samples.names or sample_names)
 
-    contig_names: List[str] = []
+    contig_names: List[str] = list(contig_order)
     if hasattr(header, "contigs") and header.contigs:
         contig_names = list(header.contigs.keys())
     if not contig_names:
@@ -675,7 +754,9 @@ def merge_vcfs(
     def _advance(idx: int):
         iterator = reader_iters[idx]
         try:
-            return next(iterator)
+            record = next(iterator)
+            _sort_record_alts(record)
+            return record
         except StopIteration:
             return None
 
@@ -911,6 +992,10 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
             line for line in combined_header.lines if getattr(line, "key", None) != "SAMPLE"
         ]
         combined_header.add_line(sample_line)
+
+    contig_order = list(contig_lines.keys())
+    if contig_order:
+        _apply_contig_order(combined_header, contig_order)
 
     return combined_header
 

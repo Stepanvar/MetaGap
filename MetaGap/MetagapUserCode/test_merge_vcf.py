@@ -262,13 +262,138 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
     return entries
 
 
+def _load_metadata_template(template_path, verbose=False):
+    if not template_path:
+        return None, [], [], None
+
+    normalized_path = os.path.abspath(template_path)
+    if not os.path.exists(normalized_path):
+        handle_critical_error(
+            f"Metadata template header file does not exist: {template_path}"
+        )
+    if not os.path.isfile(normalized_path):
+        handle_critical_error(
+            f"Metadata template header path is not a file: {template_path}"
+        )
+
+    template_sample_mapping = None
+    template_serialized_sample = None
+    sanitized_lines = []
+    simple_header_lines = []
+    existing_simple = set()
+    existing_sanitized = set()
+
+    try:
+        with open(normalized_path, "r", encoding="utf-8") as handle:
+            for line_number, raw_line in enumerate(handle, 1):
+                stripped = raw_line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("#CHROM"):
+                    continue
+                if not stripped.startswith("##"):
+                    log_message(
+                        (
+                            "Skipping non-metadata line in template "
+                            f"{normalized_path} line {line_number}: {stripped}"
+                        ),
+                        verbose,
+                    )
+                    continue
+                if stripped.startswith("##SAMPLE="):
+                    try:
+                        parsed_sample = _parse_sample_metadata_line(stripped)
+                    except ValueError as exc:
+                        handle_critical_error(
+                            "Invalid SAMPLE metadata line in template "
+                            f"{normalized_path} line {line_number}: {exc}"
+                        )
+                    if template_sample_mapping is not None:
+                        log_message(
+                            (
+                                "WARNING: Multiple ##SAMPLE lines found in metadata "
+                                f"template {normalized_path}; using the last occurrence"
+                            ),
+                            verbose,
+                        )
+                    template_sample_mapping = OrderedDict(parsed_sample.items())
+                    template_serialized_sample = stripped
+                    continue
+
+                parsed = _parse_simple_metadata_line(stripped)
+                if not parsed:
+                    handle_critical_error(
+                        "Metadata template lines must be in '##key=value' format. "
+                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}"
+                    )
+                key, value = parsed
+                sanitized = f"##{key}={value}"
+                if sanitized not in existing_sanitized:
+                    sanitized_lines.append(sanitized)
+                    existing_sanitized.add(sanitized)
+
+                try:
+                    simple_line = vcfpy.SimpleHeaderLine(key, value)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    log_message(
+                        f"WARNING: Failed to parse metadata template line '{sanitized}': {exc}",
+                        verbose,
+                    )
+                    continue
+
+                identifier = (simple_line.key, getattr(simple_line, "value", None))
+                if identifier in existing_simple:
+                    continue
+                simple_header_lines.append(simple_line)
+                existing_simple.add(identifier)
+    except OSError as exc:
+        handle_critical_error(
+            f"Unable to read metadata template header file {template_path}: {exc}"
+        )
+
+    log_message(
+        f"Loaded metadata template header from {normalized_path}",
+        verbose,
+    )
+    if sanitized_lines:
+        log_message(
+            "Metadata template header lines: " + ", ".join(sanitized_lines),
+            verbose,
+        )
+    if template_serialized_sample:
+        log_message(
+            f"Metadata template sample line: {template_serialized_sample}",
+            verbose,
+        )
+
+    return (
+        template_sample_mapping,
+        simple_header_lines,
+        sanitized_lines,
+        template_serialized_sample,
+    )
+
+
 def parse_metadata_arguments(args, verbose=False):
     """Return header metadata derived from CLI arguments."""
+
+    (
+        template_sample_mapping,
+        template_simple_lines,
+        template_header_lines,
+        template_serialized_sample,
+    ) = _load_metadata_template(
+        getattr(args, "metadata_template_path", None), verbose=verbose
+    )
 
     sample_entries = getattr(args, "sample_metadata_entries", None) or []
     additional_lines = getattr(args, "header_metadata_lines", None) or []
 
     sample_mapping = OrderedDict()
+    serialized_sample_line = template_serialized_sample
+    if template_sample_mapping:
+        sample_mapping.update(template_sample_mapping)
+
     for raw_entry in sample_entries:
         entry = raw_entry.strip()
         if not entry:
@@ -283,20 +408,25 @@ def parse_metadata_arguments(args, verbose=False):
         if not key:
             handle_critical_error("Sample metadata keys cannot be empty.")
         sample_mapping[key] = value
+        serialized_sample_line = None
 
     sample_header_line = None
-    serialized_sample_line = None
     if sample_mapping:
         try:
             sample_line = build_sample_metadata_line(sample_mapping)
         except ValueError as exc:
             handle_critical_error(str(exc))
-        log_message(f"Using CLI sample metadata: {sample_line}", verbose)
+        log_message(f"Using sample metadata: {sample_line}", verbose)
         serialized_sample_line = sample_line
         sample_header_line = vcfpy.SampleHeaderLine.from_mapping(sample_mapping)
 
-    simple_header_lines = []
-    sanitized_header_lines = []
+    simple_header_lines = list(template_simple_lines)
+    sanitized_header_lines = list(template_header_lines)
+    existing_simple = {
+        (line.key, getattr(line, "value", None)) for line in simple_header_lines
+    }
+    existing_sanitized = set(sanitized_header_lines)
+    cli_added_lines = []
     for raw_line in additional_lines:
         normalized = raw_line.strip()
         if not normalized:
@@ -309,13 +439,19 @@ def parse_metadata_arguments(args, verbose=False):
                 f"Additional metadata '{raw_line}' must be in '##key=value' format."
             )
         key, value = parsed
-        simple_header_lines.append(vcfpy.SimpleHeaderLine(key, value))
-        sanitized_header_lines.append(f"##{key}={value}")
+        sanitized = f"##{key}={value}"
+        cli_added_lines.append(sanitized)
+        if sanitized not in existing_sanitized:
+            sanitized_header_lines.append(sanitized)
+            existing_sanitized.add(sanitized)
+        identifier = (key, value)
+        if identifier not in existing_simple:
+            simple_header_lines.append(vcfpy.SimpleHeaderLine(key, value))
+            existing_simple.add(identifier)
 
-    if simple_header_lines:
+    if cli_added_lines:
         log_message(
-            "Using CLI header metadata lines: "
-            + ", ".join(f"##{line.key}={line.value}" for line in simple_header_lines),
+            "Using CLI header metadata lines: " + ", ".join(cli_added_lines),
             verbose,
         )
 

@@ -24,6 +24,10 @@ After loading the data you can sign in with either demo account and visit the pr
 - Install dependencies with `pip install -r requirements.txt`.
 - Run checks with `python manage.py check` and execute the test suite using `python manage.py test`.
 - Static files are served from the `static/` directory; new assets should be collected with `python manage.py collectstatic` in production environments.
+- Set `LOG_LEVEL` (default: `INFO`) to tune runtime verbosity.  Even when `DEBUG=0`
+  the configured logging ensures full tracebacks for request errors reach the
+  server logs so developers can diagnose issues without exposing Django's debug
+  pages to end users.
 
 ### Logging format for the VCF merger
 

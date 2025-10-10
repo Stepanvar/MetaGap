@@ -160,42 +160,66 @@ def _merge_colliding_records(
     return base_record
 
 
-def preprocess_vcf(file_path: str) -> str:
+def preprocess_vcf(file_path: str, *, chunk_size: int = 1024) -> str:
     """Normalize whitespace delimiters in ``file_path`` if necessary."""
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
 
     opener = gzip.open if str(file_path).endswith(".gz") else open
     mode = "rt" if opener is gzip.open else "r"
 
-    with opener(file_path, mode, encoding="utf-8") as handle:
-        lines = handle.readlines()
-
     modified = False
-    new_lines: List[str] = []
     header_found = False
-    for line in lines:
-        if line.startswith("##"):
-            new_lines.append(line)
-        elif line.startswith("#"):
-            new_line = re.sub(r"\s+", "\t", line.rstrip()) + "\n"
-            new_lines.append(new_line)
-            header_found = True
-            if new_line != line:
-                modified = True
-        else:
-            if header_found:
-                new_line = re.sub(r"\s+", "\t", line.rstrip()) + "\n"
-                new_lines.append(new_line)
-                if new_line != line:
-                    modified = True
-            else:
-                new_lines.append(line)
 
-    if modified:
-        temp_file = file_path + ".tmp"
-        with open(temp_file, "w", encoding="utf-8") as handle:
-            handle.writelines(new_lines)
-        return temp_file
-    return file_path
+    with opener(file_path, mode, encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("##"):
+                continue
+            if line.startswith("#"):
+                header_found = True
+                normalized = re.sub(r"\s+", "\t", line.rstrip()) + "\n"
+                if normalized != line:
+                    modified = True
+            elif header_found:
+                normalized = re.sub(r"\s+", "\t", line.rstrip()) + "\n"
+                if normalized != line:
+                    modified = True
+
+    if not modified:
+        return file_path
+
+    temp_file = f"{file_path}.tmp"
+
+    with opener(file_path, mode, encoding="utf-8") as read_handle, open(
+        temp_file, "w", encoding="utf-8"
+    ) as write_handle:
+        header_found = False
+        buffer: List[str] = []
+
+        def flush_buffer() -> None:
+            if buffer:
+                write_handle.writelines(buffer)
+                buffer.clear()
+
+        for line in read_handle:
+            if line.startswith("##"):
+                buffer.append(line)
+            elif line.startswith("#"):
+                header_found = True
+                buffer.append(re.sub(r"\s+", "\t", line.rstrip()) + "\n")
+            else:
+                if header_found:
+                    buffer.append(re.sub(r"\s+", "\t", line.rstrip()) + "\n")
+                else:
+                    buffer.append(line)
+
+            if len(buffer) >= chunk_size:
+                flush_buffer()
+
+        flush_buffer()
+
+    return temp_file
 
 
 def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable[[], dict]:

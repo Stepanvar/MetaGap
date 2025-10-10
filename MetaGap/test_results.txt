@@ -1,28 +1,28 @@
 Creating test database for alias 'default'...
-Found 118 test(s).
+Found 120 test(s).
 System check identified no issues (0 silenced).
-.....................F..Could not parse VCF metadata with pysam: malformed header. Falling back to a text parser.
-....Unsupported metadata section 'SAMPLE_PLATFORM' encountered in the VCF header.
+.........................2025-10-10 17:55:20,962 [WARNING] app.services.vcf_importer:62 Could not parse VCF metadata with pysam: malformed header. Falling back to a text parser.
+....2025-10-10 17:55:22,832 [WARNING] app.services.vcf_metadata:229 Unsupported metadata section 'SAMPLE_PLATFORM' encountered in the VCF header.
 [W::vcf_parse_info] INFO 'DP' is not defined in the header, assuming Type=String
 [W::vcf_parse_format] FORMAT 'GT' at 1:123 is not defined in the header, assuming Type=String
-.Unsupported sequencing platform 'GalacticSeq'; storing raw metadata only.
+.2025-10-10 17:55:23,174 [WARNING] app.services.vcf_metadata:260 Unsupported sequencing platform 'GalacticSeq'; storing raw metadata only.
 [W::vcf_parse] Contig '4' is not defined in the header. (Quick workaround: index the file with tabix.)
 [W::vcf_parse_info] INFO 'UNDECLARED' is not defined in the header, assuming Type=String
 [W::vcf_parse_format] FORMAT 'XY' at 4:5555 is not defined in the header, assuming Type=String
-.Could not parse VCF metadata with pysam: boom. Falling back to a text parser.
-.Could not parse VCF metadata with pysam: malformed header. Falling back to a text parser.
+.2025-10-10 17:55:23,543 [WARNING] app.services.vcf_importer:62 Could not parse VCF metadata with pysam: boom. Falling back to a text parser.
+.2025-10-10 17:55:23,894 [WARNING] app.services.vcf_importer:62 Could not parse VCF metadata with pysam: malformed header. Falling back to a text parser.
 .[W::vcf_parse] Contig '3' is not defined in the header. (Quick workaround: index the file with tabix.)
 [W::vcf_parse_info] INFO 'MISSING' is not defined in the header, assuming Type=String
 [W::vcf_parse_info] INFO 'UNDECLARED' is not defined in the header, assuming Type=String
 [W::vcf_parse_format] FORMAT 'XY' at 3:7777 is not defined in the header, assuming Type=String
-....Unsupported sequencing platform 'AlienSeq'; storing raw metadata only.
+....2025-10-10 17:55:25,465 [WARNING] app.services.vcf_metadata:260 Unsupported sequencing platform 'AlienSeq'; storing raw metadata only.
 .[W::vcf_parse_format] FORMAT 'GT' at 1:2000 is not defined in the header, assuming Type=String
 [W::vcf_parse_format] FORMAT 'GQ' at 1:2000 is not defined in the header, assuming Type=String
 ..[W::vcf_parse] Contig '2' is not defined in the header. (Quick workaround: index the file with tabix.)
-.Could not parse VCF metadata with pysam: fallback. Falling back to a text parser.
-.......................VCF import failed
+.2025-10-10 17:55:26,827 [WARNING] app.services.vcf_importer:62 Could not parse VCF metadata with pysam: fallback. Falling back to a text parser.
+.......................2025-10-10 17:55:34,474 [ERROR] app.views:669 VCF import failed
 Traceback (most recent call last):
-  File "/workspaces/MetaGap/MetaGap/app/views.py", line 661, in form_valid
+  File "/workspaces/MetaGap/MetaGap/app/views.py", line 660, in form_valid
     created_group = importer.import_file(full_path)
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/codespace/.python/current/lib/python3.12/unittest/mock.py", line 1134, in __call__
@@ -34,21 +34,9 @@ Traceback (most recent call last):
   File "/home/codespace/.python/current/lib/python3.12/unittest/mock.py", line 1193, in _execute_mock_call
     raise effect
 ValueError: boom
-.......................................................
-======================================================================
-FAIL: test_extract_section_data_prefers_section_specific_tool_keys (app.tests.test_import_helpers.ImportHelpersTests.test_extract_section_data_prefers_section_specific_tool_keys)
-Section-specific aliases win over bare tool keys for overlapping sections.
+........................................................
 ----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/workspaces/MetaGap/MetaGap/app/tests/test_import_helpers.py", line 149, in test_extract_section_data_prefers_section_specific_tool_keys
-    self.assertEqual(alignment_data["tool"], "BWA")
-AssertionError: 'GATK' != 'BWA'
-- GATK
-+ BWA
+Ran 120 tests in 49.936s
 
-
-----------------------------------------------------------------------
-Ran 118 tests in 48.953s
-
-FAILED (failures=1)
+OK
 Destroying test database for alias 'default'...

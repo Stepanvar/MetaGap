@@ -554,6 +554,8 @@ class SearchResultsViewTests(TestCase):
                 "info__mq",
             ],
         )
+        self.assertNotIn("info__additional", column_names)
+        self.assertNotIn("format__payload", column_names)
 
     def test_combined_filters_reduce_results(self) -> None:
         response = self.client.get(
@@ -836,6 +838,8 @@ class SampleGroupDetailViewTests(SampleGroupTestDataMixin, TestCase):
         ]
         self.assertGreaterEqual(len(header_names), len(expected_prefix))
         self.assertEqual(header_names[: len(expected_prefix)], expected_prefix)
+        self.assertNotIn("sample_group", header_names)
+        self.assertNotIn("format__payload", header_names)
 
         table_html = variant_table.as_html(response.wsgi_request)
         self.assertIn(self.allele.variant_id, table_html)

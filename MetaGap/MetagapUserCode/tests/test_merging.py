@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import gzip
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from typing import Callable
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -95,6 +97,52 @@ class _StubRecord:
         self.call_for_sample = {call.sample: call for call in self.calls}
 
 
+def _serialize_record(record) -> str:
+    alt = ",".join(record.ALT) if getattr(record, "ALT", None) else "."
+    filt = ";".join(record.FILTER) if getattr(record, "FILTER", None) else "."
+    qual = getattr(record, "QUAL", None)
+    if qual in {None, "", "."}:
+        qual_field = "."
+    else:
+        qual_field = str(qual)
+
+    fields = [
+        str(record.CHROM),
+        str(record.POS),
+        getattr(record, "ID", ".") or ".",
+        getattr(record, "REF", "."),
+        alt if alt else ".",
+        qual_field,
+        filt if filt else ".",
+        ".",
+    ]
+
+    fmt_keys = list(getattr(record, "FORMAT", []) or [])
+    if fmt_keys:
+        fields.append(":".join(fmt_keys))
+        for call in getattr(record, "calls", []):
+            values = []
+            data = getattr(call, "data", {}) or {}
+            for key in fmt_keys:
+                value = data.get(key)
+                if isinstance(value, list):
+                    if not value:
+                        values.append(".")
+                    else:
+                        serialized = ",".join(
+                            "." if entry in {None, "", "."} else str(entry)
+                            for entry in value
+                        )
+                        values.append(serialized)
+                elif value in {None, "", "."}:
+                    values.append(".")
+                else:
+                    values.append(str(value))
+            fields.append(":".join(values))
+
+    return "\t".join(fields)
+
+
 def _header_with_formats(sample_names):
     header = SimpleNamespace()
     header.samples = SimpleNamespace(names=list(sample_names))
@@ -146,6 +194,45 @@ def test_pad_record_samples_normalizes_blank_genotypes():
     assert record.call_for_sample["S1"].data["GT"] == "./."
 
 
+def test_merge_colliding_records_inserts_missing_sample_defaults(monkeypatch):
+    header = _header_with_formats(["X"])
+
+    def _format_info(key):
+        mappings = {
+            "GT": SimpleNamespace(number="1"),
+            "DP": SimpleNamespace(number="1"),
+            "GQ": SimpleNamespace(number="1"),
+            "AD": SimpleNamespace(number="R"),
+        }
+        return mappings.get(key)
+
+    header.get_format_field_info = _format_info
+
+    rec1 = _StubRecord("X", "0/1")
+    rec1.FORMAT.extend(["DP", "GQ"])
+    rec1.call_for_sample["X"].data["DP"] = 7
+    rec1.call_for_sample["X"].data["GQ"] = 45
+
+    rec2 = _StubRecord("X", "0/0")
+    rec2.FORMAT.append("AD")
+    rec2.call_for_sample["X"].data["AD"] = [10, 5]
+
+    monkeypatch.setattr(merging.vcfpy, "Call", _StubCall)
+
+    merged = merging._merge_colliding_records(
+        [(rec1, 0), (rec2, 1)],
+        header,
+        ["X", "Y"],
+    )
+
+    assert list(merged.call_for_sample) == ["X", "Y"]
+    missing = merged.call_for_sample["Y"].data
+    assert missing["GT"] == "./."
+    assert missing["DP"] is None
+    assert missing["GQ"] is None
+    assert missing["AD"] == []
+
+
 def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     sample_order = ["S1", "S2"]
 
@@ -160,12 +247,15 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     monkeypatch.setattr(merging, "_filter_vcf_records", lambda *args, **kwargs: None)
     monkeypatch.setattr(merging, "_ensure_info_header_lines", lambda header: None)
 
-    reader_instances = {}
+    reader_registry: dict[str, Callable[[], object]] = {}
+
+    def _register_reader(path: Path, factory):
+        reader_registry[str(path)] = factory
 
     class _Reader:
-        def __init__(self, path):
-            self.header = _header_with_formats(["S1"])
-            self._records = [_StubRecord("S1", "0/1")]
+        def __init__(self, header, records):
+            self.header = header
+            self._records = [rec.copy() for rec in records]
 
         def __iter__(self):
             for record in self._records:
@@ -181,28 +271,48 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
             self.records = []
             self._handle = self.path.open("w", encoding="utf-8")
 
+            def _factory():
+                return _Reader(self.header.copy(), self.records)
+
+            _register_reader(self.path, _factory)
+
+            self._handle.write("##fileformat=VCFv4.2\n")
+            columns = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
+            sample_names = getattr(getattr(self.header, "samples", None), "names", []) or []
+            if sample_names:
+                columns += "\tFORMAT"
+                for name in sample_names:
+                    columns += f"\t{name}"
+            self._handle.write(columns + "\n")
+
         def write_record(self, record):
             self.records.append(record.copy())
-            self._handle.write("record\n")
+            self._handle.write(_serialize_record(record) + "\n")
 
         def close(self):
-            self._handle.close()
-            reader_instances["writer"] = self
+            if self._handle:
+                self._handle.close()
+                self._handle = None
 
-    def fake_reader_from_path(path):
-        instance = _Reader(path)
-        return instance
+            def _factory():
+                return _Reader(self.header.copy(), self.records)
+
+            _register_reader(self.path, _factory)
 
     class _ReaderFactory:
         @staticmethod
         def from_path(path):
-            return fake_reader_from_path(path)
+            factory = reader_registry.get(str(path))
+            if factory is None:
+                raise AssertionError(f"No reader registered for {path}")
+            return factory()
 
     class _WriterFactory:
         @staticmethod
         def from_path(path, header):
             writer = _Writer(path, header)
-            reader_instances["writer"] = writer
+            if "merged_writer" not in reader_registry:
+                reader_registry["merged_writer"] = lambda: writer
             return writer
 
     monkeypatch.setattr(merging.vcfpy, "Call", _StubCall)
@@ -214,32 +324,33 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
         SimpleNamespace(FormatHeaderLine=object, InfoHeaderLine=object),
     )
 
-    def fake_run(cmd, *args, **kwargs):
-        if cmd[:2] == ["bcftools", "merge"]:
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if cmd[:2] == ["bcftools", "+fill-tags"]:
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if cmd[:2] == ["bcftools", "view"]:
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if cmd[:1] == ["bgzip"]:
-            target = Path(cmd[-1])
-            gz_path = Path(str(target) + ".gz")
-            gz_path.write_text("stub")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if cmd[:1] == ["tabix"]:
-            Path(cmd[-1] + ".tbi").write_text("stub-index")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    class _PysamStub:
+        @staticmethod
+        def tabix_compress(src, dest, force=True):
+            with open(src, "rt", encoding="utf-8") as src_handle:
+                with gzip.open(dest, "wt", encoding="utf-8") as dest_handle:
+                    dest_handle.write(src_handle.read())
 
-    monkeypatch.setattr(merging, "subprocess", SimpleNamespace(run=fake_run))
+        @staticmethod
+        def tabix_index(path, preset="vcf", force=True):
+            Path(path + ".tbi").write_text("stub-index", encoding="utf-8")
+
+    monkeypatch.setattr(merging, "pysam", _PysamStub())
 
     output_dir = tmp_path
     input_path = output_dir / "sample1.vcf"
     input_path.write_text("placeholder")
 
+    def _input_reader_factory():
+        header = _header_with_formats(["S1"])
+        record = _StubRecord("S1", "0/1")
+        return _Reader(header, [record])
+
+    _register_reader(input_path, _input_reader_factory)
+
     result_path = merging.merge_vcfs([str(input_path)], str(output_dir), sample_order=sample_order)
 
-    writer = reader_instances["writer"]
+    writer = reader_registry["merged_writer"]()
     assert writer.records, "Expected merge to emit at least one record"
     merged_record = writer.records[0]
 
@@ -247,6 +358,16 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     assert merged_record.call_for_sample["S2"].data["GT"] == "./."
     assert merged_record.call_for_sample["S1"].data["GT"] == "0/1"
     assert result_path.endswith(".gz")
+
+    gz_path = Path(result_path)
+    assert gz_path.exists()
+    with gzip.open(gz_path, "rt", encoding="utf-8") as handle:
+        lines = [line.strip() for line in handle.readlines() if line.strip()]
+
+    assert any(line.startswith("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO") for line in lines)
+    data_rows = [line for line in lines if not line.startswith("#")]
+    assert data_rows, "Expected data rows in compressed output"
+    assert all(len(row.split("\t")) == 8 for row in data_rows)
 
 
 def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):

@@ -498,27 +498,182 @@ def merge_vcfs(
     an_threshold: Optional[float] = 50.0,
     allowed_filter_values: Optional[Sequence[str]] = ("PASS",),
 ) -> str:
-    """Merge multiple VCF files (shards) into one VCF. Returns the path to the compressed merged VCF (.vcf.gz)."""
+    """Merge multiple VCF files into one .vcf.gz and index it."""
+    import os, copy, datetime, concurrent.futures
+    from collections import OrderedDict
+    import vcfpy, pysam
+
+    os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     gz_vcf = base_vcf + ".gz"
 
-    file_count = len(valid_files)
-    log_message(f"Discovered {file_count} validated VCF shard(s) for merging.", verbose)
+    log_message(f"Discovered {len(valid_files)} validated VCF shard(s) for merging.", verbose)
 
-    # Preprocess input VCFs (whitespace normalization) concurrently
     temp_files: List[str] = []
     preprocessed: List[str] = []
+
+    # Preprocess inputs in parallel
     try:
+        def _run_pre(p: str) -> str:
+            return preprocess_vcf(
+                p,
+                qual_threshold=qual_threshold,
+                an_threshold=an_threshold,
+                allowed_filter_values=allowed_filter_values,
+                verbose=verbose,
+            )
+
         max_workers = min(8, max(1, len(valid_files)))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(preprocess_vcf, valid_files))
+            results = list(executor.map(_run_pre, valid_files))
     except Exception as exc:
         handle_critical_error(f"Failed to preprocess input VCF files: {exc}", exc_cls=MergeConflictError)
+
     for orig_path, pre_path in zip(valid_files, results):
         preprocessed.append(pre_path)
         if pre_path != orig_path:
             temp_files.append(pre_path)
+
+    # Build merged header
+    try:
+        merged_header = union_headers(preprocessed, sample_order=sample_order)
+    except MergeConflictError:
+        raise
+    except Exception as exc:
+        handle_critical_error(f"Failed to merge VCF headers: {exc}", exc_cls=MergeConflictError)
+
+    # Apply custom metadata
+    try:
+        header = apply_metadata_to_header(
+            merged_header,
+            sample_header_line=sample_header_line,
+            simple_header_lines=simple_header_lines,
+            verbose=verbose,
+        )
+    except Exception as exc:
+        handle_critical_error(f"Failed to apply metadata to header: {exc}", exc_cls=MergeConflictError)
+
+    final_sample_order = list(sample_order) if sample_order else list(getattr(header.samples, "names", []))
+
+    # Collect records keyed by variant
+    def _alt_tuple(rec: vcfpy.Record) -> tuple[str, ...]:
+        return tuple(getattr(a, "value", str(a)) for a in (rec.ALT or []))
+
+    def _rec_key(rec: vcfpy.Record) -> tuple[str, int, str, tuple[str, ...]]:
+        return (rec.CHROM, rec.POS, rec.REF, _alt_tuple(rec))
+
+    record_store: Dict[tuple, dict] = {}
+
+    try:
+        for path in preprocessed:
+            with vcfpy.Reader.from_path(path) as reader:
+                for rec in reader:
+                    key = _rec_key(rec)
+                    container = record_store.get(key)
+                    if container is None:
+                        container = {
+                            "CHROM": rec.CHROM,
+                            "POS": rec.POS,
+                            "ID": copy.deepcopy(rec.ID),
+                            "REF": rec.REF,
+                            "ALT": copy.deepcopy(rec.ALT),
+                            "QUAL": rec.QUAL,
+                            "FILTER": copy.deepcopy(rec.FILTER),
+                            "INFO": copy.deepcopy(rec.INFO),
+                            "format_keys": list(rec.FORMAT or []),
+                            "calls": {},
+                        }
+                        record_store[key] = container
+                    else:
+                        fmt = container["format_keys"]
+                        for fk in rec.FORMAT or []:
+                            if fk not in fmt:
+                                fmt.append(fk)
+
+                    calls_map: Dict[str, dict] = container["calls"]
+                    for call in rec.calls or []:
+                        sname = getattr(call, "sample", None) or getattr(call, "name", None)
+                        if sname:
+                            calls_map[sname] = copy.deepcopy(call.data or {})
+    except Exception as exc:
+        handle_critical_error(f"Failed while aggregating records: {exc}", exc_cls=MergeConflictError)
+
+    # Write merged VCF, bgzip, tabix
+    try:
+        def _order_format(fmt_keys: List[str]) -> List[str]:
+            if "GT" in fmt_keys and fmt_keys[0] != "GT":
+                fmt_keys = [k for k in fmt_keys if k != "GT"]
+                fmt_keys.insert(0, "GT")
+            seen, ordered = set(), []
+            for k in fmt_keys:
+                if k not in seen:
+                    seen.add(k)
+                    ordered.append(k)
+            return ordered
+
+        # sort by header contig order then position
+        contig_order: Dict[str, int] = {}
+        try:
+            from vcfpy import header as vcfhdr
+            idx = 0
+            for line in getattr(header, "lines", []):
+                if isinstance(line, vcfhdr.ContigHeaderLine) and line.id:
+                    contig_order[line.id] = idx
+                    idx += 1
+        except Exception:
+            contig_order = {}
+
+        def _sort_key(k: tuple[str, int, str, tuple[str, ...]]):
+            chrom, pos, _, _ = k
+            return (contig_order.get(chrom, 10**9), chrom, pos)
+
+        with vcfpy.Writer.from_path(base_vcf, header=header) as writer:
+            for key in sorted(record_store.keys(), key=_sort_key):
+                cont = record_store[key]
+                fmt_keys = _order_format(list(cont["format_keys"]))
+
+                calls_out: List[vcfpy.Call] = []
+                for s in final_sample_order:
+                    data = cont["calls"].get(s, {})
+                    filled = OrderedDict()
+                    for fk in fmt_keys:
+                        filled[fk] = data.get(fk, "./." if fk == "GT" else ".")
+                    calls_out.append(vcfpy.Call(sample=s, data=filled))
+
+                out_rec = vcfpy.Record(
+                    CHROM=cont["CHROM"],
+                    POS=cont["POS"],
+                    ID=cont["ID"],
+                    REF=cont["REF"],
+                    ALT=cont["ALT"],
+                    QUAL=cont["QUAL"],
+                    FILTER=cont["FILTER"],
+                    INFO=cont["INFO"],
+                    FORMAT=fmt_keys,
+                    calls=calls_out,
+                )
+                writer.write_record(out_rec)
+
+        pysam.tabix_compress(base_vcf, gz_vcf, force=True)
+        pysam.tabix_index(gz_vcf, preset="vcf", force=True)
+        try:
+            os.remove(base_vcf)
+        except OSError:
+            pass
+    except Exception as exc:
+        handle_critical_error(f"Failed to write merged VCF: {exc}", exc_cls=MergeConflictError)
+    finally:
+        for tmp in temp_files:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+
+    log_message(f"Merged VCF written and indexed: {gz_vcf}", verbose)
+    return gz_vcf
+
 
     # Merge headers from all files to create a combined header
     try:

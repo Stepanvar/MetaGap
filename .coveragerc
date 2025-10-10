@@ -1,0 +1,15 @@
+[run]
+branch = True
+source =
+    MetaGap/app
+    MetaGap/MetagapUserCode
+    MetaGap/MetaGap
+omit =
+    */migrations/*
+    */tests/*
+    */venv/*
+    */env/*
+
+[report]
+show_missing = True
+skip_covered = False

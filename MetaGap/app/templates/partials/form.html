@@ -13,7 +13,7 @@
     {% elif form.is_multipart %}
       enctype="multipart/form-data"
     {% endif %}
-    {% if form_novalidate|default:True %}novalidate{% endif %}
+    {% if form_novalidate|default:False %}novalidate{% endif %}
     {% if form_class %}class="{{ form_class }}"{% endif %}
     {% if form_attrs %}
       {% for attr_name, attr_value in form_attrs.items %}

@@ -15,10 +15,10 @@
 }
 
 :root[data-bs-theme='light'] {
-        --app-body-bg: #f1f4fc;
+        --app-body-bg: #f4f6fe;
         --app-body-color: #101828;
-        --app-body-gradient-start: rgba(31, 111, 235, 0.18);
-        --app-body-gradient-end: rgba(46, 160, 67, 0.12);
+        --app-body-gradient-start: rgba(196, 219, 255, 0.9);
+        --app-body-gradient-end: rgba(212, 247, 224, 0.85);
         --app-navbar-bg: linear-gradient(135deg, #123873, #0f2d5c);
         --app-navbar-border: rgba(12, 31, 58, 0.28);
         --app-footer-bg: #0f233f;
@@ -31,19 +31,19 @@
 }
 
 :root[data-bs-theme='dark'] {
-        --app-body-bg: #0f0f0f;
-        --app-body-color: #f4f7fb;
-        --app-body-gradient-start: rgba(31, 111, 235, 0.24);
-        --app-body-gradient-end: rgba(46, 160, 67, 0.18);
-        --app-navbar-bg: rgba(24, 24, 24, 0.95);
-        --app-navbar-border: rgba(255, 255, 255, 0.1);
-        --app-footer-bg: #111111;
-        --app-footer-color: #e9ecef;
-        --app-surface-bg: rgba(18, 18, 18, 0.88);
-        --app-surface-border: rgba(255, 255, 255, 0.08);
-        --app-breadcrumb-bg: rgba(18, 18, 18, 0.85);
-        --app-breadcrumb-border: rgba(255, 255, 255, 0.06);
-        --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.55)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        --app-body-bg: #050b17;
+        --app-body-color: #f6f8ff;
+        --app-body-gradient-start: rgba(10, 26, 60, 0.88);
+        --app-body-gradient-end: rgba(4, 15, 35, 0.92);
+        --app-navbar-bg: linear-gradient(135deg, rgba(11, 33, 74, 0.95), rgba(6, 18, 38, 0.95));
+        --app-navbar-border: rgba(122, 169, 255, 0.25);
+        --app-footer-bg: #050d1f;
+        --app-footer-color: #f2f6ff;
+        --app-surface-bg: rgba(9, 20, 40, 0.92);
+        --app-surface-border: rgba(122, 169, 255, 0.2);
+        --app-breadcrumb-bg: rgba(8, 20, 40, 0.88);
+        --app-breadcrumb-border: rgba(122, 169, 255, 0.18);
+        --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(236, 243, 255, 0.7)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }
 
 /* Global layout */
@@ -289,6 +289,61 @@ main.flex-grow-1 {
         --bs-btn-hover-bg: var(--color-secondary);
         --bs-btn-hover-border-color: var(--color-secondary);
         --bs-btn-hover-color: var(--color-secondary-contrast);
+}
+
+[data-bs-theme='dark'] .btn-primary {
+        --bs-btn-color: #ffffff;
+        --bs-btn-bg: #3c7aff;
+        --bs-btn-border-color: #3c7aff;
+        --bs-btn-hover-bg: #2f68e3;
+        --bs-btn-hover-border-color: #2f68e3;
+        --bs-btn-active-bg: #2553ba;
+        --bs-btn-active-border-color: #2553ba;
+}
+
+[data-bs-theme='dark'] .btn-secondary {
+        --bs-btn-color: #0a152d;
+        --bs-btn-bg: #5be399;
+        --bs-btn-border-color: #5be399;
+        --bs-btn-hover-bg: #4fcb85;
+        --bs-btn-hover-border-color: #4fcb85;
+        --bs-btn-active-bg: #3ca76a;
+        --bs-btn-active-border-color: #3ca76a;
+}
+
+[data-bs-theme='dark'] .btn-outline-primary,
+[data-bs-theme='dark'] .btn-outline-secondary {
+        --bs-btn-color: #f6f8ff;
+        --bs-btn-hover-color: #0a152d;
+}
+
+[data-bs-theme='dark'] .form-control,
+[data-bs-theme='dark'] .form-select,
+[data-bs-theme='dark'] .form-check-input {
+        background-color: rgba(12, 28, 58, 0.65);
+        border-color: rgba(122, 169, 255, 0.4);
+        color: #f6f8ff;
+}
+
+[data-bs-theme='dark'] .form-control::placeholder,
+[data-bs-theme='dark'] .form-select::placeholder {
+        color: rgba(239, 244, 255, 0.65);
+}
+
+[data-bs-theme='dark'] .form-control:focus,
+[data-bs-theme='dark'] .form-select:focus {
+        border-color: #7aa6ff;
+        box-shadow: 0 0 0 0.25rem rgba(66, 122, 255, 0.35);
+}
+
+[data-bs-theme='dark'] .form-check-input:checked {
+        background-color: #3c7aff;
+        border-color: #3c7aff;
+}
+
+[data-bs-theme='dark'] label,
+[data-bs-theme='dark'] .form-label {
+        color: #f6f8ff;
 }
 
 /* Tables */

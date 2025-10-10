@@ -658,6 +658,227 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         context.setdefault("sample_groups", sample_groups)
         return context
 
+    METADATA_SECTION_MAP = {
+        "SAMPLE_GROUP": "sample_group",
+        "SAMPLEGROUP": "sample_group",
+        "GROUP": "sample_group",
+        "SAMPLE": "sample_group",
+        "REFERENCE_GENOME_BUILD": "reference_genome_build",
+        "REFERENCE_GENOME": "reference_genome_build",
+        "REFERENCE": "reference_genome_build",
+        "GENOME_COMPLEXITY": "genome_complexity",
+        "SAMPLE_ORIGIN": "sample_origin",
+        "ORIGIN": "sample_origin",
+        "MATERIAL_TYPE": "material_type",
+        "LIBRARY_CONSTRUCTION": "library_construction",
+        "LIBRARY_PREP": "library_construction",
+        "ILLUMINA_SEQ": "illumina_seq",
+        "ONT_SEQ": "ont_seq",
+        "PACBIO_SEQ": "pacbio_seq",
+        "IONTORRENT_SEQ": "iontorrent_seq",
+        "ION_TORRENT_SEQ": "iontorrent_seq",
+        "BIOINFO_ALIGNMENT": "bioinfo_alignment",
+        "ALIGNMENT": "bioinfo_alignment",
+        "BIOINFO_VARIANT_CALLING": "bioinfo_variant_calling",
+        "VARIANT_CALLING": "bioinfo_variant_calling",
+        "BIOINFO_POSTPROC": "bioinfo_post_proc",
+        "BIOINFO_POST_PROC": "bioinfo_post_proc",
+        "BIOINFO_POST_PROCESSING": "bioinfo_post_proc",
+        "INPUT_QUALITY": "input_quality",
+        "PLATFORM_INDEPENDENT": "platform_independent",
+        "PLATFORM-INDEPENDENT": "platform_independent",
+        "PLATFORMINDEPENDENT": "platform_independent",
+    }
+
+    METADATA_MODEL_MAP = {
+        "reference_genome_build": ReferenceGenomeBuild,
+        "genome_complexity": GenomeComplexity,
+        "sample_origin": SampleOrigin,
+        "material_type": MaterialType,
+        "library_construction": LibraryConstruction,
+        "illumina_seq": IlluminaSeq,
+        "ont_seq": OntSeq,
+        "pacbio_seq": PacBioSeq,
+        "iontorrent_seq": IonTorrentSeq,
+        "bioinfo_alignment": BioinfoAlignment,
+        "bioinfo_variant_calling": BioinfoVariantCalling,
+        "bioinfo_post_proc": BioinfoPostProc,
+        "input_quality": InputQuality,
+    }
+
+    METADATA_FIELD_ALIASES = {
+        "sample_group": {
+            "name": ["group", "group_name", "dataset", "id"],
+            "doi": ["dataset_doi", "group_doi"],
+            "source_lab": ["lab", "lab_name", "source", "center"],
+            "contact_email": ["email", "lab_email", "contact"],
+            "contact_phone": ["phone", "lab_phone"],
+            "total_samples": [
+                "samples",
+                "sample_count",
+                "n_samples",
+                "n",
+                "num_samples",
+                "number_of_samples",
+            ],
+            "inclusion_criteria": ["inclusion", "inclusioncriteria"],
+            "exclusion_criteria": ["exclusion", "exclusioncriteria"],
+            "comments": ["description", "notes"],
+        },
+        "input_quality": {
+            "a260_a280": ["a260_280", "ratio_a260_a280"],
+            "a260_a230": ["a260_230", "ratio_a260_a230"],
+            "dna_concentration": ["dna_conc", "dna_concentration_ng_ul", "concentration"],
+            "rna_concentration": ["rna_conc", "rna_concentration_ng_ul"],
+            "notes": ["note", "comment", "comments"],
+            "additional_metrics": ["metrics", "additional_metrics"],
+        },
+        "reference_genome_build": {
+            "build_name": ["name", "reference", "build"],
+            "build_version": ["version", "build_version"],
+            "additional_info": ["additional", "additional_info"],
+        },
+        "genome_complexity": {
+            "size": ["genome_size", "size_bp"],
+            "ploidy": ["ploidy_level"],
+            "gc_content": ["gc", "gc_percent"],
+        },
+        "sample_origin": {
+            "tissue": [
+                "tissue_type",
+                "sample_group_tissue",
+                "samplegroup_tissue",
+            ],
+            "collection_method": [
+                "collection",
+                "method",
+                "sample_group_collection_method",
+                "samplegroup_collection_method",
+            ],
+            "storage_conditions": [
+                "storage",
+                "storage_conditions",
+                "sample_group_storage_conditions",
+                "samplegroup_storage_conditions",
+            ],
+            "time_stored": ["time", "storage_time"],
+        },
+        "material_type": {
+            "material_type": ["type"],
+            "integrity_number": ["rin", "din", "integrity"],
+        },
+        "library_construction": {
+            "kit": ["library_kit", "kit_name"],
+            "fragmentation": ["fragmentation_method"],
+            "adapter_ligation_efficiency": ["adapter_efficiency"],
+            "pcr_cycles": ["pcr", "pcr_cycles"],
+        },
+        "illumina_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "channel_method": ["channel"],
+            "cluster_density": ["cluster"],
+            "qc_software": ["qc", "software"],
+        },
+        "ont_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "flow_cell_version": ["flowcell_version"],
+            "pore_type": ["pore"],
+            "bias_voltage": ["bias"],
+        },
+        "pacbio_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "smrt_cell_type": ["smrt_cell", "cell_type"],
+            "zmw_density": ["zmw"],
+        },
+        "iontorrent_seq": {
+            "instrument": ["machine", "instrument"],
+            "flow_cell": ["flowcell", "flow_cell_id"],
+            "chip_type": ["chip"],
+            "ph_calibration": ["ph"],
+            "flow_order": ["floworder"],
+            "ion_sphere_metrics": ["ionsphere", "sphere_metrics"],
+        },
+        "bioinfo_alignment": {
+            "tool": ["aligner", "software", "tool"],
+            "params": ["parameters", "params"],
+            "ref_genome_version": ["reference_version"],
+            "recalibration_settings": ["recalibration", "recal_settings"],
+        },
+        "bioinfo_variant_calling": {
+            "tool": ["caller", "tool"],
+            "version": ["tool_version", "version"],
+            "filtering_thresholds": ["filters", "thresholds"],
+            "duplicate_handling": ["duplicates"],
+            "mq": ["mapping_quality"],
+        },
+        "bioinfo_post_proc": {
+            "normalization": ["normalisation", "normalization_method"],
+            "harmonization": ["harmonisation", "harmonization_method"],
+        },
+    }
+
+    SECTION_PRIMARY_FIELD = {
+        "reference_genome_build": "build_name",
+        "genome_complexity": "size",
+        "sample_origin": "tissue",
+        "material_type": "material_type",
+        "library_construction": "kit",
+        "illumina_seq": "instrument",
+        "ont_seq": "instrument",
+        "pacbio_seq": "instrument",
+        "iontorrent_seq": "instrument",
+        "bioinfo_alignment": "tool",
+        "bioinfo_variant_calling": "tool",
+        "bioinfo_post_proc": "normalization",
+    }
+
+    INFO_FIELD_STRING = "string"
+    INFO_FIELD_INT = "int"
+    INFO_FIELD_FLOAT = "float"
+    INFO_PLACEHOLDER_VALUES = {".", ""}
+
+    INFO_FIELD_MAP = {
+        "aa": ("aa", INFO_FIELD_STRING),
+        "ac": ("ac", INFO_FIELD_STRING),
+        "af": ("af", INFO_FIELD_STRING),
+        "an": ("an", INFO_FIELD_STRING),
+        "bq": ("bq", INFO_FIELD_STRING),
+        "cigar": ("cigar", INFO_FIELD_STRING),
+        "db": ("db", INFO_FIELD_STRING),
+        "dp": ("dp", INFO_FIELD_STRING),
+        "end": ("end", INFO_FIELD_STRING),
+        "h2": ("h2", INFO_FIELD_STRING),
+        "h3": ("h3", INFO_FIELD_STRING),
+        "mq": ("mq", INFO_FIELD_STRING),
+        "mq0": ("mq0", INFO_FIELD_STRING),
+        "ns": ("ns", INFO_FIELD_STRING),
+        "qd": ("qd", INFO_FIELD_STRING),
+        "fs": ("fs", INFO_FIELD_STRING),
+        "sor": ("sor", INFO_FIELD_STRING),
+        "sb": ("sb", INFO_FIELD_STRING),
+    }
+
+    FORMAT_FIELD_MAP = {
+        "ad": "ad",
+        "adf": "adf",
+        "adr": "adr",
+        "dp": "dp",
+        "ec": "ec",
+        "ft": "ft",
+        "gl": "gl",
+        "gp": "gp",
+        "gq": "gq",
+        "gt": "gt",
+        "hq": "hq",
+        "mq": "mq",
+        "pl": "pl",
+        "pq": "pq",
+        "ps": "ps",
+    }
+
     def form_valid(self, form):
         data_file = form.cleaned_data["data_file"]
         temp_path = default_storage.save(f"tmp/{data_file.name}", data_file)
@@ -1344,7 +1565,8 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                 structured[field_name] = self._coerce_info_value(value, field_type)
             else:
                 additional_value = self._normalize_additional_info_value(value)
-                additional[normalized] = additional_value
+                if additional_value is not None:
+                    additional[normalized] = additional_value
 
         if not structured and not additional:
             return None
@@ -1399,18 +1621,16 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         if value is None:
             return None
         if isinstance(value, (list, tuple)):
-            normalized_items = [
-                cls._normalize_info_scalar(item)
-                for item in value
-                if item not in (None, "")
-            ]
-            flattened = [item for item in normalized_items if item not in (None, "")]
-            if not flattened:
-                return None
-            return flattened
+            normalized_items = []
+            for item in value:
+                normalized_item = cls._normalize_info_scalar(item)
+                if normalized_item is None:
+                    continue
+                normalized_items.append(normalized_item)
+            return normalized_items or None
         if isinstance(value, str):
             stripped = value.strip()
-            if not stripped:
+            if not stripped or stripped in cls.INFO_PLACEHOLDER_VALUES:
                 return None
             return stripped
         return value
@@ -1449,13 +1669,14 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     @classmethod
     def _normalize_additional_info_value(cls, value: Any) -> Any:
         if isinstance(value, (list, tuple)):
-            normalized_list = [
-                cls._normalize_additional_info_value(item)
-                for item in value
-                if item not in (None, "")
-            ]
+            normalized_list = []
+            for item in value:
+                normalized_item = cls._normalize_additional_info_value(item)
+                if normalized_item is None:
+                    continue
+                normalized_list.append(normalized_item)
             return normalized_list or None
-        if value in (None, ""):
+        if value in (None, "", "."):
             return None
         if isinstance(value, (int, float, bool)):
             return value

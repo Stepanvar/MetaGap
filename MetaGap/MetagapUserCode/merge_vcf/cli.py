@@ -91,17 +91,22 @@ def parse_arguments():
         parser.error("No input VCF files specified.")
 
     # Clean metadata
-    args.sample_header_entries = [s for s in args.sample_header_entries if s and s.strip()]
-    args.simple_header_lines = [
+    cleaned_sample_entries = [s for s in args.sample_header_entries if s and s.strip()]
+    args.sample_header_entries = cleaned_sample_entries
+    args.sample_metadata_entries = list(cleaned_sample_entries)
+
+    cleaned_header_lines = [
         s if s.startswith("##") else f"##{s}" for s in args.simple_header_lines if s and s.strip()
     ]
+    args.simple_header_lines = cleaned_header_lines
+    args.header_metadata_lines = list(cleaned_header_lines)
 
     # Require SAMPLE ID if any SAMPLE metadata present
     has_id = any(
         (kv := ent.split("=", 1)) and kv[0].strip().lower() == "id" and kv[1].strip()
-        for ent in args.sample_header_entries
+        for ent in args.sample_metadata_entries
     )
-    if args.sample_header_entries and not has_id:
+    if args.sample_metadata_entries and not has_id:
         parser.error("Provide a non-empty SAMPLE ID (e.g., --sample-header ID=SampleName).")
 
     # Normalize paths
@@ -201,11 +206,12 @@ def main():
         )
 
         # Combine file-provided header lines with CLI-provided simple headers
-        header_metadata_lines = (args.simple_header_lines or []) + (extra_file_lines or [])
+        cli_header_metadata = getattr(args, "header_metadata_lines", None)
+        header_metadata_lines = (cli_header_metadata or []) + (extra_file_lines or [])
 
         final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
             merged_vcf_path,
-            sample_header_entries=args.sample_header_entries,
+            sample_metadata_entries=args.sample_metadata_entries,
             header_metadata_lines=header_metadata_lines,
             qual_threshold=qual_threshold,
             an_threshold=an_threshold,

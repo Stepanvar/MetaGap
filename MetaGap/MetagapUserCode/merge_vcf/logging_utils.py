@@ -108,14 +108,14 @@ class MergeConflictError(MergeVCFError):
     """Raised when merging fails due to conflicting inputs or tooling errors."""
 
 
-def log_message(message: str, verbose: bool = False) -> None:
+def log_message(message: str, verbose: bool = False, level: int = logging.INFO) -> None:
     """Log *message* using the configured handlers."""
-    logger.info(message)
+    logger.log(level, message, stacklevel=2)
 
 
 def handle_critical_error(message: str, exc_cls: type[BaseException] | None = None) -> None:
     """Log and raise a fatal error before exiting."""
-    logger.error("CRITICAL ERROR: %s", message)
+    logger.critical("CRITICAL ERROR: %s", message)
     raise (exc_cls or MergeVCFError)(message)
 
 

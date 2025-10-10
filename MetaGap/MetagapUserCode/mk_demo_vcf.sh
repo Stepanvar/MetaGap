@@ -2,12 +2,34 @@
 # mk_demo_vcfs.sh
 set -euo pipefail
 
-START_POS=${1:-14370}
-STEP=${2:-50}
+SAMPLE_COUNT=${SAMPLE_COUNT:-${1:-4}}
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+START_POS=${START_POS:-${1:-14370}}
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+STEP=${STEP:-${1:-50}}
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
 VARS_PER_FILE=${VARS_PER_FILE:-3}
 CHROM=20
 
 mkdir -p demo_vcfs
+
+if ! [[ $SAMPLE_COUNT =~ ^[0-9]+$ ]] || (( SAMPLE_COUNT <= 0 )); then
+  echo "Sample count must be a positive integer (received: $SAMPLE_COUNT)" >&2
+  exit 1
+fi
+
+REFS=(G T A C)
+ALTS=(A C G T)
+GENOTYPES=(0/0 0/1 1/1 ./.)
 
 mk() {
   local out=$1 sample=$2
@@ -15,80 +37,56 @@ mk() {
   printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s\n' "$sample" >> "$out"
 }
 
-write_variants() {
-  local out=$1 sample=$2 recs_name=$3
-  local -n recs=$recs_name
-  if [[ ${#recs[@]} -ne VARS_PER_FILE ]]; then
-    echo "Expected ${VARS_PER_FILE} records for $sample but found ${#recs[@]}" >&2
-    exit 1
+generate_variant_fields() {
+  local sample_idx=$1 variant_idx=$2
+
+  local id="rs$((6054257 + sample_idx * VARS_PER_FILE + variant_idx))"
+  local ref=${REFS[variant_idx % ${#REFS[@]}]}
+  local alt=${ALTS[((sample_idx + variant_idx) % ${#ALTS[@]})]}
+  if [[ $alt == $ref ]]; then
+    alt=${ALTS[((sample_idx + variant_idx + 1) % ${#ALTS[@]})]}
   fi
+
+  local qual=$((45 + ((sample_idx * 11 + variant_idx * 7) % 30)))
+  local filter=PASS
+  if (( (sample_idx + variant_idx) % 5 == 0 )); then
+    filter=q10
+  fi
+
+  local dp=$((8 + ((sample_idx * 5 + variant_idx * 3) % 12)))
+  local info="NS=1;DP=$dp"
+  local format="GT:DP:GQ"
+
+  local gt=${GENOTYPES[((sample_idx + variant_idx) % ${#GENOTYPES[@]})]}
+  local gq=$((35 + ((sample_idx * 3 + variant_idx * 5) % 40)))
+  local sample_data="$gt:$dp:$gq"
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+    "$id" "$ref" "$alt" "$qual" "$filter" "$info" "$format" "$sample_data"
+}
+
+write_variants() {
+  local out=$1 sample=$2 sample_idx=$3
 
   mk "$out" "$sample"
   for ((i = 0; i < VARS_PER_FILE; i++)); do
     local pos=$((START_POS + i * STEP))
-    IFS='|' read -r id ref alt qual filter info format sample_data <<<"${recs[$i]}"
+    IFS=$'\t' read -r id ref alt qual filter info format sample_data <<<"$(generate_variant_fields "$sample_idx" "$i")"
     printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$CHROM" "$pos" "$id" "$ref" "$alt" "$qual" "$filter" "$info" "$format" "$sample_data" >> "$out"
   done
 }
 
-records_a=(
-  'rs6054257|G|A|60|PASS|NS=1;DP=10|GT:DP:GQ|0/1:10:50'
-  '.|T|A|40|PASS|NS=1;DP=12|GT:DP:GQ|0/0:12:60'
-  'rs6040355|A|G|50|PASS|NS=1;DP=8|GT:DP:GQ|1/1:8:40'
-)
-
-records_b=(
-  'rs6054257|G|A|44|PASS|NS=1;DP=9|GT:DP:GQ|0/0:9:50'
-  '.|T|A|35|PASS|NS=1;DP=11|GT:DP:GQ|0/1:11:45'
-  'rs6040355|A|G|55|PASS|NS=1;DP=7|GT:DP:GQ|0/1:7:48'
-)
-
-records_c=(
-  'rs6054257|G|A|70|PASS|NS=1;DP=12|GT:DP:GQ|1/1:12:60'
-  '.|T|A|42|PASS|NS=1;DP=10|GT:DP:GQ|0/0:10:55'
-  'rs6040355|A|G|52|PASS|NS=1;DP=9|GT:DP:GQ|0/1:9:52'
-)
-
-records_d=(
-  'rs6054257|G|A|50|PASS|NS=1;DP=0|GT:DP:GQ|./.:.:.'
-  '.|T|A|60|PASS|NS=1;DP=13|GT:DP:GQ|1/1:13:62'
-  'rs6040355|A|G|45|PASS|NS=1;DP=8|GT:DP:GQ|0/0:8:45'
-)
-
-sample_id() {
-  local index=$1
-  printf 'SAMPLE_%d' "$((index + 1))"
-}
-
-record_sets=(records_a records_b records_c records_d)
-
-outputs=()
-
-for i in "${!record_sets[@]}"; do
-  sample="$(sample_id "$i")"
-  out="demo_vcfs/$((i + 1)).vcf"
-  outputs+=("$out")
-  write_variants "$out" "$sample" "${record_sets[$i]}"
+for ((sample_idx = 1; sample_idx <= SAMPLE_COUNT; sample_idx++)); do
+  sample_name=$(printf 'SAMPLE_%03d' "$sample_idx")
+  out_file="demo_vcfs/${sample_idx}.vcf"
+  write_variants "$out_file" "$sample_name" "$sample_idx"
 done
 
-print_outputs() {
-  printf 'Wrote:'
-  for f in "$@"; do
-    printf ' %s' "$f"
-  done
-  printf '\n'
-}
-
 if command -v bgzip >/dev/null 2>&1 && command -v tabix >/dev/null 2>&1; then
-  gz_outputs=()
-  for f in "${outputs[@]}"; do
-    bgzip -f "$f"
-    tabix -f -p vcf "$f.gz"
-    gz_outputs+=("$f.gz")
-  done
-  print_outputs "${gz_outputs[@]}"
+  for f in demo_vcfs/*.vcf; do bgzip -f "$f"; tabix -f -p vcf "$f.gz"; done
+  echo "Wrote $SAMPLE_COUNT compressed sample VCF files in demo_vcfs/"
 else
   echo "bgzip/tabix not found; skipping compression" >&2
-  print_outputs "${outputs[@]}"
+  echo "Wrote $SAMPLE_COUNT sample VCF files in demo_vcfs/"
 fi

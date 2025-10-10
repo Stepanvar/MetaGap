@@ -14,6 +14,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 import pysam  # BGZF + Tabix
 import concurrent.futures
 from . import vcfpy
+from .filtering import DEFAULT_ALLOWED_FILTER_VALUES, prepare_allowed_filter_set
 from .logging_utils import (
     MergeConflictError,
     handle_critical_error,
@@ -465,14 +466,16 @@ def _record_passes_filters(
         except (TypeError, ValueError):
             return False
     # FILTER field check: only allow records with filter values in allowed_filter_values (default "PASS")
-    filters = record.FILTER or []
+    filters_field = getattr(record, "FILTER", None)
+    filters = filters_field or []
+    if not isinstance(filters, (list, tuple)):
+        filters = [filters]
     if not filters:
         return True
     vals = [f for f in filters if f not in {None, "", "."}]
     if not vals:
         return True
-    allowed = tuple(allowed_filter_values or ("PASS",))
-    allowed_set = {v for v in allowed if v not in {None, "", "."}}
+    allowed_set = prepare_allowed_filter_set(allowed_filter_values)
     return bool(allowed_set) and all(v in allowed_set for v in vals)
 
 def _filter_vcf_records(
@@ -537,7 +540,7 @@ def merge_vcfs(
     simple_header_lines=None,
     qual_threshold: Optional[float] = 30.0,
     an_threshold: Optional[float] = 50.0,
-    allowed_filter_values: Optional[Sequence[str]] = ("PASS",),
+    allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
 ) -> str:
     """Merge multiple VCF files into one .vcf.gz and index it."""
     import os, copy, datetime, concurrent.futures

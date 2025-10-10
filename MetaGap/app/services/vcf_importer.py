@@ -152,7 +152,7 @@ class VCFImporter:
         )
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
-        return extract_metadata_text_fallback(file_path)
+        return extract_metadata_text_fallback(file_path, warnings=self.warnings)
 
     @staticmethod
     def _render_validation_error(exc: ValidationError) -> str:

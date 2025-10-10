@@ -110,6 +110,27 @@ class ImportHelpersTests(TestCase):
         self.assertNotIn("malformedentry", metadata)
         self.assertNotIn("shouldnotappear", metadata.values())
 
+    def test_extract_metadata_text_fallback_splits_combined_records(self):
+        """Metadata extraction handles multiple header records on a single line."""
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".vcf", encoding="utf-8"
+        ) as handle:
+            handle.write("##fileformat=VCFv4.2\n")
+            handle.write(
+                "##BIOINFO_VARIANT_CALLING=<Tool=GATK,Version=4.2>"
+                "##FILTER=<ID=PASS,Description=\"All filters passed\">\n"
+            )
+            handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+
+        try:
+            metadata = self.importer._extract_metadata_text_fallback(handle.name)
+        finally:
+            os.remove(handle.name)
+
+        self.assertEqual(metadata.get("bioinfo_variant_calling_tool"), "GATK")
+        self.assertEqual(metadata.get("bioinfo_variant_calling_version"), "4.2")
+
     def test_extract_section_data_supports_hyphenated_keys(self):
         """Hyphenated section prefixes map fields and feed remaining into additional."""
 

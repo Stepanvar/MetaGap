@@ -21,6 +21,12 @@ from .logging_utils import (
 )
 
 
+# Re-export frequently patched helpers for the test suite.
+validate_all_vcfs = validation.validate_all_vcfs
+validate_merged_vcf = validation.validate_merged_vcf
+merge_vcfs = merging.merge_vcfs
+append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
+
 def _validate_metadata_entry(arg: str) -> str:
     """Validate KEY=VALUE and return sanitized string."""
     if arg is None:
@@ -41,72 +47,141 @@ def _validate_metadata_entry(arg: str) -> str:
 
 def parse_arguments():
     """Parse CLI args for the VCF merging tool."""
+
+    def _metadata_list(values: list[str]) -> list[str]:
+        """Return sanitized metadata entries, discarding blanks."""
+
+        sanitized: list[str] = []
+        for entry in values or []:
+            if entry is None:
+                continue
+            cleaned = entry.strip()
+            if not cleaned:
+                continue
+            sanitized.append(cleaned)
+        return sanitized
+
     parser = argparse.ArgumentParser(
         prog="merge_vcf",
         description="Consolidate multiple VCF files into a single merged VCF.",
     )
-    parser.add_argument("input_vcfs", nargs="*", help="Input VCF files.")
-    parser.add_argument("--inputs", nargs="+", dest="input_list", help="Alternate way to pass input VCFs.")
+    parser.add_argument(
+        "--input-dir",
+        dest="input_dir",
+        required=True,
+        help="Directory containing the VCF shards to merge.",
+    )
     parser.add_argument(
         "-o",
-        "--out-dir",
-        "--output-dir",
         "--output",
+        "--output-dir",
         dest="output_dir",
-        help="Output directory for the merged VCF. Defaults to current directory.",
+        help="Directory where merged VCF artifacts will be written.",
     )
-    parser.add_argument("--qual-threshold", type=float, default=30.0, help="Minimum QUAL to keep a variant. <0 disables.")
-    parser.add_argument("--an-threshold", type=float, default=50.0, help="Minimum INFO/AN to keep a variant. <0 disables.")
+    parser.add_argument("--ref", dest="ref", help="Reference genome build override.")
     parser.add_argument(
-        "--sample-header",
-        action="append",
-        dest="sample_header_entries",
-        type=_validate_metadata_entry,
-        default=[],
-        help="SAMPLE header KEY=VALUE entry (repeatable). Must include ID=...",
+        "--vcf-version",
+        dest="vcf_version",
+        help="VCF specification version override (e.g., 4.2).",
     )
     parser.add_argument(
-        "--simple-header",
+        "--allow-gvcf",
+        dest="allow_gvcf",
+        action="store_true",
+        help="Permit gVCF inputs that contain <NON_REF> alleles.",
+    )
+    parser.add_argument(
+        "--meta",
+        dest="meta",
         action="append",
-        dest="simple_header_lines",
-        type=_validate_metadata_entry,
         default=[],
-        help="Additional header KEY=VALUE (repeatable). '##' is auto-prefixed.",
+        type=_validate_metadata_entry,
+        help="Generic KEY=VALUE metadata entries to add to the header.",
+    )
+    parser.add_argument(
+        "--sample-metadata",
+        dest="sample_metadata_entries",
+        action="append",
+        default=[],
+        type=_validate_metadata_entry,
+        help="SAMPLE metadata KEY=VALUE entries (repeatable).",
+    )
+    parser.add_argument(
+        "--header-metadata",
+        dest="header_metadata_lines",
+        action="append",
+        default=[],
+        type=_validate_metadata_entry,
+        help="Header KEY=VALUE entries (repeatable).",
+    )
+    parser.add_argument(
+        "--metadata-template",
+        dest="metadata_template_path",
+        help="Optional metadata template file to seed header entries.",
     )
     parser.add_argument(
         "--metadata-file",
         dest="metadata_file",
-        help="Optional file with extra header lines. One entry per line. Lines without '##' will be prefixed.",
+        help="Optional file with additional header metadata lines.",
+    )
+    parser.add_argument(
+        "--qual-threshold",
+        type=float,
+        default=30.0,
+        help="Minimum QUAL to keep a variant. <0 disables.",
+    )
+    parser.add_argument(
+        "--an-threshold",
+        type=float,
+        default=50.0,
+        help="Minimum INFO/AN to keep a variant. <0 disables.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose console logging.")
+
     args = parser.parse_args()
 
-    # Collect inputs
-    input_files: list[str] = []
-    if args.input_list:
-        input_files.extend(args.input_list)
-    if args.input_vcfs:
-        input_files.extend(args.input_vcfs)
-    if not input_files:
-        parser.error("No input VCF files specified.")
+    try:
+        input_dir_path = Path(args.input_dir).expanduser().resolve()
+    except OSError as exc:  # pragma: no cover - defensive
+        parser.error(f"Unable to normalize input directory: {exc}")
+        raise
 
-    # Clean metadata
-    args.sample_header_entries = [s for s in args.sample_header_entries if s and s.strip()]
-    args.simple_header_lines = [
-        s if s.startswith("##") else f"##{s}" for s in args.simple_header_lines if s and s.strip()
-    ]
+    if not input_dir_path.exists() or not input_dir_path.is_dir():
+        parser.error(f"Input directory does not exist: {args.input_dir}")
 
-    # Require SAMPLE ID if any SAMPLE metadata present
-    has_id = any(
-        (kv := ent.split("=", 1)) and kv[0].strip().lower() == "id" and kv[1].strip()
-        for ent in args.sample_header_entries
-    )
-    if args.sample_header_entries and not has_id:
-        parser.error("Provide a non-empty SAMPLE ID (e.g., --sample-header ID=SampleName).")
+    args.input_dir = str(input_dir_path)
 
-    # Normalize paths
-    args.output_dir = str(Path(args.output_dir)) if args.output_dir else "."
-    args.input_files = [str(Path(p)) for p in input_files]
+    output_dir_value = args.output_dir
+    if output_dir_value:
+        try:
+            output_dir_path = Path(output_dir_value).expanduser().resolve()
+        except OSError as exc:  # pragma: no cover - defensive
+            parser.error(f"Unable to normalize output directory: {exc}")
+            raise
+    else:
+        output_dir_path = input_dir_path
+    args.output_dir = str(output_dir_path)
+
+    if args.metadata_template_path:
+        try:
+            template_path = Path(args.metadata_template_path).expanduser().resolve()
+        except OSError as exc:  # pragma: no cover - defensive
+            parser.error(f"Unable to normalize metadata template path: {exc}")
+            raise
+        args.metadata_template_path = str(template_path)
+
+    if args.metadata_file:
+        try:
+            metadata_file_path = Path(args.metadata_file).expanduser().resolve()
+        except OSError as exc:  # pragma: no cover - defensive
+            parser.error(f"Unable to normalize metadata file path: {exc}")
+            raise
+        args.metadata_file = str(metadata_file_path)
+
+    args.meta = _metadata_list(args.meta)
+    args.sample_metadata_entries = _metadata_list(args.sample_metadata_entries)
+    args.header_metadata_lines = _metadata_list(args.header_metadata_lines)
+
     return args
 
 
@@ -125,16 +200,18 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
 def main():
     args = parse_arguments()
     verbose = args.verbose
+    ref_genome = None
+    vcf_version = None
 
     # Phase 1: environment + autodetect metadata
     try:
-        # Infer a base input directory from files
-        base_dirs = [os.path.dirname(os.path.abspath(p)) or "." for p in args.input_files]
-        input_dir = os.path.commonpath(base_dirs) if base_dirs else "."
+        input_dir = getattr(args, "input_dir", None)
+        if not input_dir:
+            raise ValidationError("An input directory must be provided.")
         if not os.path.isdir(input_dir):
             raise ValidationError(f"Input directory does not exist: {input_dir}")
 
-        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
+        output_dir = getattr(args, "output_dir", None) or input_dir
         os.makedirs(output_dir, exist_ok=True)
 
         log_path = os.path.join(output_dir, LOG_FILE)
@@ -145,15 +222,22 @@ def main():
             enable_console=verbose,
         )
 
-        extra_file_lines = metadata_module.load_metadata_lines(args.metadata_file, verbose) if args.metadata_file else []
+        metadata_file = getattr(args, "metadata_file", None)
+        extra_file_lines = (
+            metadata_module.load_metadata_lines(metadata_file, verbose) if metadata_file else []
+        )
 
         log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         log_message(f"Input directory: {input_dir}")
         log_message(f"Output directory: {output_dir}")
 
-        detected_file, detected_fileformat, detected_reference = validation.find_first_vcf_with_header(input_dir, verbose)
-        ref_genome = detected_reference
-        vcf_version = validation.normalize_vcf_version(detected_fileformat)
+        detected_file, detected_fileformat, detected_reference = validation.find_first_vcf_with_header(
+            input_dir, verbose
+        )
+        ref_override = getattr(args, "ref", None)
+        vcf_override = getattr(args, "vcf_version", None)
+        ref_genome = ref_override or detected_reference
+        vcf_version = vcf_override or validation.normalize_vcf_version(detected_fileformat)
 
         if not ref_genome:
             raise ValidationError("Reference genome build must be auto-detectable from input files.")
@@ -180,17 +264,25 @@ def main():
 
     # Phase 2: validate, merge, annotate, finalize
     try:
-        out_dir = Path(args.output_dir)
+        out_dir = Path(getattr(args, "output_dir", input_dir))
         out_dir.mkdir(parents=True, exist_ok=True)
         log_message(f"Output directory: {out_dir}", verbose)
 
-        valid_files, sample_order = validation.validate_all_vcfs(args.input_files, verbose=verbose)
+        valid_files, sample_order = validate_all_vcfs(
+            input_dir,
+            ref_genome,
+            vcf_version,
+            verbose=verbose,
+            allow_gvcf=getattr(args, "allow_gvcf", False),
+        )
 
-        qual_threshold = args.qual_threshold if args.qual_threshold >= 0 else None
-        an_threshold = args.an_threshold if args.an_threshold >= 0 else None
+        qual_threshold = getattr(args, "qual_threshold", 30.0)
+        qual_threshold = qual_threshold if qual_threshold >= 0 else None
+        an_threshold = getattr(args, "an_threshold", 50.0)
+        an_threshold = an_threshold if an_threshold >= 0 else None
         allowed_filter_values = DEFAULT_ALLOWED_FILTER_VALUES
 
-        merged_vcf_path = merging.merge_vcfs(
+        merged_vcf_path = merge_vcfs(
             valid_files,
             str(out_dir),
             verbose=verbose,
@@ -201,11 +293,13 @@ def main():
         )
 
         # Combine file-provided header lines with CLI-provided simple headers
-        header_metadata_lines = (args.simple_header_lines or []) + (extra_file_lines or [])
+        header_metadata_lines = (
+            (getattr(args, "header_metadata_lines", []) or []) + (extra_file_lines or [])
+        )
 
-        final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
+        final_vcf_path = append_metadata_to_merged_vcf(
             merged_vcf_path,
-            sample_header_entries=args.sample_header_entries,
+            sample_metadata_entries=getattr(args, "sample_metadata_entries", []),
             header_metadata_lines=header_metadata_lines,
             qual_threshold=qual_threshold,
             an_threshold=an_threshold,
@@ -213,7 +307,7 @@ def main():
             verbose=verbose,
         )
 
-        validation.validate_merged_vcf(final_vcf_path, verbose=verbose)
+        validate_merged_vcf(final_vcf_path, verbose=verbose)
 
         final_target = out_dir / "cohort_final.vcf.gz"
         final_vcf_path = Path(final_vcf_path)

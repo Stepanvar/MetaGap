@@ -7,7 +7,8 @@ import os
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-from django.db import models as django_models
+from django.core.exceptions import ValidationError
+from django.db import DataError, IntegrityError, models as django_models
 
 from ..models import AlleleFrequency, Format, Info, SampleGroup
 from .vcf_metadata import (
@@ -102,60 +103,71 @@ class VCFDatabaseWriter:
             or metadata.get("description")
         )
 
-        sample_group = SampleGroup.objects.create(
-            name=name,
-            created_by=organization_profile,
-            comments=comments,
-            **group_data,
-        )
-
-        update_fields: list[str] = []
-        for section, model_cls in self.metadata_model_map.items():
-            section_data, section_consumed, additional = self._extract_section_data(
-                metadata, section, model_cls
+        try:
+            sample_group = SampleGroup.objects.create(
+                name=name,
+                created_by=organization_profile,
+                comments=comments,
+                **group_data,
             )
 
-            consumed_keys.update(section_consumed)
-            if not section_data and additional is None:
-                continue
+            update_fields: list[str] = []
+            for section, model_cls in self.metadata_model_map.items():
+                section_data, section_consumed, additional = self._extract_section_data(
+                    metadata, section, model_cls
+                )
 
-            payload = {key: value for key, value in section_data.items() if value is not None}
-            if additional is not None:
-                additional_field = self._resolve_additional_field(model_cls)
-                if additional_field:
-                    existing = payload.get(additional_field)
-                    if isinstance(existing, dict) and isinstance(additional, dict):
-                        payload[additional_field] = {**existing, **additional}
-                    elif existing is None:
-                        payload[additional_field] = additional
-                    else:
-                        payload[additional_field] = additional
+                consumed_keys.update(section_consumed)
+                if not section_data and additional is None:
+                    continue
 
-            if not payload:
-                continue
+                payload = {
+                    key: value for key, value in section_data.items() if value is not None
+                }
+                if additional is not None:
+                    additional_field = self._resolve_additional_field(model_cls)
+                    if additional_field:
+                        existing = payload.get(additional_field)
+                        if isinstance(existing, dict) and isinstance(additional, dict):
+                            payload[additional_field] = {**existing, **additional}
+                        elif existing is None:
+                            payload[additional_field] = additional
+                        else:
+                            payload[additional_field] = additional
 
-            instance = model_cls.objects.create(**payload)
-            setattr(sample_group, section, instance)
-            if section not in update_fields:
-                update_fields.append(section)
+                if not payload:
+                    continue
 
-        for key, value in metadata.items():
-            if key in consumed_keys:
-                continue
-            coerced = self._coerce_additional_value(value)
-            if key not in additional_metadata:
-                additional_metadata[key] = coerced
+                instance = model_cls.objects.create(**payload)
+                setattr(sample_group, section, instance)
+                if section not in update_fields:
+                    update_fields.append(section)
 
-        additional_payload = additional_metadata or None
-        if additional_payload != getattr(sample_group, "additional_metadata", None):
-            sample_group.additional_metadata = additional_payload
-            if "additional_metadata" not in update_fields:
-                update_fields.append("additional_metadata")
+            for key, value in metadata.items():
+                if key in consumed_keys:
+                    continue
+                coerced = self._coerce_additional_value(value)
+                if key not in additional_metadata:
+                    additional_metadata[key] = coerced
 
-        if update_fields:
-            sample_group.save(update_fields=update_fields)
+            additional_payload = additional_metadata or None
+            if additional_payload != getattr(sample_group, "additional_metadata", None):
+                sample_group.additional_metadata = additional_payload
+                if "additional_metadata" not in update_fields:
+                    update_fields.append("additional_metadata")
 
-        return sample_group
+            if update_fields:
+                sample_group.save(update_fields=update_fields)
+
+            return sample_group
+        except IntegrityError as exc:
+            raise ValidationError(
+                f"A dataset named '{name}' already exists. Please choose a different name."
+            ) from exc
+        except DataError as exc:
+            raise ValidationError(
+                "One or more metadata values are out of range. Please review your dataset metadata."
+            ) from exc
 
     def _extract_section_data(
         self,
@@ -554,32 +566,43 @@ class VCFDatabaseWriter:
         format_instance: Optional[Format],
         format_sample: Optional[str],
     ) -> AlleleFrequency:
-        allele = AlleleFrequency.objects.create(
-            sample_group=sample_group,
-            chrom=chrom,
-            pos=pos,
-            variant_id=variant_id,
-            ref=ref,
-            alt=alt,
-            qual=qual,
-            filter=filter_value,
-            info=info,
-            format=format_instance,
-        )
+        variant_label = f"{chrom}:{pos} {ref}>{alt}"
 
-        if format_instance and format_sample:
-            payload: Dict[str, Any] = dict(format_instance.payload or {})
-            additional = dict(payload.get("additional") or {})
-            if additional.get("sample_id") != format_sample:
-                additional["sample_id"] = format_sample
-                if additional:
-                    payload["additional"] = additional
-                elif "additional" in payload:
-                    payload.pop("additional")
-                format_instance.payload = payload or None
-                format_instance.save(update_fields=["payload"])
+        try:
+            allele = AlleleFrequency.objects.create(
+                sample_group=sample_group,
+                chrom=chrom,
+                pos=pos,
+                variant_id=variant_id,
+                ref=ref,
+                alt=alt,
+                qual=qual,
+                filter=filter_value,
+                info=info,
+                format=format_instance,
+            )
 
-        return allele
+            if format_instance and format_sample:
+                payload: Dict[str, Any] = dict(format_instance.payload or {})
+                additional = dict(payload.get("additional") or {})
+                if additional.get("sample_id") != format_sample:
+                    additional["sample_id"] = format_sample
+                    if additional:
+                        payload["additional"] = additional
+                    elif "additional" in payload:
+                        payload.pop("additional")
+                    format_instance.payload = payload or None
+                    format_instance.save(update_fields=["payload"])
+
+            return allele
+        except IntegrityError as exc:
+            raise ValidationError(
+                f"The variant {variant_label} is already present in this dataset."
+            ) from exc
+        except DataError as exc:
+            raise ValidationError(
+                f"Variant {variant_label} contains out-of-range or invalid values."
+            ) from exc
 
 
 __all__ = [

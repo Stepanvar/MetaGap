@@ -574,24 +574,18 @@ def append_metadata_to_merged_vcf(
             for line in body_handle:
                 body_lines.append(line.rstrip("\n"))
 
-        is_gzipped_output = False
-        if merged_vcf.endswith(".vcf.gz"):
-            base = merged_vcf[: -len(".vcf.gz")]
-            final_vcf = f"{base}.anonymized.vcf.gz"
-            is_gzipped_output = True
-        else:
+        if not final_plain_vcf:
             base, ext = os.path.splitext(merged_vcf)
             if not ext:
                 ext = ".vcf"
-            final_vcf = f"{base}.anonymized{ext}"
+            final_plain_vcf = f"{base}.anonymized{ext}"
 
-        writer = gzip.open if is_gzipped_output else open
-        open_kwargs = {"mode": "wt", "encoding": "utf-8"} if is_gzipped_output else {"mode": "w", "encoding": "utf-8"}
-        with writer(final_vcf, **open_kwargs) as output_handle:
+        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
             for line in final_header_lines:
                 output_handle.write(line + "\n")
             for line in body_lines:
                 output_handle.write(line + "\n")
+        final_vcf = final_plain_vcf
     except Exception as exc:
         _cleanup_temp_files()
         if final_plain_vcf and os.path.exists(final_plain_vcf):
@@ -603,9 +597,12 @@ def append_metadata_to_merged_vcf(
             f"Failed to assemble final anonymized VCF contents: {exc}"
         )
 
-    if expects_gzip:
+    if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
         try:
             subprocess.run(["bgzip", "-f", final_plain_vcf], check=True)
+            compressed_path = f"{final_plain_vcf}.gz"
+            if os.path.exists(compressed_path):
+                final_vcf = compressed_path
             subprocess.run(["tabix", "-p", "vcf", "-f", final_vcf], check=True)
         except (subprocess.CalledProcessError, OSError) as exc:
             _cleanup_temp_files()

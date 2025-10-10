@@ -6,7 +6,9 @@ import copy
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from typing import Sequence
 
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -59,12 +61,12 @@ class _StubCall:
 class _StubRecord:
     """Simple record carrying FORMAT/call data for padding tests."""
 
-    def __init__(self, sample: str, genotype):
+    def __init__(self, sample: str, genotype, alt: Sequence[str] | None = None):
         self.CHROM = "1"
         self.POS = 100
         self.ID = "."
         self.REF = "A"
-        self.ALT = ["G"]
+        self.ALT = list(alt) if alt is not None else ["G"]
         self.QUAL = "."
         self.FILTER = []
         self.INFO = {}
@@ -148,6 +150,40 @@ def _header_with_formats(sample_names):
     header.get_format_field_info = _get_format_field_info
     header.copy = lambda: _header_with_formats(header.samples.names)
     return header
+
+
+def test_merge_colliding_records_recomputes_allele_metrics(monkeypatch):
+    header = _header_with_formats(["S1", "S2"])
+    sample_order = ["S1", "S2"]
+
+    monkeypatch.setattr(merging.vcfpy, "Call", _StubCall)
+
+    record_a = _StubRecord("S1", "0/1")
+    record_a.INFO.update({"AC": [99], "AN": 99, "AF": [0.99]})
+
+    record_b = _StubRecord("S2", "1/1")
+    record_b.INFO.update({"AC": [1], "AN": 2, "AF": [0.5]})
+
+    merged = merging._merge_colliding_records(
+        [(record_a, 0), (record_b, 1)], header, sample_order
+    )
+
+    merging._recompute_ac_an_af(merged)
+
+    assert merged.INFO["AC"] == [3]
+    assert merged.INFO["AN"] == 4
+    assert merged.INFO["AF"] == [pytest.approx(0.75)]
+
+    zero_alt = merged.copy()
+    zero_alt.INFO.update({"AC": [7], "AN": 8, "AF": [1.0]})
+    for call in zero_alt.calls:
+        call.data["GT"] = "./."
+
+    merging._recompute_ac_an_af(zero_alt)
+
+    assert zero_alt.INFO["AC"] == [0]
+    assert zero_alt.INFO["AN"] == 0
+    assert zero_alt.INFO["AF"] == [0.0]
 
 
 def test_pad_record_samples_adds_missing_calls(monkeypatch):

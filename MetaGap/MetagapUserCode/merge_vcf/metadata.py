@@ -8,7 +8,7 @@ import gzip
 import os
 import re
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import logging
 import subprocess
@@ -25,6 +25,11 @@ try:  # pragma: no cover - optional dependency
     import pysam
 except ImportError:  # pragma: no cover - exercised in environments without pysam
     pysam = None
+
+
+DEFAULT_QUAL_THRESHOLD: Optional[float] = 30.0
+DEFAULT_AN_THRESHOLD: Optional[float] = 50.0
+DEFAULT_ALLOWED_FILTER_VALUES: Tuple[str, ...] = ("PASS",)
 
 
 STANDARD_INFO_DEFINITIONS = OrderedDict(
@@ -573,6 +578,9 @@ def append_metadata_to_merged_vcf(
     sample_metadata_entries=None,
     header_metadata_lines=None,
     serialized_sample_line=None,
+    qual_threshold: Optional[float] = DEFAULT_QUAL_THRESHOLD,
+    an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
+    allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
     verbose: bool = False,
 ):
     """Finalize the merged VCF by applying in-Python processing and metadata."""
@@ -704,13 +712,39 @@ def append_metadata_to_merged_vcf(
 
     def _record_passes_filters(record, allele_number: int) -> bool:
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
-        if qual_value is None or qual_value <= 30:
-            return False
-        if allele_number <= 50:
-            return False
+        if qual_threshold is not None:
+            if qual_value is None or qual_value <= qual_threshold:
+                return False
+        if an_threshold is not None:
+            if allele_number is None or allele_number <= an_threshold:
+                return False
+
         filters = getattr(record, "FILTER", None)
-        filter_text = _normalize_filter(filters)
-        return filter_text == "PASS"
+
+        if allowed_filter_values is None:
+            return True
+
+        if filters in {None, [], (), "", "."}:
+            return True
+
+        if isinstance(filters, (list, tuple)):
+            filter_tokens = [token for token in filters if token not in {None, "", "."}]
+        else:
+            filter_tokens = [filters] if filters not in {None, "", "."} else []
+
+        if not filter_tokens:
+            return True
+
+        allowed = {
+            str(value)
+            for value in allowed_filter_values
+            if value not in {None, "", "."}
+        }
+
+        if not allowed:
+            return False
+
+        return all(str(token) in allowed for token in filter_tokens)
 
     def _serialize_record(record) -> str:
         alt_field = (

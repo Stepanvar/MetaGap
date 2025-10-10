@@ -15,11 +15,13 @@ Options:
                                 sample-specific or subset-only records.
   --start-pos POS  Override the starting position for the first variant.
   --step STEP      Override the distance between consecutive variants.
+  --samples COUNT  Number of sample VCFs to generate (default: 4).
   -h, --help       Display this help message and exit.
 
 The legacy positional arguments START_POS and STEP are still accepted for
 compatibility. Environment variables START_POS, STEP, MODE, and VARS_PER_FILE
-may also be set prior to invocation.
+may also be set prior to invocation. SAMPLE_COUNT can be used instead of
+--samples.
 USAGE
 }
 
@@ -35,6 +37,7 @@ fi
 
 MODE=${MODE:-shared}
 CHROM=20
+SAMPLE_COUNT=${SAMPLE_COUNT:-4}
 
 declare -a POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -52,6 +55,11 @@ while [[ $# -gt 0 ]]; do
     --step)
       [[ $# -ge 2 ]] || { echo "--step requires an argument" >&2; exit 1; }
       STEP=$2
+      shift 2
+      ;;
+    --samples)
+      [[ $# -ge 2 ]] || { echo "--samples requires an argument" >&2; exit 1; }
+      SAMPLE_COUNT=$2
       shift 2
       ;;
     -h|--help)
@@ -106,6 +114,10 @@ if ! [[ $SAMPLE_COUNT =~ ^[0-9]+$ ]] || (( SAMPLE_COUNT <= 0 )); then
   exit 1
 fi
 
+if (( VARS_PER_FILE_WAS_DEFAULT == 1 )) && [[ $MODE == partial ]]; then
+  VARS_PER_FILE=6
+fi
+
 REFS=(G T A C)
 ALTS=(A C G T)
 GENOTYPES=(0/0 0/1 1/1 ./.)
@@ -116,16 +128,10 @@ mk() {
   printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s\n' "$sample" >> "$out"
 }
 
-write_variants() {
-  local out=$1 sample=$2 recs_name=$3
-  local -n recs=$recs_name
-  if [[ ${#recs[@]} -gt VARS_PER_FILE ]]; then
-    echo "Expected at most ${VARS_PER_FILE} records for $sample but found ${#recs[@]}" >&2
-    exit 1
 generate_variant_fields() {
   local sample_idx=$1 variant_idx=$2
 
-  local id="rs$((6054257 + sample_idx * VARS_PER_FILE + variant_idx))"
+  local id="rs$((6054257 + variant_idx))"
   local ref=${REFS[variant_idx % ${#REFS[@]}]}
   local alt=${ALTS[((sample_idx + variant_idx) % ${#ALTS[@]})]}
   if [[ $alt == $ref ]]; then
@@ -150,13 +156,40 @@ generate_variant_fields() {
     "$id" "$ref" "$alt" "$qual" "$filter" "$info" "$format" "$sample_data"
 }
 
+should_include_variant() {
+  local sample_idx=$1 variant_idx=$2
+
+  if [[ $MODE == shared ]]; then
+    return 0
+  fi
+
+  local pattern=$((variant_idx % 3))
+  case $pattern in
+    0)
+      return 0
+      ;;
+    1)
+      if (( sample_idx % 2 == 1 )); then
+        return 0
+      fi
+      ;;
+    *)
+      local target_sample=$(( (variant_idx / 3) % SAMPLE_COUNT + 1 ))
+      if (( sample_idx == target_sample )); then
+        return 0
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
 write_variants() {
   local out=$1 sample=$2 sample_idx=$3
 
   mk "$out" "$sample"
   for ((i = 0; i < VARS_PER_FILE; i++)); do
-    local rec="${recs[$i]-}"
-    if [[ -z "$rec" ]]; then
+    if ! should_include_variant "$sample_idx" "$i"; then
       continue
     fi
     local pos=$((START_POS + i * STEP))

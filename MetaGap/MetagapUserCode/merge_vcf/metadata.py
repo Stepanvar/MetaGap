@@ -1,9 +1,16 @@
-"""Metadata helpers for augmenting merged VCF files."""
+"""Metadata helpers for augmenting merged VCF files.
+
+This module orchestrates the construction of VCF headers by combining CLI
+metadata with auto-generated INFO definitions and helper utilities for reading
+and writing VCF text streams. The helpers centralize tricky logic such as
+escaping header descriptions and de-duplicating metadata contributed by
+multiple sources so that downstream workflows can reuse the same guarantees.
+"""
 
 from __future__ import annotations
 
-import logging
-import copy
+import collections
+from collections.abc import MutableMapping
 import gzip
 import io
 import os
@@ -24,17 +31,28 @@ from .logging_utils import (
     log_message,
 )
 
+DEFAULT_QUAL_THRESHOLD = 30.0
+"""Minimum QUAL value required for a record to pass default filtering."""
+
+DEFAULT_AN_THRESHOLD = 50.0
+"""Minimum allele number required for a record to pass default filtering."""
+
 try:  # pragma: no cover - optional dependency
     import pysam
 except ImportError:  # pragma: no cover - exercised in environments without pysam
     pysam = None
 
 
+DEFAULT_QUAL_THRESHOLD: Optional[float] = 30.0
+DEFAULT_AN_THRESHOLD: Optional[float] = 50.0
+DEFAULT_ALLOWED_FILTER_VALUES: Tuple[str, ...] = ("PASS",)
+
+
 STANDARD_INFO_DEFINITIONS = OrderedDict(
     [
         (
             "AC",
-            OrderedDict(
+            collections.OrderedDict(
                 [
                     ("Number", "A"),
                     ("Type", "Integer"),
@@ -47,7 +65,7 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
         ),
         (
             "AN",
-            OrderedDict(
+            collections.OrderedDict(
                 [
                     ("Number", "1"),
                     ("Type", "Integer"),
@@ -57,7 +75,7 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
         ),
         (
             "AF",
-            OrderedDict(
+            collections.OrderedDict(
                 [
                     ("Number", "A"),
                     ("Type", "Float"),
@@ -74,12 +92,17 @@ FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
 CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
-def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:
+def _format_info_definition(
+    info_id: str, definition_mapping: collections.OrderedDict[str, object]
+) -> str:
     parts = [f"ID={info_id}"]
     for key, value in definition_mapping.items():
         if value is None:
             continue
         if key == "Description":
+            # Escape embedded quotes so the serialized INFO line survives a
+            # round-trip through vcfpy and pysam without corrupting the
+            # comma-delimited payload defined by the VCF specification.
             escaped_value = str(value).replace('"', '\\"')
             parts.append(f'Description="{escaped_value}"')
             continue
@@ -88,6 +111,14 @@ def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> st
 
 
 def ensure_standard_info_definitions(header, verbose: bool = False):
+    """Ensure AC/AN/AF INFO definitions exist on a ``vcfpy`` header object.
+
+    The helper inspects the mutable ``header`` supplied by ``vcfpy`` and
+    inserts definitions for the canonical AC, AN, and AF INFO tags when they are
+    absent. All operations are performed defensively so that environments
+    lacking ``vcfpy`` support can continue without modification.
+    """
+
     if not VCFPY_AVAILABLE:
         return header
 
@@ -106,7 +137,7 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
         if info_id in existing_ids:
             continue
 
-        mapping = OrderedDict([("ID", info_id)])
+        mapping = collections.OrderedDict([("ID", info_id)])
         mapping.update(definition)
 
         try:
@@ -146,6 +177,15 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
 def ensure_standard_info_header_lines(
     final_header_lines, existing_header_lines, verbose: bool = False
 ):
+    """Inject AC/AN/AF INFO lines into serialized header text when needed.
+
+    ``final_header_lines`` contains the mutable list of header strings that will
+    be written to disk, while ``existing_header_lines`` tracks the set of lines
+    already present. The helper mirrors :func:`ensure_standard_info_definitions`
+    but operates on raw strings so that code paths without ``vcfpy`` access can
+    benefit from the same guarantees.
+    """
+
     current_ids = set()
     for line in final_header_lines:
         if not isinstance(line, str):
@@ -161,6 +201,8 @@ def ensure_standard_info_header_lines(
 
         formatted = _format_info_definition(info_id, definition)
         if formatted in existing_header_lines:
+            # Header lines supplied by CLI metadata or pre-existing files must
+            # not be duplicated; mark the ID so later iterations skip it.
             current_ids.add(info_id)
             continue
 
@@ -180,6 +222,132 @@ def ensure_standard_info_header_lines(
     return final_header_lines
 
 
+def _open_vcf(path: str):
+    return (
+        gzip.open(path, "rt", encoding="utf-8")
+        if path.endswith(".gz")
+        else open(path, "r", encoding="utf-8")
+    )
+
+
+def _read_header_lines(path: str) -> List[str]:
+    header_lines: List[str] = []
+    with _open_vcf(path) as handle:
+        for raw in handle:
+            if not raw.startswith("#"):
+                break
+            header_lines.append(raw.rstrip("\n"))
+    return header_lines
+
+
+def _format_scalar(value) -> str:
+    if value is None:
+        return "."
+    if isinstance(value, float):
+        return "%g" % value
+    return str(value)
+
+
+def _serialize_info(info: OrderedDict) -> str:
+    entries = []
+    for key, value in info.items():
+        if value is None:
+            continue
+        if isinstance(value, list):
+            if not value:
+                serialized = "."
+            else:
+                serialized = ",".join(_format_scalar(item) for item in value)
+        else:
+            serialized = _format_scalar(value)
+        entries.append(f"{key}={serialized}")
+    return ";".join(entries) if entries else "."
+
+
+def _normalize_filter(field) -> str:
+    if field in {None, [], ["PASS"], "PASS"}:
+        return "PASS"
+    if isinstance(field, list):
+        return ";".join(str(entry) for entry in field)
+    return str(field)
+
+
+def _normalize_quality(qual_value):
+    if qual_value in {None, ".", ""}:
+        return None
+    try:
+        return float(qual_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_called_alleles(gt_value) -> List[int]:
+    if gt_value is None:
+        return []
+    if isinstance(gt_value, (list, tuple)):
+        tokens = []
+        for item in gt_value:
+            if item is None:
+                continue
+            tokens.extend(str(item).replace("|", "/").split("/"))
+    else:
+        tokens = str(gt_value).replace("|", "/").split("/")
+    allele_indices: List[int] = []
+    for token in tokens:
+        cleaned = token.strip()
+        if not cleaned or cleaned == ".":
+            continue
+        try:
+            allele_indices.append(int(cleaned))
+        except ValueError:
+            continue
+    return allele_indices
+
+
+def _serialize_record(record) -> str:
+    alt_values = getattr(record, "ALT", []) or []
+    alt_field = ",".join(str(alt) for alt in alt_values) if alt_values else "."
+    qual_value = _normalize_quality(getattr(record, "QUAL", None))
+    qual_field = _format_scalar(qual_value) if qual_value is not None else "."
+    info_field = _serialize_info(getattr(record, "INFO", OrderedDict()))
+    filter_field = _normalize_filter(getattr(record, "FILTER", None))
+    record_id = getattr(record, "ID", None)
+    if isinstance(record_id, list):
+        record_id_field = ";".join(str(entry) for entry in record_id)
+    else:
+        record_id_field = str(record_id or ".")
+    return "\t".join(
+        [
+            str(getattr(record, "CHROM", ".")),
+            str(getattr(record, "POS", ".")),
+            record_id_field,
+            str(getattr(record, "REF", ".")),
+            alt_field,
+            qual_field,
+            filter_field,
+            info_field,
+        ]
+    )
+
+
+def _cleanup_temp_files(
+    joint_temp: str, filtered_temp: str, verbose: bool = False
+) -> None:
+    for path in (joint_temp, filtered_temp):
+        if not path:
+            continue
+        if not os.path.exists(path):
+            continue
+        try:
+            os.remove(path)
+        except OSError as exc:  # pragma: no cover - defensive logging
+            log_message(
+                f"Failed to remove temporary file {path}: {exc}",
+                verbose,
+                level=logging.WARNING,
+            )
+
+
 def _format_sample_metadata_value(value: str) -> str:
     """Return a VCF-safe representation of the provided metadata value."""
 
@@ -190,6 +358,33 @@ def _format_sample_metadata_value(value: str) -> str:
 
     escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
     return f'"{escaped}"'
+
+
+def _open_vcf_stream(path: str):
+    """Return a text-mode handle for ``path`` that transparently handles gzip."""
+
+    return (
+        gzip.open(path, "rt", encoding="utf-8")
+        if path.endswith(".gz")
+        else open(path, "r", encoding="utf-8")
+    )
+
+
+def _read_vcf_header_lines(path: str) -> List[str]:
+    """Return the header lines from ``path`` without consuming variant records.
+
+    The function mirrors the streaming logic used in :func:`vcfpy.Reader` but
+    returns raw strings without trailing newlines so callers can merge them with
+    additional metadata before writing to disk.
+    """
+
+    header_lines: List[str] = []
+    with _open_vcf_stream(path) as handle:
+        for raw in handle:
+            if not raw.startswith("#"):
+                break
+            header_lines.append(raw.rstrip("\n"))
+    return header_lines
 
 
 def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
@@ -212,7 +407,7 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
-def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
+def _parse_sample_metadata_line(serialized: str) -> collections.OrderedDict[str, str]:
     """Return an ordered mapping extracted from a serialized ``##SAMPLE`` line."""
 
     if not isinstance(serialized, str):
@@ -225,10 +420,10 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
         raise ValueError("Serialized sample metadata must be in '##SAMPLE=<...>' format.")
 
     body = text[len(prefix) : -len(suffix)]
-    entries = OrderedDict()
+    entries = collections.OrderedDict()
 
-    token: List[str] = []
-    stack: List[str] = []
+    token: list[str] = []
+    stack: list[str] = []
     in_quotes = False
     escape = False
 
@@ -246,7 +441,7 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
             raise ValueError("SAMPLE metadata keys cannot be empty.")
         if len(value) >= 2 and value[0] == value[-1] == '"':
             inner = value[1:-1]
-            unescaped: List[str] = []
+            unescaped: list[str] = []
             i = 0
             while i < len(inner):
                 ch = inner[i]
@@ -311,7 +506,7 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
     return entries
 
 
-def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
+def _parse_simple_metadata_line(line: str) -> tuple[str, str] | None:
     stripped = line.strip()
     if not stripped.startswith("##") or "=" not in stripped:
         return None
@@ -324,8 +519,8 @@ def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
 
 
 def _load_metadata_template(
-    template_path: Optional[str], verbose: bool = False
-) -> Tuple[Optional["OrderedDict[str, str]"], List, List[str], Optional[str]]:
+    template_path: str | None, verbose: bool = False
+) -> tuple[collections.OrderedDict[str, str] | None, list, list[str], str | None]:
     """Return metadata derived from a user-supplied template header file."""
 
     if not template_path:
@@ -333,19 +528,17 @@ def _load_metadata_template(
 
     normalized_path = os.path.abspath(template_path)
     if not os.path.exists(normalized_path):
-        handle_critical_error(
-            f"Metadata template header file does not exist: {template_path}",
-            exc_cls=ValidationError,
+        raise ValidationError(
+            f"Metadata template header file does not exist: {template_path}"
         )
     if not os.path.isfile(normalized_path):
-        handle_critical_error(
-            f"Metadata template header path is not a file: {template_path}",
-            exc_cls=ValidationError,
+        raise ValidationError(
+            f"Metadata template header path is not a file: {template_path}"
         )
 
-    template_sample_mapping: Optional["OrderedDict[str, str]"] = None
-    template_serialized_sample: Optional[str] = None
-    sanitized_lines: List[str] = []
+    template_sample_mapping: collections.OrderedDict[str, str] | None = None
+    template_serialized_sample: str | None = None
+    sanitized_lines: list[str] = []
     simple_header_lines = []
     existing_simple = set()
     existing_sanitized = set()
@@ -372,11 +565,10 @@ def _load_metadata_template(
                     try:
                         parsed_sample = _parse_sample_metadata_line(stripped)
                     except ValueError as exc:
-                        handle_critical_error(
+                        raise ValidationError(
                             "Invalid SAMPLE metadata line in template "
-                            f"{normalized_path} line {line_number}: {exc}",
-                            exc_cls=ValidationError,
-                        )
+                            f"{normalized_path} line {line_number}: {exc}"
+                        ) from exc
                     if template_sample_mapping is not None:
                         log_message(
                             (
@@ -386,16 +578,15 @@ def _load_metadata_template(
                             verbose,
                             level=logging.WARNING,
                         )
-                    template_sample_mapping = OrderedDict(parsed_sample.items())
+                    template_sample_mapping = collections.OrderedDict(parsed_sample.items())
                     template_serialized_sample = stripped
                     continue
 
                 parsed = _parse_simple_metadata_line(stripped)
                 if not parsed:
-                    handle_critical_error(
+                    raise ValidationError(
                         "Metadata template lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}",
-                        exc_cls=ValidationError,
+                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}"
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -419,10 +610,9 @@ def _load_metadata_template(
                 simple_header_lines.append(simple_line)
                 existing_simple.add(identifier)
     except OSError as exc:
-        handle_critical_error(
-            f"Unable to read metadata template header file {template_path}: {exc}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(
+            f"Unable to read metadata template header file {template_path}: {exc}"
+        ) from exc
 
     log_message(
         f"Loaded metadata template header from {normalized_path}",
@@ -450,28 +640,19 @@ def _load_metadata_template(
     )
 
 
-def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
+def load_metadata_lines(metadata_file: str, verbose: bool = False) -> list[str]:
     """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
     if not metadata_file:
-        handle_critical_error(
-            "A metadata file path must be provided.",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError("A metadata file path must be provided.")
 
     normalized_path = os.path.abspath(metadata_file)
     if not os.path.exists(normalized_path):
-        handle_critical_error(
-            f"Metadata file does not exist: {metadata_file}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(f"Metadata file does not exist: {metadata_file}")
     if not os.path.isfile(normalized_path):
-        handle_critical_error(
-            f"Metadata file path is not a file: {metadata_file}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(f"Metadata file path is not a file: {metadata_file}")
 
-    sanitized_lines: List[str] = []
+    sanitized_lines: list[str] = []
     seen_lines = set()
 
     try:
@@ -484,10 +665,9 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                     stripped = "##" + stripped
                 parsed = _parse_simple_metadata_line(stripped)
                 if not parsed:
-                    handle_critical_error(
+                    raise ValidationError(
                         "Metadata file lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}",
-                        exc_cls=ValidationError,
+                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -496,10 +676,9 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                 sanitized_lines.append(sanitized)
                 seen_lines.add(sanitized)
     except OSError as exc:
-        handle_critical_error(
-            f"Unable to read metadata file {metadata_file}: {exc}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(
+            f"Unable to read metadata file {metadata_file}: {exc}"
+        ) from exc
 
     log_message(
         f"Loaded {len(sanitized_lines)} metadata header line(s) from {normalized_path}",
@@ -579,6 +758,9 @@ def append_metadata_to_merged_vcf(
     sample_metadata_entries=None,
     header_metadata_lines=None,
     serialized_sample_line=None,
+    qual_threshold: Optional[float] = DEFAULT_QUAL_THRESHOLD,
+    an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
+    allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
     verbose: bool = False,
 ):
     """Finalize the merged VCF by applying in-Python processing and metadata."""
@@ -593,8 +775,8 @@ def append_metadata_to_merged_vcf(
     filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
 
     expects_gzip = merged_vcf.endswith(".gz")
-    final_plain_vcf: Optional[str]
-    final_vcf: Optional[str]
+    final_plain_vcf: str | None
+    final_vcf: str | None
 
     if merged_vcf.endswith(".vcf.gz"):
         base_path = merged_vcf[: -len(".vcf.gz")]
@@ -613,18 +795,6 @@ def append_metadata_to_merged_vcf(
         else:
             final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
             final_vcf = final_plain_vcf
-
-    def _open_vcf(path):
-        return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, "r", encoding="utf-8")
-
-    def _read_header_lines(path: str) -> List[str]:
-        header_lines: List[str] = []
-        with _open_vcf(path) as handle:
-            for raw in handle:
-                if not raw.startswith("#"):
-                    break
-                header_lines.append(raw.rstrip("\n"))
-        return header_lines
 
     def _format_scalar(value) -> str:
         if value is None:
@@ -697,34 +867,55 @@ def append_metadata_to_merged_vcf(
 
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
-        ac = [0] * alt_count
-        an = 0
-        for call in getattr(record, "calls", []):
-            data = getattr(call, "data", {})
-            alleles = _extract_called_alleles(data.get("GT"))
-            for allele in alleles:
-                if allele is None:
-                    continue
-                if allele >= 0:
-                    an += 1
-                if 1 <= allele <= alt_count:
-                    ac[allele - 1] += 1
+        genotypes = (
+            getattr(call, "data", {}).get("GT")
+            for call in getattr(record, "calls", []) or []
+        )
+        ac, an, af = _compute_ac_an_af(genotypes, alt_count)
         info = getattr(record, "INFO", OrderedDict())
         info["AC"] = ac if alt_count else []
         info["AN"] = an
-        info["AF"] = [count / an for count in ac] if an else []
+        info["AF"] = af if an else []
         record.INFO = info
         return an
 
     def _record_passes_filters(record, allele_number: int) -> bool:
+        """Return whether a record satisfies the default QUAL and AN thresholds."""
+
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
-        if qual_value is None or qual_value <= 30:
-            return False
-        if allele_number <= 50:
-            return False
+        if qual_threshold is not None:
+            if qual_value is None or qual_value <= qual_threshold:
+                return False
+        if an_threshold is not None:
+            if allele_number is None or allele_number <= an_threshold:
+                return False
+
         filters = getattr(record, "FILTER", None)
-        filter_text = _normalize_filter(filters)
-        return filter_text == "PASS"
+
+        if allowed_filter_values is None:
+            return True
+
+        if filters in {None, [], (), "", "."}:
+            return True
+
+        if isinstance(filters, (list, tuple)):
+            filter_tokens = [token for token in filters if token not in {None, "", "."}]
+        else:
+            filter_tokens = [filters] if filters not in {None, "", "."} else []
+
+        if not filter_tokens:
+            return True
+
+        allowed = {
+            str(value)
+            for value in allowed_filter_values
+            if value not in {None, "", "."}
+        }
+
+        if not allowed:
+            return False
+
+        return all(str(token) in allowed for token in filter_tokens)
 
     def _serialize_record(record) -> str:
         alt_field = (
@@ -734,7 +925,9 @@ def append_metadata_to_merged_vcf(
         )
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
         qual_field = _format_scalar(qual_value) if qual_value is not None else "."
-        info_field = _serialize_info(getattr(record, "INFO", OrderedDict()))
+        info_field = _serialize_info(
+            getattr(record, "INFO", collections.OrderedDict())
+        )
         filter_field = _normalize_filter(getattr(record, "FILTER", None))
         record_id = getattr(record, "ID", None)
         if isinstance(record_id, list):
@@ -754,348 +947,188 @@ def append_metadata_to_merged_vcf(
             ]
         )
 
-    def _serialize_fields_without_vcfpy(
-        fields: List[str], *, enforce_filters: bool = True
-    ) -> Optional[str]:
-        if len(fields) < 8:
-            return None
+  def _iter_serialized_records_from_cut(path: str) -> list[str]:
+      """Fallback: use `cut` to strip FORMAT+sample columns. Returns only body lines."""
+      import subprocess
+      # `cut` cannot read gzip; defer to the pure-python fallback in that case.
+      if path.endswith((".gz", ".bgz", ".bgzip")):
+          return []
+      try:
+          res = subprocess.run(
+              ["cut", "-f", "1-8", path],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+      except (OSError, subprocess.CalledProcessError):
+          return []
+      return [ln.strip() for ln in res.stdout.splitlines() if ln.strip() and not ln.startswith("#")]
 
-        alt_tokens = [allele for allele in fields[4].split(",") if allele]
-        alt_counts = [0] * len(alt_tokens)
-        allele_number = 0
+  log_message("Recalculating AC, AN, AF tags across the merged cohort...", verbose, level=logging.DEBUG)
 
-        if len(fields) >= 10:
-            format_keys = fields[8].split(":") if fields[8] else []
-            try:
-                gt_index = format_keys.index("GT")
-            except ValueError:
-                gt_index = None
+  header_lines = _read_vcf_header_lines(merged_vcf)
+  fileformat_line = None
+  remaining_header_lines: list[str] = []
+  for line in header_lines:
+      stripped = line.strip()
+      if not stripped or stripped.startswith("#CHROM"):
+          continue
+      if stripped.startswith("##fileformat") and fileformat_line is None:
+          fileformat_line = stripped
+          continue
+      if stripped.startswith("##SAMPLE="):
+          continue
+      remaining_header_lines.append(stripped)
 
-            if gt_index is not None:
-                for sample_entry in fields[9:]:
-                    parts = sample_entry.split(":")
-                    if gt_index >= len(parts):
-                        continue
-                    genotype = parts[gt_index]
-                    if not genotype:
-                        continue
-                    tokens = genotype.replace("|", "/").split("/")
-                    for token in tokens:
-                        token = token.strip()
-                        if not token or token == ".":
-                            continue
-                        try:
-                            allele_index = int(token)
-                        except ValueError:
-                            continue
-                        if allele_index < 0:
-                            continue
-                        allele_number += 1
-                        if allele_index == 0:
-                            continue
-                        normalized_index = allele_index - 1
-                        if 0 <= normalized_index < len(alt_counts):
-                            alt_counts[normalized_index] += 1
+  final_header_lines: list[str] = []
+  final_header_lines.append(fileformat_line or "##fileformat=VCFv4.2")
+  final_header_lines.extend(remaining_header_lines)
+  existing_header_lines = set(final_header_lines)
 
-        info_field = fields[7]
-        info_map = {}
-        order = []
-        for entry in info_field.split(";"):
-            if not entry:
-                continue
-            if "=" in entry:
-                key, value = entry.split("=", 1)
-            else:
-                key, value = entry, ""
-            if key not in info_map:
-                order.append(key)
-            info_map[key] = value
+  ensure_standard_info_header_lines(final_header_lines, existing_header_lines, verbose=verbose)
 
-        info_map["AN"] = str(allele_number)
-        if alt_counts:
-            info_map["AC"] = ",".join(str(count) for count in alt_counts)
-            if allele_number > 0:
-                info_map["AF"] = ",".join(
-                    f"{count / allele_number:.6g}" for count in alt_counts
-                )
-            else:
-                info_map["AF"] = ",".join("0" for _ in alt_counts)
-        else:
-            info_map["AC"] = "."
-            info_map["AF"] = "."
+  if sample_metadata_entries:
+      try:
+          serialized_line = (
+              serialized_sample_line
+              if serialized_sample_line is not None
+              else build_sample_metadata_line(sample_metadata_entries)
+          )
+          if serialized_line not in existing_header_lines:
+              final_header_lines.append(serialized_line)
+              existing_header_lines.add(serialized_line)
+      except ValueError as exc:
+          handle_critical_error(str(exc))
 
-        for key in ("AC", "AN", "AF"):
-            if key not in order:
-                order.append(key)
+  for metadata_line in header_metadata_lines:
+      normalized = metadata_line.strip()
+      if not normalized:
+          continue
+      if not normalized.startswith("##"):
+          normalized = "##" + normalized
+      if normalized in existing_header_lines:
+          continue
+      final_header_lines.append(normalized)
+      existing_header_lines.add(normalized)
 
-        new_entries = []
-        for key in order:
-            value = info_map.get(key, "")
-            if value == "":
-                new_entries.append(f"{key}=")
-            else:
-                new_entries.append(f"{key}={value}")
-        fields[7] = ";".join(new_entries)
+  ensure_standard_info_header_lines(final_header_lines, existing_header_lines, verbose=verbose)
 
-        qual_value = _normalize_quality(fields[5])
-        if enforce_filters:
-            if qual_value is None or qual_value <= 30:
-                return None
-            if allele_number <= 50:
-                return None
-        elif qual_value is None:
-            qual_value = None
+  final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
 
-        raw_filter = fields[6]
-        if raw_filter in (None, "", ".", "PASS"):
-            filter_text = "PASS"
-        else:
-            filter_text = _normalize_filter(raw_filter.split(";"))
-        if enforce_filters and filter_text != "PASS":
-            return None
+  # ---- write anonymized VCF body ----
+  if not final_plain_vcf:
+      base, ext = os.path.splitext(merged_vcf)
+      if not ext:
+          ext = ".vcf"
+      final_plain_vcf = f"{base}.anonymized{ext}"
 
-        chrom = fields[0] or "."
-        pos = fields[1] or "."
-        record_id = fields[2] or "."
-        ref = fields[3] or "."
-        alt_field = fields[4] or "."
-        qual_field = _format_scalar(qual_value) if qual_value is not None else "."
+  reader = None
+  temp_output_path: Optional[str] = None
+  try:
+      import tempfile, shutil
+      output_dir = os.path.dirname(os.path.abspath(final_plain_vcf)) or None
+      with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=output_dir, suffix=".tmp") as outfh:
+          temp_output_path = outfh.name
+          # header
+          for line in final_header_lines:
+              outfh.write(line + "\n")
 
-        return "\t".join(
-            [
-                chrom,
-                pos,
-                record_id,
-                ref,
-                alt_field,
-                qual_field,
-                filter_text,
-                fields[7],
-            ]
-        )
+          # body: prefer vcfpy stream; fallback to cut; then to pure-python
+          stream_handle = None
+          stream_used = False
+          manual_iterator: Optional[list[str]] = None
+          try:
+              stream = _open_vcf(merged_vcf)
+              stream_handle = stream
+              try:
+                  reader = vcfpy.Reader.from_stream(stream)
+                  stream_used = True
+              except NotImplementedError:
+                  stream.close()
+                  stream_handle = None
+                  try:
+                      reader = vcfpy.Reader.from_path(merged_vcf)
+                  except Exception:
+                      reader = None
+                      lines = _iter_serialized_records_from_cut(merged_vcf)
+                      manual_iterator = lines if lines else _iter_serialized_records_without_vcfpy(merged_vcf)
+                  stream_used = False
+          except Exception:
+              if stream_handle is not None:
+                  try:
+                      stream_handle.close()
+                  except Exception:
+                      pass
+              raise
 
-    def _iter_serialized_records_without_vcfpy(path: str):
-        with _open_vcf(path) as handle:
-            for raw_line in handle:
-                if not raw_line or raw_line.startswith("#"):
-                    continue
-                line = raw_line.rstrip("\n")
-                if not line:
-                    continue
-                serialized = _serialize_fields_without_vcfpy(line.split("\t"))
-                if serialized:
-                    yield serialized
+          if manual_iterator is not None:
+              for serialized_line in manual_iterator:
+                  outfh.write(serialized_line + "\n")
+          else:
+              try:
+                  for record in reader:
+                      allele_number = _recalculate_info_fields(record)
+                      if not _record_passes_filters(record, allele_number):
+                          continue
+                      outfh.write(_serialize_record(record) + "\n")
+              finally:
+                  if stream_handle is not None and stream_used:
+                      try:
+                          stream_handle.close()
+                      except Exception:
+                          pass
+                      stream_handle = None
 
-    def _iter_serialized_records_from_cut() -> Iterable[str]:
-        try:
-            buffer = io.StringIO()
-            subprocess.run(
-                ["cut", "-f1-8"],
-                check=True,
-                stdout=buffer,
-            )
-        except (OSError, subprocess.CalledProcessError):
-            return []
+      shutil.move(temp_output_path, final_plain_vcf)
+      final_vcf = final_plain_vcf
 
-        contents = buffer.getvalue()
-        lines = []
-        for raw_line in contents.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            lines.append(line)
-        return lines
+  except Exception as exc:
+      if temp_output_path and os.path.exists(temp_output_path):
+          try:
+              os.remove(temp_output_path)
+          except Exception:
+              pass
+      if final_plain_vcf and os.path.exists(final_plain_vcf):
+          try:
+              os.remove(final_plain_vcf)
+          except Exception:
+              pass
+      handle_critical_error(
+          f"Failed to assemble final anonymized VCF contents: {exc}",
+          exc_cls=MergeConflictError,
+      )
+  finally:
+      if reader is not None:
+          try:
+              reader.close()
+          except Exception:
+              pass
 
-    log_message(
-        "Recalculating AC, AN, AF tags across the merged cohort...",
-        verbose,
-        level=logging.DEBUG,
-    )
+  # compress + index if requested
+  if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
+      if pysam is None:
+          _cleanup_temp_files(joint_temp, filtered_temp, verbose=verbose)
+          handle_critical_error("pysam is required to BGZF-compress and index the anonymized VCF.")
+      try:
+          final_vcf = f"{final_plain_vcf}.gz"
+          pysam.bgzip(final_plain_vcf, final_vcf, force=True)
+          pysam.tabix_index(final_vcf, preset="vcf", force=True)
+      except (OSError, ValueError) as exc:
+          _cleanup_temp_files(joint_temp, filtered_temp, verbose=verbose)
+          for p in (final_plain_vcf, final_vcf):
+              if p and os.path.exists(p):
+                  try:
+                      os.remove(p)
+                  except Exception:
+                      pass
+          handle_critical_error(f"Failed to compress or index anonymized VCF: {exc}", exc_cls=MergeConflictError)
+  else:
+      final_vcf = final_plain_vcf
 
-    header_lines = _read_header_lines(merged_vcf)
-    fileformat_line = None
-    remaining_header_lines: List[str] = []
-    for line in header_lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("#CHROM"):
-            continue
-        if stripped.startswith("##fileformat") and fileformat_line is None:
-            fileformat_line = stripped
-            continue
-        if stripped.startswith("##SAMPLE="):
-            continue
-        remaining_header_lines.append(stripped)
+  _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
+  log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose, level=logging.INFO)
+  return final_vcf
 
-    final_header_lines: List[str] = []
-    if fileformat_line is not None:
-        final_header_lines.append(fileformat_line)
-    else:
-        final_header_lines.append("##fileformat=VCFv4.2")
-    final_header_lines.extend(remaining_header_lines)
-    existing_header_lines = set(final_header_lines)
-
-    ensure_standard_info_header_lines(
-        final_header_lines, existing_header_lines, verbose=verbose
-    )
-
-    if sample_metadata_entries:
-        try:
-            serialized_line = (
-                serialized_sample_line
-                if serialized_sample_line is not None
-                else build_sample_metadata_line(sample_metadata_entries)
-            )
-            if serialized_line not in existing_header_lines:
-                final_header_lines.append(serialized_line)
-                existing_header_lines.add(serialized_line)
-        except ValueError as exc:
-            handle_critical_error(str(exc))
-
-    for metadata_line in header_metadata_lines:
-        normalized = metadata_line.strip()
-        if not normalized:
-            continue
-        if not normalized.startswith("##"):
-            normalized = "##" + normalized
-        if normalized in existing_header_lines:
-            continue
-        final_header_lines.append(normalized)
-        existing_header_lines.add(normalized)
-
-    ensure_standard_info_header_lines(
-        final_header_lines, existing_header_lines, verbose=verbose
-    )
-
-    final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
-
-    if not final_plain_vcf:
-        base, ext = os.path.splitext(merged_vcf)
-        if not ext:
-            ext = ".vcf"
-        final_plain_vcf = f"{base}.anonymized{ext}"
-
-    reader = None
-    temp_output_path: Optional[str] = None
-    try:
-        output_dir = os.path.dirname(os.path.abspath(final_plain_vcf)) or None
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", delete=False, dir=output_dir, suffix=".tmp"
-        ) as output_handle:
-            temp_output_path = output_handle.name
-            for line in final_header_lines:
-                output_handle.write(line + "\n")
-            stream_handle = None
-            stream_used = False
-            manual_iterator = None
-            try:
-                stream = _open_vcf(merged_vcf)
-                stream_handle = stream
-                try:
-                    reader = vcfpy.Reader.from_stream(stream)
-                    stream_used = True
-                except NotImplementedError:
-                    stream.close()
-                    stream_handle = None
-                    try:
-                        reader = vcfpy.Reader.from_path(merged_vcf)
-                    except Exception:
-                        reader = None
-                        cut_lines = _iter_serialized_records_from_cut()
-                        if cut_lines:
-                            manual_iterator = cut_lines
-                        else:
-                            manual_iterator = _iter_serialized_records_without_vcfpy(
-                                merged_vcf
-                            )
-                    stream_used = False
-            except Exception:
-                if stream_handle is not None:
-                    try:
-                        stream_handle.close()
-                    except Exception:
-                        pass
-                raise
-            if manual_iterator is not None:
-                for serialized_line in manual_iterator:
-                    output_handle.write(serialized_line + "\n")
-            else:
-                try:
-                    for record in reader:
-                        allele_number = _recalculate_info_fields(record)
-                        if not _record_passes_filters(record, allele_number):
-                            continue
-                        output_handle.write(_serialize_record(record) + "\n")
-                finally:
-                    if stream_handle is not None and stream_used:
-                        try:
-                            stream_handle.close()
-                        except Exception:
-                            pass
-                        stream_handle = None
-        shutil.move(temp_output_path, final_plain_vcf)
-        final_vcf = final_plain_vcf
-    except Exception as exc:
-        if temp_output_path and os.path.exists(temp_output_path):
-            try:
-                os.remove(temp_output_path)
-            except Exception:
-                pass
-        if final_plain_vcf and os.path.exists(final_plain_vcf):
-            try:
-                os.remove(final_plain_vcf)
-            except Exception:
-                pass
-        handle_critical_error(
-            f"Failed to assemble final anonymized VCF contents: {exc}",
-            exc_cls=MergeConflictError,
-        )
-    finally:
-        if reader is not None:
-            try:
-                reader.close()
-            except Exception:
-                pass
-
-    if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
-        if pysam is None:
-            _cleanup_temp_files()
-            handle_critical_error(
-                "pysam is required to BGZF-compress and index the anonymized VCF."
-            )
-
-        try:
-            final_vcf = f"{final_plain_vcf}.gz"
-            pysam.bgzip(final_plain_vcf, final_vcf, force=True)
-            pysam.tabix_index(final_vcf, preset="vcf", force=True)
-        except (OSError, ValueError) as exc:
-            _cleanup_temp_files()
-            if os.path.exists(final_plain_vcf):
-                try:
-                    os.remove(final_plain_vcf)
-                except Exception:
-                    pass
-            if final_vcf and os.path.exists(final_vcf):
-                try:
-                    os.remove(final_vcf)
-                except Exception:
-                    pass
-            handle_critical_error(
-                f"Failed to compress or index anonymized VCF: {exc}",
-                exc_cls=MergeConflictError,
-            )
-    elif not expects_gzip:
-        final_vcf = final_plain_vcf
-
-    _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
-
-    log_message(
-        f"Anonymized merged VCF written to: {final_vcf}",
-        verbose,
-        level=logging.INFO,
-    )
-    return final_vcf
 
 
 def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
@@ -1122,39 +1155,19 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
         for record in reader:
             info = dict(getattr(record, "INFO", {}) or {})
             alt_alleles = list(getattr(record, "ALT", []) or [])
-            alt_counts = [0] * len(alt_alleles)
-            allele_number = 0
-
-            for call in getattr(record, "calls", []) or []:
-                data = getattr(call, "data", {}) or {}
-                genotype = data.get("GT")
-                if not genotype:
-                    continue
-                tokens = genotype.replace("|", "/").split("/")
-                for token in tokens:
-                    token = token.strip()
-                    if not token or token == ".":
-                        continue
-                    try:
-                        allele_index = int(token)
-                    except ValueError:
-                        continue
-                    if allele_index < 0:
-                        continue
-                    allele_number += 1
-                    if allele_index == 0:
-                        continue
-                    normalized_index = allele_index - 1
-                    if 0 <= normalized_index < len(alt_counts):
-                        alt_counts[normalized_index] += 1
+            alt_count = len(alt_alleles)
+            genotypes = (
+                getattr(call, "data", {}).get("GT")
+                for call in getattr(record, "calls", []) or []
+            )
+            alt_counts, allele_number, allele_frequencies = _compute_ac_an_af(
+                genotypes, alt_count
+            )
 
             info["AN"] = allele_number
-            if alt_counts:
+            if alt_count:
                 info["AC"] = alt_counts
-                if allele_number > 0:
-                    info["AF"] = [count / allele_number for count in alt_counts]
-                else:
-                    info["AF"] = [0.0 for _ in alt_counts]
+                info["AF"] = allele_frequencies
             else:
                 info["AC"] = []
                 info["AF"] = []
@@ -1192,19 +1205,18 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
     try:
         input_handle = opener(vcf_path, "rt", encoding="utf-8")
     except OSError as exc:
-        handle_critical_error(
-            f"Failed to open {vcf_path}: {exc}",
-            exc_cls=MergeConflictError,
-        )
+        handle_critical_error(f"Failed to open {vcf_path}: {exc}", exc_cls=MergeConflictError)
         return
+
+    import tempfile
 
     temp_path: Optional[str] = None
     try:
         temp_dir = os.path.dirname(os.path.abspath(vcf_path)) or None
         try:
-            temp_file = tempfile.NamedTemporaryFile(
-                delete=False, dir=temp_dir, suffix=".tmp"
-            )
+            tmp = tempfile.NamedTemporaryFile(delete=False, dir=temp_dir, suffix=".tmp")
+            temp_path = tmp.name
+            tmp.close()
         except OSError as exc:
             try:
                 input_handle.close()
@@ -1215,33 +1227,33 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
                 exc_cls=MergeConflictError,
             )
             return
-        temp_path = temp_file.name
-        temp_file.close()
 
         column_header_found = False
         try:
-            with input_handle, writer_opener(temp_path, "wt", encoding="utf-8") as output_handle:
+            with input_handle, writer_opener(temp_path, "wt", encoding="utf-8") as out:
                 for raw_line in input_handle:
                     line = raw_line.rstrip("\n")
+                    if not line:
+                        continue
                     if line.startswith("##"):
-                        output_handle.write(line + "\n")
+                        out.write(line + "\n")
                         continue
                     if line.startswith("#CHROM"):
                         column_header_found = True
-                        output_handle.write(line + "\n")
-                        continue
-                    if not line:
+                        out.write(line + "\n")
                         continue
 
                     fields = line.split("\t")
                     if len(fields) < 8:
-                        output_handle.write(line + "\n")
+                        out.write(line + "\n")
                         continue
 
-                    alt_alleles = [allele for allele in fields[4].split(",") if allele]
+                    # ALT allele list
+                    alt_alleles = [a for a in fields[4].split(",") if a]
                     alt_counts = [0] * len(alt_alleles)
                     allele_number = 0
 
+                    # Extract GT from FORMAT and per-sample fields
                     if len(fields) >= 10:
                         format_keys = fields[8].split(":") if fields[8] else []
                         try:
@@ -1257,8 +1269,7 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
                                 genotype = parts[gt_index]
                                 if not genotype:
                                     continue
-                                tokens = genotype.replace("|", "/").split("/")
-                                for token in tokens:
+                                for token in genotype.replace("|", "/").split("/"):
                                     token = token.strip()
                                     if not token or token == ".":
                                         continue
@@ -1271,60 +1282,56 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
                                     allele_number += 1
                                     if allele_index == 0:
                                         continue
-                                    normalized_index = allele_index - 1
-                                    if 0 <= normalized_index < len(alt_counts):
-                                        alt_counts[normalized_index] += 1
+                                    idx = allele_index - 1
+                                    if 0 <= idx < len(alt_counts):
+                                        alt_counts[idx] += 1
 
-                    info_field = fields[7]
-                    info_map = {}
-                    order = []
-                    for entry in info_field.split(";"):
-                        if not entry:
-                            continue
-                        if "=" in entry:
-                            key, value = entry.split("=", 1)
-                        else:
-                            key, value = entry, ""
-                        if key not in info_map:
-                            order.append(key)
-                        info_map[key] = value
+                    # Parse existing INFO preserving order
+                    info_raw = fields[7] if len(fields) >= 8 else ""
+                    info_map: dict = {}
+                    order: List[str] = []
+                    if info_raw and info_raw != ".":
+                        for entry in info_raw.split(";"):
+                            if not entry:
+                                continue
+                            if "=" in entry:
+                                k, v = entry.split("=", 1)
+                            else:
+                                k, v = entry, ""
+                            if k not in info_map:
+                                order.append(k)
+                            info_map[k] = v
 
+                    # Update AN/AC/AF
                     info_map["AN"] = str(allele_number)
                     if alt_counts:
-                        info_map["AC"] = ",".join(str(count) for count in alt_counts)
+                        info_map["AC"] = ",".join(str(c) for c in alt_counts)
                         if allele_number > 0:
-                            info_map["AF"] = ",".join(
-                                f"{count / allele_number:.6g}" for count in alt_counts
-                            )
+                            info_map["AF"] = ",".join(f"{c / allele_number:.6g}" for c in alt_counts)
                         else:
                             info_map["AF"] = ",".join("0" for _ in alt_counts)
                     else:
                         info_map["AC"] = "."
                         info_map["AF"] = "."
 
-                    for key in ("AC", "AN", "AF"):
-                        if key not in order:
-                            order.append(key)
+                    for k in ("AC", "AN", "AF"):
+                        if k not in order:
+                            order.append(k)
 
-                    new_entries = []
-                    for key in order:
-                        value = info_map.get(key, "")
-                        if value == "":
-                            new_entries.append(f"{key}=")
-                        else:
-                            new_entries.append(f"{key}={value}")
-                    fields[7] = ";".join(new_entries)
-                    output_handle.write("\t".join(fields) + "\n")
+                    new_entries: List[str] = []
+                    for k in order:
+                        v = info_map.get(k, "")
+                        new_entries.append(f"{k}={v}" if v != "" else f"{k}=")
+
+                    fields[7] = ";".join(new_entries) if new_entries else "."
+                    out.write("\t".join(fields) + "\n")
         except OSError as exc:
             if temp_path and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
                 except Exception:
                     pass
-            handle_critical_error(
-                f"Failed to rewrite {vcf_path}: {exc}",
-                exc_cls=MergeConflictError,
-            )
+            handle_critical_error(f"Failed to rewrite {vcf_path}: {exc}", exc_cls=MergeConflictError)
             return
 
         if not column_header_found:
@@ -1347,10 +1354,7 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
                     os.remove(temp_path)
                 except Exception:
                     pass
-            handle_critical_error(
-                f"Failed to rewrite {vcf_path}: {exc}",
-                exc_cls=MergeConflictError,
-            )
+            handle_critical_error(f"Failed to rewrite {vcf_path}: {exc}", exc_cls=MergeConflictError)
             return
         finally:
             temp_path = None

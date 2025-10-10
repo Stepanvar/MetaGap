@@ -12,10 +12,6 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 
-class CriticalMetadataError(Exception):
-    """Raised when metadata parsing hits a critical error in tests."""
-
-
 @pytest.fixture
 def metadata_module(monkeypatch):
     """Return the metadata module with a stubbed ``vcfpy`` dependency."""
@@ -50,11 +46,6 @@ def metadata_module(monkeypatch):
     monkeypatch.setattr(module, "template_simple_lines", [], raising=False)
     monkeypatch.setattr(module, "template_header_lines", [], raising=False)
     monkeypatch.setattr(module, "template_serialized_sample", None, raising=False)
-
-    def raise_critical(message, **_kwargs):
-        raise CriticalMetadataError(message)
-
-    monkeypatch.setattr(module, "handle_critical_error", raise_critical, raising=False)
 
     return module
 
@@ -129,7 +120,7 @@ def test_parse_metadata_arguments_requires_id(metadata_module):
         header_metadata_lines=[],
     )
 
-    with pytest.raises(CriticalMetadataError) as excinfo:
+    with pytest.raises(module.ValidationError) as excinfo:
         module.parse_metadata_arguments(args, verbose=False)
 
     assert "non-empty ID" in str(excinfo.value)
@@ -144,7 +135,7 @@ def test_parse_metadata_arguments_rejects_malformed_header_line(metadata_module)
         header_metadata_lines=["Invalid header"],
     )
 
-    with pytest.raises(CriticalMetadataError) as excinfo:
+    with pytest.raises(module.ValidationError) as excinfo:
         module.parse_metadata_arguments(args, verbose=False)
 
     assert "##key=value" in str(excinfo.value)

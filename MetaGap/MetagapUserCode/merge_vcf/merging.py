@@ -168,6 +168,102 @@ def _pad_record_samples(record, header, sample_order: Sequence[str]) -> None:
     record.update_calls(updated_calls)
 
 
+def _record_passes_filters(
+    record,
+    qual_threshold: Optional[float],
+    an_threshold: Optional[float],
+    allowed_filter_values: Optional[Sequence[str]],
+) -> bool:
+    if qual_threshold is not None:
+        qual_value = getattr(record, "QUAL", None)
+        if qual_value is None:
+            return False
+        try:
+            numeric_qual = float(qual_value)
+        except (TypeError, ValueError):
+            return False
+        if numeric_qual <= qual_threshold:
+            return False
+
+    if an_threshold is not None:
+        an_value = record.INFO.get("AN")
+        if isinstance(an_value, list):
+            an_value = an_value[0] if an_value else None
+        try:
+            numeric_an = float(an_value) if an_value is not None else None
+        except (TypeError, ValueError):
+            numeric_an = None
+        if numeric_an is None or numeric_an <= an_threshold:
+            return False
+
+    filters = record.FILTER or []
+    if not filters:
+        return True
+
+    normalized_filters = []
+    for entry in filters:
+        if entry in {None, "", "."}:
+            continue
+        normalized_filters.append(entry)
+
+    if not normalized_filters:
+        return True
+
+    if allowed_filter_values is None:
+        allowed_filter_values = ("PASS",)
+
+    allowed_set = {value for value in allowed_filter_values if value not in {None, "", "."}}
+    return bool(allowed_set) and all(value in allowed_set for value in normalized_filters)
+
+
+def _filter_vcf_records(
+    input_path: str,
+    qual_threshold: Optional[float],
+    an_threshold: Optional[float],
+    allowed_filter_values: Optional[Sequence[str]],
+    verbose: bool,
+) -> None:
+    try:
+        reader = vcfpy.Reader.from_path(input_path)
+    except Exception as exc:
+        handle_critical_error(f"Failed to read VCF for filtering ({input_path}): {exc}")
+
+    tmp_filtered = input_path + ".filtered"
+    kept_records = 0
+    total_records = 0
+
+    try:
+        writer = vcfpy.Writer.from_path(tmp_filtered, reader.header)
+    except Exception as exc:
+        reader.close()
+        handle_critical_error(f"Failed to open filtered VCF writer ({input_path}): {exc}")
+
+    try:
+        for record in reader:
+            total_records += 1
+            if _record_passes_filters(
+                record,
+                qual_threshold=qual_threshold,
+                an_threshold=an_threshold,
+                allowed_filter_values=allowed_filter_values,
+            ):
+                writer.write_record(record)
+                kept_records += 1
+    finally:
+        reader.close()
+        writer.close()
+
+    shutil.move(tmp_filtered, input_path)
+
+    log_message(
+        (
+            "Applied in-memory variant quality filter: "
+            f"kept {kept_records} of {total_records} records."
+        ),
+        verbose,
+    )
+
+
 def merge_vcfs(
     valid_files: Sequence[str],
     output_dir: str,
@@ -175,6 +271,9 @@ def merge_vcfs(
     sample_order: Optional[Sequence[str]] = None,
     sample_header_line=None,
     simple_header_lines=None,
+    qual_threshold: Optional[float] = 30.0,
+    an_threshold: Optional[float] = 50.0,
+    allowed_filter_values: Optional[Sequence[str]] = ("PASS",),
 ) -> str:
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
@@ -259,6 +358,14 @@ def merge_vcfs(
     if res2.returncode != 0:
         handle_critical_error((res2.stderr or "bcftools +fill-tags failed").strip())
     shutil.move(filled_vcf, base_vcf)
+
+    _filter_vcf_records(
+        base_vcf,
+        qual_threshold=qual_threshold,
+        an_threshold=an_threshold,
+        allowed_filter_values=allowed_filter_values,
+        verbose=verbose,
+    )
 
     log_message("Compressing and indexing the final VCF...", verbose)
     try:
@@ -386,4 +493,6 @@ __all__ = [
     "_create_missing_call_factory",
     "_remove_format_and_sample_definitions",
     "_pad_record_samples",
+    "_filter_vcf_records",
+    "_record_passes_filters",
 ]

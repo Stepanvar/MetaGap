@@ -330,14 +330,12 @@ def _load_metadata_template(
 
     normalized_path = os.path.abspath(template_path)
     if not os.path.exists(normalized_path):
-        handle_critical_error(
-            f"Metadata template header file does not exist: {template_path}",
-            exc_cls=ValidationError,
+        raise ValidationError(
+            f"Metadata template header file does not exist: {template_path}"
         )
     if not os.path.isfile(normalized_path):
-        handle_critical_error(
-            f"Metadata template header path is not a file: {template_path}",
-            exc_cls=ValidationError,
+        raise ValidationError(
+            f"Metadata template header path is not a file: {template_path}"
         )
 
     template_sample_mapping: Optional["OrderedDict[str, str]"] = None
@@ -369,11 +367,10 @@ def _load_metadata_template(
                     try:
                         parsed_sample = _parse_sample_metadata_line(stripped)
                     except ValueError as exc:
-                        handle_critical_error(
+                        raise ValidationError(
                             "Invalid SAMPLE metadata line in template "
-                            f"{normalized_path} line {line_number}: {exc}",
-                            exc_cls=ValidationError,
-                        )
+                            f"{normalized_path} line {line_number}: {exc}"
+                        ) from exc
                     if template_sample_mapping is not None:
                         log_message(
                             (
@@ -389,10 +386,9 @@ def _load_metadata_template(
 
                 parsed = _parse_simple_metadata_line(stripped)
                 if not parsed:
-                    handle_critical_error(
+                    raise ValidationError(
                         "Metadata template lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}",
-                        exc_cls=ValidationError,
+                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}"
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -416,10 +412,9 @@ def _load_metadata_template(
                 simple_header_lines.append(simple_line)
                 existing_simple.add(identifier)
     except OSError as exc:
-        handle_critical_error(
-            f"Unable to read metadata template header file {template_path}: {exc}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(
+            f"Unable to read metadata template header file {template_path}: {exc}"
+        ) from exc
 
     log_message(
         f"Loaded metadata template header from {normalized_path}",
@@ -451,22 +446,13 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
     """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
     if not metadata_file:
-        handle_critical_error(
-            "A metadata file path must be provided.",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError("A metadata file path must be provided.")
 
     normalized_path = os.path.abspath(metadata_file)
     if not os.path.exists(normalized_path):
-        handle_critical_error(
-            f"Metadata file does not exist: {metadata_file}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(f"Metadata file does not exist: {metadata_file}")
     if not os.path.isfile(normalized_path):
-        handle_critical_error(
-            f"Metadata file path is not a file: {metadata_file}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(f"Metadata file path is not a file: {metadata_file}")
 
     sanitized_lines: List[str] = []
     seen_lines = set()
@@ -481,10 +467,9 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                     stripped = "##" + stripped
                 parsed = _parse_simple_metadata_line(stripped)
                 if not parsed:
-                    handle_critical_error(
+                    raise ValidationError(
                         "Metadata file lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}",
-                        exc_cls=ValidationError,
+                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -493,10 +478,9 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                 sanitized_lines.append(sanitized)
                 seen_lines.add(sanitized)
     except OSError as exc:
-        handle_critical_error(
-            f"Unable to read metadata file {metadata_file}: {exc}",
-            exc_cls=ValidationError,
-        )
+        raise ValidationError(
+            f"Unable to read metadata file {metadata_file}: {exc}"
+        ) from exc
 
     log_message(
         f"Loaded {len(sanitized_lines)} metadata header line(s) from {normalized_path}",

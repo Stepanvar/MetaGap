@@ -25,7 +25,114 @@
             }
 
             $resultsTable.DataTable({
-                dom: 'lrtip'
+                dom: 'lrtip',
+                orderCellsTop: true,
+                initComplete: function () {
+                    var api = this.api();
+                    var tableNode = api.table().node();
+                    var $tableNode = $(tableNode);
+                    var $header = $tableNode.find('thead');
+
+                    if ($header.length === 0) {
+                        return;
+                    }
+
+                    var $existingFilterRow = $header.find('tr.dataTable-filter-row');
+                    if ($existingFilterRow.length) {
+                        $existingFilterRow.remove();
+                    }
+
+                    var $filterRow = $('<tr class="dataTable-filter-row"></tr>');
+                    var escapeRegex = $.fn.dataTable.util.escapeRegex;
+
+                    api.columns().every(function (index) {
+                        var column = this;
+                        var $headerCell = $(column.header());
+                        var columnTitle = $headerCell.text().trim() || ('Column ' + (index + 1));
+                        var filterId = 'column-filter-' + index;
+                        var $cell = $('<th scope="col"></th>');
+                        var uniqueValues = [];
+
+                        column.data().each(function (value) {
+                            if (uniqueValues.length >= 50) {
+                                return;
+                            }
+
+                            if (value === null || value === undefined) {
+                                return;
+                            }
+
+                            var stringValue = value;
+                            if (typeof stringValue !== 'string') {
+                                stringValue = stringValue.toString();
+                            }
+
+                            stringValue = $('<div>').html(stringValue).text().trim();
+
+                            if (stringValue && uniqueValues.indexOf(stringValue) === -1) {
+                                uniqueValues.push(stringValue);
+                            }
+                        });
+
+                        uniqueValues.sort(function (a, b) {
+                            return a.localeCompare(b, undefined, { sensitivity: 'base' });
+                        });
+
+                        var useSelect = uniqueValues.length > 0 && uniqueValues.length <= 20;
+                        var $control;
+
+                        if (useSelect) {
+                            $control = $('<select class="form-select form-select-sm"></select>');
+                            $control.append('<option value="">All</option>');
+
+                            uniqueValues.forEach(function (optionValue) {
+                                var escapedValue = $('<div>').text(optionValue).html();
+                                $control.append('<option value="' + escapedValue + '">' + escapedValue + '</option>');
+                            });
+
+                            $control.on('change', function () {
+                                var val = $(this).val();
+                                if (val) {
+                                    column.search('^' + escapeRegex(val) + '$', true, false).draw();
+                                } else {
+                                    column.search('').draw();
+                                }
+                            });
+                        } else {
+                            $control = $('<input type="search" class="form-control form-control-sm">');
+                            $control.attr('placeholder', 'Filter ' + columnTitle);
+
+                            $control.on('input', function () {
+                                column.search(this.value).draw();
+                            });
+                        }
+
+                        $control.attr({
+                            id: filterId,
+                            'aria-label': 'Filter ' + columnTitle + ' column'
+                        });
+
+                        var $label = $('<label class="visually-hidden" for="' + filterId + '"></label>').text('Filter ' + columnTitle);
+
+                        $cell.append($label).append($control);
+                        $filterRow.append($cell);
+                    });
+
+                    $header.append($filterRow);
+                    $tableNode.attr('aria-describedby', function (idx, current) {
+                        var helperId = 'column-filter-help';
+                        if (!current) {
+                            return helperId;
+                        }
+
+                        var ids = current.split(/\s+/);
+                        if (ids.indexOf(helperId) === -1) {
+                            ids.push(helperId);
+                        }
+
+                        return ids.join(' ');
+                    });
+                }
             });
         }
 
@@ -161,6 +268,8 @@
     {% if request.GET.query %}
         <p class="text-muted">Showing results for "{{ request.GET.query }}"</p>
     {% endif %}
+
+    <p class="text-muted small" id="column-filter-help">Use the column filters below to narrow results. Clear a filter by removing its text or selecting "All" in dropdowns.</p>
 
     <div class="table-responsive">
         {% render_table table %}

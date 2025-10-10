@@ -7,27 +7,14 @@ workflows.
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
 
-MODULE_PATH = Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
-
-
-def load_user_module():
-    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)  # type: ignore[call-arg]
-    return module
-
-
-_module = load_user_module()
-pytestmark = pytest.mark.skipif(
-    not getattr(_module, "VCFPY_AVAILABLE", True),
-    reason="vcfpy dependency is required for sample metadata tests",
-)
+@pytest.fixture(autouse=True)
+def _skip_without_vcfpy(merge_script_module):
+    if not getattr(merge_script_module, "VCFPY_AVAILABLE", True):
+        pytest.skip("vcfpy dependency is required for sample metadata tests")
 
 
 def _copy_fixture(tmp_path: Path, name: str) -> Path:
@@ -37,8 +24,8 @@ def _copy_fixture(tmp_path: Path, name: str) -> Path:
     return destination
 
 
-def test_validate_vcf_flags_missing_sample_id(tmp_path, monkeypatch):
-    module = load_user_module()
+def test_validate_vcf_flags_missing_sample_id(tmp_path, monkeypatch, merge_script_module):
+    module = merge_script_module
 
     shard = _copy_fixture(tmp_path, "malformed_sample_metadata.vcf")
 
@@ -55,8 +42,10 @@ def test_validate_vcf_flags_missing_sample_id(tmp_path, monkeypatch):
     assert any("Missing key \"ID\"" in message for message in messages)
 
 
-def test_validate_all_vcfs_skips_malformed_sample_metadata(tmp_path, monkeypatch):
-    module = load_user_module()
+def test_validate_all_vcfs_skips_malformed_sample_metadata(
+    tmp_path, monkeypatch, merge_script_module
+):
+    module = merge_script_module
 
     good_text = "\n".join(
         [

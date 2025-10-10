@@ -31,7 +31,11 @@ def _build_args(input_dir, output_dir, allow_gvcf):
     )
 
 
-def test_cli_accepts_gvcf_when_flag_enabled(monkeypatch, cli_module, gvcf_inputs):
+@pytest.mark.parametrize("merge_script_module", ["cli"], indirect=True)
+def test_cli_accepts_gvcf_when_flag_enabled(
+    monkeypatch, merge_script_module, gvcf_inputs
+):
+    cli_module = merge_script_module
     gvcf_path, input_dir, output_dir = gvcf_inputs
     recorded = {}
 
@@ -84,7 +88,11 @@ def test_cli_accepts_gvcf_when_flag_enabled(monkeypatch, cli_module, gvcf_inputs
     assert recorded["valid_files"] == recorded["validated_files"]
 
 
-def test_cli_rejects_gvcf_without_flag(monkeypatch, cli_module, gvcf_inputs, capsys):
+@pytest.mark.parametrize("merge_script_module", ["cli"], indirect=True)
+def test_cli_rejects_gvcf_without_flag(
+    monkeypatch, merge_script_module, gvcf_inputs, capsys
+):
+    cli_module = merge_script_module
     _, input_dir, output_dir = gvcf_inputs
 
     monkeypatch.setattr(

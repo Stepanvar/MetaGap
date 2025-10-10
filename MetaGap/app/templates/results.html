@@ -48,112 +48,162 @@
 
     {% if filter_form %}
         <form method="get" action="{% url 'search_results' %}" class="mb-4" novalidate>
-            <div class="card border-0 shadow-sm mb-3">
-                <div class="card-header filter-card-header fw-semibold">Variant filters</div>
-                <div class="card-body">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-4">
-                            <label class="form-label" for="{{ filter_form.query.id_for_label }}">{{ filter_form.query.label }}</label>
-                            {{ filter_form.query }}
-                            {{ filter_form.query.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.chrom.id_for_label }}">{{ filter_form.chrom.label }}</label>
-                            {{ filter_form.chrom }}
-                            {{ filter_form.chrom.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.pos_min.id_for_label }}">{{ filter_form.pos_min.label }}</label>
-                            {{ filter_form.pos_min }}
-                            {{ filter_form.pos_min.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.pos_max.id_for_label }}">{{ filter_form.pos_max.label }}</label>
-                            {{ filter_form.pos_max }}
-                            {{ filter_form.pos_max.errors }}
-                        </div>
-                        <div class="col-md-1">
-                            <label class="form-label" for="{{ filter_form.ref.id_for_label }}">{{ filter_form.ref.label }}</label>
-                            {{ filter_form.ref }}
-                            {{ filter_form.ref.errors }}
-                        </div>
-                        <div class="col-md-1">
-                            <label class="form-label" for="{{ filter_form.alt.id_for_label }}">{{ filter_form.alt.label }}</label>
-                            {{ filter_form.alt }}
-                            {{ filter_form.alt.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <div class="form-check mt-4">
-                                {{ filter_form.pass_only }}
-                                <label class="form-check-label" for="{{ filter_form.pass_only.id_for_label }}">{{ filter_form.pass_only.label }}</label>
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                <button
+                    class="btn btn-outline-secondary"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#advancedFiltersCollapse"
+                    aria-expanded="false"
+                    aria-controls="advancedFiltersCollapse"
+                >
+                    Advanced filters
+                </button>
+                <div class="ms-auto d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">Apply filters</button>
+                    <a href="{% url 'search_results' %}" class="btn btn-outline-secondary">Clear</a>
+                </div>
+            </div>
+
+            <div class="collapse" id="advancedFiltersCollapse">
+                <div class="accordion" id="advancedFiltersAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="variantFiltersHeading">
+                            <button
+                                class="accordion-button"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#variantFilters"
+                                aria-expanded="true"
+                                aria-controls="variantFilters"
+                            >
+                                Variant filters
+                            </button>
+                        </h2>
+                        <div
+                            id="variantFilters"
+                            class="accordion-collapse collapse show"
+                            data-bs-parent="#advancedFiltersAccordion"
+                        >
+                            <div class="accordion-body">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="{{ filter_form.query.id_for_label }}">{{ filter_form.query.label }}</label>
+                                        {{ filter_form.query }}
+                                        {{ filter_form.query.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.chrom.id_for_label }}">{{ filter_form.chrom.label }}</label>
+                                        {{ filter_form.chrom }}
+                                        {{ filter_form.chrom.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.pos_min.id_for_label }}">{{ filter_form.pos_min.label }}</label>
+                                        {{ filter_form.pos_min }}
+                                        {{ filter_form.pos_min.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.pos_max.id_for_label }}">{{ filter_form.pos_max.label }}</label>
+                                        {{ filter_form.pos_max }}
+                                        {{ filter_form.pos_max.errors }}
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label" for="{{ filter_form.ref.id_for_label }}">{{ filter_form.ref.label }}</label>
+                                        {{ filter_form.ref }}
+                                        {{ filter_form.ref.errors }}
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label" for="{{ filter_form.alt.id_for_label }}">{{ filter_form.alt.label }}</label>
+                                        {{ filter_form.alt }}
+                                        {{ filter_form.alt.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-check mt-4">
+                                            {{ filter_form.pass_only }}
+                                            <label class="form-check-label" for="{{ filter_form.pass_only.id_for_label }}">{{ filter_form.pass_only.label }}</label>
+                                        </div>
+                                        {{ filter_form.pass_only.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.qual_min.id_for_label }}">{{ filter_form.qual_min.label }}</label>
+                                        {{ filter_form.qual_min }}
+                                        {{ filter_form.qual_min.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.af_min.id_for_label }}">{{ filter_form.af_min.label }}</label>
+                                        {{ filter_form.af_min }}
+                                        {{ filter_form.af_min.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.ac_min.id_for_label }}">{{ filter_form.ac_min.label }}</label>
+                                        {{ filter_form.ac_min }}
+                                        {{ filter_form.ac_min.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.an_min.id_for_label }}">{{ filter_form.an_min.label }}</label>
+                                        {{ filter_form.an_min }}
+                                        {{ filter_form.an_min.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.dp_min.id_for_label }}">{{ filter_form.dp_min.label }}</label>
+                                        {{ filter_form.dp_min }}
+                                        {{ filter_form.dp_min.errors }}
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" for="{{ filter_form.mq_min.id_for_label }}">{{ filter_form.mq_min.label }}</label>
+                                        {{ filter_form.mq_min }}
+                                        {{ filter_form.mq_min.errors }}
+                                    </div>
+                                </div>
                             </div>
-                            {{ filter_form.pass_only.errors }}
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.qual_min.id_for_label }}">{{ filter_form.qual_min.label }}</label>
-                            {{ filter_form.qual_min }}
-                            {{ filter_form.qual_min.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.af_min.id_for_label }}">{{ filter_form.af_min.label }}</label>
-                            {{ filter_form.af_min }}
-                            {{ filter_form.af_min.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.ac_min.id_for_label }}">{{ filter_form.ac_min.label }}</label>
-                            {{ filter_form.ac_min }}
-                            {{ filter_form.ac_min.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.an_min.id_for_label }}">{{ filter_form.an_min.label }}</label>
-                            {{ filter_form.an_min }}
-                            {{ filter_form.an_min.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.dp_min.id_for_label }}">{{ filter_form.dp_min.label }}</label>
-                            {{ filter_form.dp_min }}
-                            {{ filter_form.dp_min.errors }}
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="{{ filter_form.mq_min.id_for_label }}">{{ filter_form.mq_min.label }}</label>
-                            {{ filter_form.mq_min }}
-                            {{ filter_form.mq_min.errors }}
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="metadataFiltersHeading">
+                            <button
+                                class="accordion-button collapsed"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#metadataFilters"
+                                aria-expanded="false"
+                                aria-controls="metadataFilters"
+                            >
+                                Metadata filters
+                            </button>
+                        </h2>
+                        <div
+                            id="metadataFilters"
+                            class="accordion-collapse collapse"
+                            data-bs-parent="#advancedFiltersAccordion"
+                        >
+                            <div class="accordion-body">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label" for="{{ filter_form.sample_group_name.id_for_label }}">{{ filter_form.sample_group_name.label }}</label>
+                                        {{ filter_form.sample_group_name }}
+                                        {{ filter_form.sample_group_name.errors }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" for="{{ filter_form.sample_group_source_lab.id_for_label }}">{{ filter_form.sample_group_source_lab.label }}</label>
+                                        {{ filter_form.sample_group_source_lab }}
+                                        {{ filter_form.sample_group_source_lab.errors }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" for="{{ filter_form.sample_origin_tissue.id_for_label }}">{{ filter_form.sample_origin_tissue.label }}</label>
+                                        {{ filter_form.sample_origin_tissue }}
+                                        {{ filter_form.sample_origin_tissue.errors }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" for="{{ filter_form.variant_calling_tool.id_for_label }}">{{ filter_form.variant_calling_tool.label }}</label>
+                                        {{ filter_form.variant_calling_tool }}
+                                        {{ filter_form.variant_calling_tool.errors }}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="card border-0 shadow-sm mb-3">
-                <div class="card-header filter-card-header fw-semibold">Metadata filters</div>
-                <div class="card-body">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label" for="{{ filter_form.sample_group_name.id_for_label }}">{{ filter_form.sample_group_name.label }}</label>
-                            {{ filter_form.sample_group_name }}
-                            {{ filter_form.sample_group_name.errors }}
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="{{ filter_form.sample_group_source_lab.id_for_label }}">{{ filter_form.sample_group_source_lab.label }}</label>
-                            {{ filter_form.sample_group_source_lab }}
-                            {{ filter_form.sample_group_source_lab.errors }}
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="{{ filter_form.sample_origin_tissue.id_for_label }}">{{ filter_form.sample_origin_tissue.label }}</label>
-                            {{ filter_form.sample_origin_tissue }}
-                            {{ filter_form.sample_origin_tissue.errors }}
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="{{ filter_form.variant_calling_tool.id_for_label }}">{{ filter_form.variant_calling_tool.label }}</label>
-                            {{ filter_form.variant_calling_tool }}
-                            {{ filter_form.variant_calling_tool.errors }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Apply filters</button>
-                <a href="{% url 'search_results' %}" class="btn btn-outline-secondary">Clear</a>
             </div>
         </form>
     {% endif %}

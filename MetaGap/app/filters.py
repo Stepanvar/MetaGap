@@ -323,7 +323,8 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
 
     def filter_pass_only(self, queryset, name, value):
         truthy_values = {True, "True", "true", "1", 1, "on", "ON", "On"}
-        if value in truthy_values:
+        raw_value = self.data.get(name)
+        if value in truthy_values or raw_value in truthy_values:
             return queryset.filter(filter__iexact="PASS")
         return queryset
 
@@ -361,6 +362,7 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
                 widget.attrs["class"] = self._merge_css_classes(
                     existing, "form-check-input"
                 )
+                widget.attrs.setdefault("value", "True")
             else:
                 existing = widget.attrs.get("class", "")
                 widget.attrs["class"] = self._merge_css_classes(

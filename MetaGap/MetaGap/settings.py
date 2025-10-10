@@ -150,3 +150,36 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = 'profile'
 LOGOUT_REDIRECT_URL = 'home'
 WHITENOISE_MANIFEST_STRICT = False
+
+# Logging
+# ------
+# When ``DEBUG`` is ``False`` Django will stop rendering its detailed error
+# pages and users will only see the generic 500 page.  We still want the full
+# traceback to appear in the application logs so developers can investigate
+# issues without enabling debug mode in production.  The configuration below
+# sends structured log messages to stdout and makes sure request exceptions are
+# always recorded together with their traceback information.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        }
+    },
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        }
+    },
+}

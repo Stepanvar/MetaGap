@@ -183,6 +183,10 @@ class SampleGroupViewMatrixMixin(SampleGroupTestDataMixin):
         ) = self.create_sample_group_with_variant(
             self.intruder, name="Matrix Intruder Cohort"
         )
+        # Provide commonly used aliases for compatibility with existing tests.
+        self.sample_group = self.owned_group
+        self.allele = self.owned_allele
+        self.other_user = self.intruder
 
     def _resolve_url(self, candidates, *args) -> str:
         for name in candidates:

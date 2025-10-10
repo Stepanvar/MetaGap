@@ -8,7 +8,7 @@ import gzip
 import os
 import re
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import logging
 import subprocess
@@ -187,6 +187,55 @@ def _format_sample_metadata_value(value: str) -> str:
 
     escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
     return f'"{escaped}"'
+
+
+def _extract_called_alleles(gt_value) -> List[int]:
+    if gt_value is None:
+        return []
+    if isinstance(gt_value, (list, tuple)):
+        tokens: List[str] = []
+        for item in gt_value:
+            if item is None:
+                continue
+            tokens.extend(str(item).replace("|", "/").split("/"))
+    else:
+        tokens = str(gt_value).replace("|", "/").split("/")
+
+    allele_indices: List[int] = []
+    for token in tokens:
+        cleaned = token.strip()
+        if not cleaned or cleaned == ".":
+            continue
+        try:
+            allele_indices.append(int(cleaned))
+        except ValueError:
+            continue
+    return allele_indices
+
+
+def _compute_ac_an_af(genotypes: Iterable, alt_count: int) -> Tuple[List[int], int, List[float]]:
+    ac = [0] * alt_count
+    an = 0
+
+    for genotype in genotypes:
+        for allele in _extract_called_alleles(genotype):
+            if allele is None or allele < 0:
+                continue
+            an += 1
+            if allele == 0:
+                continue
+            index = allele - 1
+            if 0 <= index < alt_count:
+                ac[index] += 1
+
+    if alt_count == 0:
+        af: List[float] = []
+    elif an > 0:
+        af = [count / an for count in ac]
+    else:
+        af = [0.0 for _ in ac]
+
+    return ac, an, af
 
 
 def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
@@ -657,22 +706,6 @@ def append_metadata_to_merged_vcf(
         except (TypeError, ValueError):
             return None
 
-    def _extract_called_alleles(gt_value) -> List[int]:
-        if gt_value is None:
-            return []
-        if isinstance(gt_value, (list, tuple)):
-            tokens = []
-            for item in gt_value:
-                if item is None:
-                    continue
-                tokens.extend(str(item).replace("|", "/").split("/"))
-        else:
-            tokens = str(gt_value).replace("|", "/").split("/")
-        allele_indices: List[int] = []
-        for token in tokens:
-            cleaned = token.strip()
-            if not cleaned or cleaned == ".":
-                continue
     def _cleanup_temp_files():
         for path in [joint_temp, filtered_temp]:
             try:
@@ -683,22 +716,15 @@ def append_metadata_to_merged_vcf(
 
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
-        ac = [0] * alt_count
-        an = 0
-        for call in getattr(record, "calls", []):
-            data = getattr(call, "data", {})
-            alleles = _extract_called_alleles(data.get("GT"))
-            for allele in alleles:
-                if allele is None:
-                    continue
-                if allele >= 0:
-                    an += 1
-                if 1 <= allele <= alt_count:
-                    ac[allele - 1] += 1
+        genotypes = (
+            getattr(call, "data", {}).get("GT")
+            for call in getattr(record, "calls", []) or []
+        )
+        ac, an, af = _compute_ac_an_af(genotypes, alt_count)
         info = getattr(record, "INFO", OrderedDict())
         info["AC"] = ac if alt_count else []
         info["AN"] = an
-        info["AF"] = [count / an for count in ac] if an else []
+        info["AF"] = af if an else []
         record.INFO = info
         return an
 
@@ -905,39 +931,19 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
         for record in reader:
             info = dict(getattr(record, "INFO", {}) or {})
             alt_alleles = list(getattr(record, "ALT", []) or [])
-            alt_counts = [0] * len(alt_alleles)
-            allele_number = 0
-
-            for call in getattr(record, "calls", []) or []:
-                data = getattr(call, "data", {}) or {}
-                genotype = data.get("GT")
-                if not genotype:
-                    continue
-                tokens = genotype.replace("|", "/").split("/")
-                for token in tokens:
-                    token = token.strip()
-                    if not token or token == ".":
-                        continue
-                    try:
-                        allele_index = int(token)
-                    except ValueError:
-                        continue
-                    if allele_index < 0:
-                        continue
-                    allele_number += 1
-                    if allele_index == 0:
-                        continue
-                    normalized_index = allele_index - 1
-                    if 0 <= normalized_index < len(alt_counts):
-                        alt_counts[normalized_index] += 1
+            alt_count = len(alt_alleles)
+            genotypes = (
+                getattr(call, "data", {}).get("GT")
+                for call in getattr(record, "calls", []) or []
+            )
+            alt_counts, allele_number, allele_frequencies = _compute_ac_an_af(
+                genotypes, alt_count
+            )
 
             info["AN"] = allele_number
-            if alt_counts:
+            if alt_count:
                 info["AC"] = alt_counts
-                if allele_number > 0:
-                    info["AF"] = [count / allele_number for count in alt_counts]
-                else:
-                    info["AF"] = [0.0 for _ in alt_counts]
+                info["AF"] = allele_frequencies
             else:
                 info["AC"] = []
                 info["AF"] = []
@@ -1008,8 +1014,8 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
             continue
 
         alt_alleles = [allele for allele in fields[4].split(",") if allele]
-        alt_counts = [0] * len(alt_alleles)
-        allele_number = 0
+        alt_count = len(alt_alleles)
+        genotype_values: List[str] = []
 
         if len(fields) >= 10:
             format_keys = fields[8].split(":") if fields[8] else []
@@ -1023,26 +1029,11 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
                     parts = sample_entry.split(":")
                     if gt_index >= len(parts):
                         continue
-                    genotype = parts[gt_index]
-                    if not genotype:
-                        continue
-                    tokens = genotype.replace("|", "/").split("/")
-                    for token in tokens:
-                        token = token.strip()
-                        if not token or token == ".":
-                            continue
-                        try:
-                            allele_index = int(token)
-                        except ValueError:
-                            continue
-                        if allele_index < 0:
-                            continue
-                        allele_number += 1
-                        if allele_index == 0:
-                            continue
-                        normalized_index = allele_index - 1
-                        if 0 <= normalized_index < len(alt_counts):
-                            alt_counts[normalized_index] += 1
+                    genotype_values.append(parts[gt_index])
+
+        alt_counts, allele_number, allele_frequencies = _compute_ac_an_af(
+            genotype_values, alt_count
+        )
 
         info_field = fields[7]
         info_map = {}
@@ -1059,14 +1050,9 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
             info_map[key] = value
 
         info_map["AN"] = str(allele_number)
-        if alt_counts:
+        if alt_count:
             info_map["AC"] = ",".join(str(count) for count in alt_counts)
-            if allele_number > 0:
-                info_map["AF"] = ",".join(
-                    f"{count / allele_number:.6g}" for count in alt_counts
-                )
-            else:
-                info_map["AF"] = ",".join("0" for _ in alt_counts)
+            info_map["AF"] = ",".join(f"{value:.6g}" for value in allele_frequencies)
         else:
             info_map["AC"] = "."
             info_map["AF"] = "."

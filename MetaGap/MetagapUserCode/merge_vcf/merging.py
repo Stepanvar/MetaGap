@@ -845,7 +845,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                             handle_critical_error(
                                 "INFO header definitions conflict across shards. "
                                 f"Field '{k}' for INFO '{line.id}' differs: {em.get(k)!r} vs {nm.get(k)!r} "
-                                f"(in {file_path})."
+                                f"(in {file_path}).",
+                                exc_cls=MergeConflictError,
                             )
                 elif isinstance(line, vcfpy.header.FilterHeaderLine):
                     exist = filter_lines.get(line.id)
@@ -858,7 +859,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         handle_critical_error(
                             "FILTER header definitions conflict across shards. "
                             f"Description for FILTER '{line.id}' differs: {em.get('Description')!r} vs {nm.get('Description')!r} "
-                            f"(in {file_path})."
+                            f"(in {file_path}).",
+                            exc_cls=MergeConflictError,
                         )
                 elif isinstance(line, vcfpy.header.ContigHeaderLine):
                     exist = contig_lines.get(line.id)
@@ -869,7 +871,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                     if _line_mapping(exist) != _line_mapping(line):
                         handle_critical_error(
                             "Contig header definitions conflict across shards. "
-                            f"Contig '{line.id}' differs between shards (conflict in {file_path})."
+                            f"Contig '{line.id}' differs between shards (conflict in {file_path}).",
+                            exc_cls=MergeConflictError,
                         )
                 elif isinstance(line, vcfpy.header.FormatHeaderLine):
                     exist = format_lines.get(line.id)
@@ -883,7 +886,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                             handle_critical_error(
                                 "FORMAT header definitions conflict across shards. "
                                 f"Field '{k}' for FORMAT '{line.id}' differs: {em.get(k)!r} vs {nm.get(k)!r} "
-                                f"(in {file_path})."
+                                f"(in {file_path}).",
+                                exc_cls=MergeConflictError,
                             )
                 elif isinstance(line, vcfpy.header.SampleHeaderLine):
                     m = _line_mapping(line)

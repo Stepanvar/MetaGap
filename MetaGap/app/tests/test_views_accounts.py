@@ -24,6 +24,35 @@ class HomePageViewTests(TestCase):
         self.assertIn("form", response.context)
         self.assertIsInstance(response.context["form"], SearchForm)
 
+    def test_search_form_preserves_submitted_filters(self) -> None:
+        response = self.client.get(
+            reverse("home"),
+            {
+                "chrom": "7",
+                "pos_min": "1000",
+                "ref": "C",
+                "alt": "G",
+                "pass_only": "on",
+                "af_min": "0.25",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        form = response.context["form"]
+        self.assertTrue(form.is_bound)
+        self.assertEqual(form["chrom"].value(), "7")
+        self.assertEqual(form["pos_min"].value(), "1000")
+        self.assertEqual(form["ref"].value(), "C")
+        self.assertEqual(form["alt"].value(), "G")
+        self.assertEqual(form["af_min"].value(), "0.25")
+        self.assertEqual(form["pass_only"].value(), True)
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["pos_min"], 1000)
+        self.assertAlmostEqual(form.cleaned_data["af_min"], 0.25)
+        self.assertTrue(form.cleaned_data["pass_only"])
+
 
 class UserRegistrationViewTests(TestCase):
     """Validate the sign-up view renders the registration form template."""

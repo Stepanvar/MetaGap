@@ -1014,7 +1014,9 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
         for info_id, info_def in defined_info_ids.items()
         if _info_field_requires_value(getattr(info_def, "number", None))
     }
-    required_info_ids = {"AC", "AN", "AF"}.intersection(defined_info_ids)
+    required_info_ids.update(
+        {"AC", "AN", "AF"}.intersection(set(defined_info_ids.keys()))
+    )
 
     encountered_exception = False
     try:

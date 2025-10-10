@@ -21,12 +21,6 @@ if __package__ in {None, ""} and __name__ == "__main__":
 
 from . import merging, metadata as metadata_module, validation
 from .filtering import DEFAULT_ALLOWED_FILTER_VALUES
-
-# Re-export frequently patched helpers for easier test monkeypatching.
-merge_vcfs = merging.merge_vcfs
-append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
-validate_all_vcfs = validation.validate_all_vcfs
-validate_merged_vcf = validation.validate_merged_vcf
 from .logging_utils import (
     LOG_FILE,
     MergeConflictError,
@@ -36,6 +30,12 @@ from .logging_utils import (
     handle_critical_error,
     log_message,
 )
+
+# Re-export helpers for tests/patching.
+merge_vcfs = merging.merge_vcfs
+append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
+validate_all_vcfs = validation.validate_all_vcfs
+validate_merged_vcf = validation.validate_merged_vcf
 
 
 def _validate_metadata_entry(arg: str) -> str:
@@ -58,6 +58,16 @@ def _validate_metadata_entry(arg: str) -> str:
 
 def parse_arguments():
     """Parse CLI args for the VCF merging tool."""
+
+    def _metadata_list(values: list[str] | None) -> list[str]:
+        """Return sanitized metadata entries, discarding blanks."""
+        sanitized: list[str] = []
+        for entry in values or []:
+            cleaned = entry.strip() if entry is not None else ""
+            if cleaned:
+                sanitized.append(cleaned)
+        return sanitized
+
     parser = argparse.ArgumentParser(
         prog="merge_vcf",
         description="Consolidate multiple VCF files into a single merged VCF.",
@@ -79,37 +89,10 @@ def parse_arguments():
     )
     parser.add_argument(
         "-o",
-        "--out-dir",
-        "--output-dir",
         "--output",
+        "--output-dir",
         dest="output_dir",
-        help="Output directory for the merged VCF. Defaults to current directory.",
-    )
-    parser.add_argument("--ref", dest="ref", help="Reference genome build to use.")
-    parser.add_argument("--vcf-version", dest="vcf_version", help="VCF version for the merged output.")
-    parser.add_argument(
-        "--allow-gvcf",
-        dest="allow_gvcf",
-        action="store_true",
-        help="Allow gVCF inputs when validating files.",
-    )
-    parser.add_argument("--qual-threshold", type=float, default=30.0, help="Minimum QUAL to keep a variant. <0 disables.")
-    parser.add_argument("--an-threshold", type=float, default=50.0, help="Minimum INFO/AN to keep a variant. <0 disables.")
-    parser.add_argument(
-        "--sample-metadata",
-        action="append",
-        dest="sample_metadata_entries",
-        type=_validate_metadata_entry,
-        default=[],
-        help="SAMPLE header KEY=VALUE entry (repeatable). Must include ID=...",
-    )
-    parser.add_argument(
-        "--header-metadata",
-        action="append",
-        dest="header_metadata_lines",
-        type=_validate_metadata_entry,
-        default=[],
-        help="Additional header KEY=VALUE (repeatable). '##' is auto-prefixed.",
+        help="Directory where merged VCF artifacts will be written.",
     )
     parser.add_argument(
         "-m",
@@ -118,14 +101,37 @@ def parse_arguments():
         help="Optional file with extra header lines. One entry per line. Lines without '##' will be prefixed.",
     )
     parser.add_argument(
-        "--meta",
-        action="append",
-        dest="meta_entries",
+        "--header-lines",
+        nargs="+",
+        dest="header_metadata_lines",
+        help="Extra header meta lines. Lines without '##' will be prefixed.",
+    )
+    parser.add_argument(
+        "--sample-metadata",
+        nargs="+",
+        dest="sample_metadata_entries",
         type=_validate_metadata_entry,
-        default=[],
-        help="Generic metadata KEY=VALUE entry. ID keys route to sample metadata; others to header metadata.",
+        help="SAMPLE key=value pairs (e.g., ID=Cohort01 Center=Genotek).",
+    )
+    parser.add_argument(
+        "--allow-gvcf",
+        action="store_true",
+        help="Allow gVCF inputs during validation.",
+    )
+    parser.add_argument(
+        "--qual-threshold",
+        type=float,
+        default=30.0,
+        help="Minimum QUAL to keep a variant. <0 disables.",
+    )
+    parser.add_argument(
+        "--an-threshold",
+        type=float,
+        default=50.0,
+        help="Minimum INFO/AN to keep a variant. <0 disables.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose console logging.")
+
     args = parser.parse_args()
 
     # Collect inputs
@@ -140,109 +146,65 @@ def parse_arguments():
     if not args.input_dir and not explicit_inputs:
         parser.error("No input VCF files specified. Provide paths or --input-dir.")
 
+    # Resolve input files
     input_files: list[str] = []
     if args.input_dir:
-        input_dir_path = Path(args.input_dir)
+        try:
+            input_dir_path = Path(args.input_dir).expanduser().resolve()
+        except OSError as exc:  # defensive
+            parser.error(f"Unable to normalize input directory: {exc}")
+            raise
         if not input_dir_path.is_dir():
             parser.error(f"Input directory does not exist: {args.input_dir}")
         globbed_files = list(input_dir_path.glob("*.vcf")) + list(input_dir_path.glob("*.vcf.gz"))
         input_files = [str(p) for p in sorted(globbed_files)]
+        args.input_dir = str(input_dir_path)
     else:
-        input_files = explicit_inputs
+        input_files = [str(Path(p).expanduser().resolve()) for p in explicit_inputs]
+        # Derive a common directory for logging if possible
+        base_dirs = [os.path.dirname(p) or "." for p in input_files]
+        if base_dirs:
+            try:
+                args.input_dir = os.path.commonpath(base_dirs)
+            except ValueError:
+                args.input_dir = os.path.dirname(input_files[0]) if input_files else "."
 
     if not input_files:
         parser.error("No input VCF files specified.")
 
-# Clean metadata (conflict-resolved)
-	def _norm(s: str) -> str:
-		return s.strip()
+    # Output directory
+    output_dir_value = args.output_dir or args.input_dir
+    try:
+        output_dir_path = Path(output_dir_value).expanduser().resolve()
+    except OSError as exc:  # defensive
+        parser.error(f"Unable to normalize output directory: {exc}")
+        raise
+    args.output_dir = str(output_dir_path)
 
-	def _ensure_hashes(s: str) -> str:
-		return s if s.startswith("##") else f"##{s}"
+    # Metadata template path
+    if args.metadata_template_path:
+        try:
+            template_path = Path(args.metadata_template_path).expanduser().resolve()
+        except OSError as exc:  # defensive
+            parser.error(f"Unable to normalize metadata template path: {exc}")
+            raise
+        args.metadata_template_path = str(template_path)
 
-	def _route_meta(entry: str) -> tuple[str, str]:
-		# SAMPLE=... goes to sample metadata; everything else goes to header metadata
-		body = entry.lstrip("#").strip()
-		if body.upper().startswith("SAMPLE="):
-			return "sample", _ensure_hashes(body)
-		return "header", _ensure_hashes(body)
+    # Sanitize lists
+    args.header_metadata_lines = _metadata_list(getattr(args, "header_metadata_lines", None))
+    args.sample_metadata_entries = _metadata_list(getattr(args, "sample_metadata_entries", None))
 
-	def _dedupe(seq: list[str]) -> list[str]:
-		seen = set()
-		out = []
-		for x in seq:
-			if x not in seen:
-				seen.add(x)
-				out.append(x)
-		return out
-
-	sample_src = (getattr(args, "sample_header_entries", []) or []) + \
-				 (getattr(args, "sample_metadata_entries", []) or [])
-	header_src = (getattr(args, "simple_header_lines", []) or []) + \
-				 (getattr(args, "header_metadata_lines", []) or [])
-	meta_src   = (getattr(args, "meta_entries", []) or [])
-
-	sample_list: list[str] = []
-	header_list: list[str] = []
-
-	for s in sample_src:
-		s = _norm(s)
-		if s:
-			sample_list.append(_ensure_hashes(s))
-
-	for h in header_src:
-		h = _norm(h)
-		if h:
-			header_list.append(_ensure_hashes(h))
-
-	for m in meta_src:
-		m = _norm(m)
-		if not m:
-			continue
-		which, v = _route_meta(m)
-		(sample_list if which == "sample" else header_list).append(v)
-
-	# drop fileformat lines; dedupe; set canonical fields
-	args.sample_metadata_entries = _dedupe([x for x in sample_list if not x.startswith("##fileformat")])
-	args.header_metadata_lines   = _dedupe([x for x in header_list if not x.startswith("##fileformat")])
-
-	# optional: clear legacy fields to avoid later confusion
-	args.sample_header_entries = []
-	args.simple_header_lines = []
-	args.meta_entries = []
-
-    # Require SAMPLE ID if any SAMPLE metadata present
-    has_id = any(
-        (kv := ent.split("=", 1)) and kv[0].strip().lower() == "id" and kv[1].strip()
-        for ent in args.sample_metadata_entries
-    )
-    if args.sample_metadata_entries and not has_id:
-        parser.error("Provide a non-empty SAMPLE ID (e.g., --sample-metadata ID=SampleName).")
-
-    # Normalize paths
-    args.output_dir = str(Path(args.output_dir)) if args.output_dir else "."
-    args.input_dir = str(Path(args.input_dir)) if args.input_dir else None
-    args.metadata_template_path = (
-        str(Path(args.metadata_template_path)) if args.metadata_template_path else None
-    )
+    # Finalize input list
     args.input_files = [str(Path(p)) for p in input_files]
-    args.meta_entries = meta_entries
     return args
 
 
 def _normalize_argument_namespace(args):
     """Ensure the parsed args namespace exposes a consistent attribute surface."""
 
-    # Normalize sample metadata entries, accepting legacy attribute names.
-    sample_entries: list[str] = []
-    for attr in ("sample_header_entries", "sample_metadata_entries", "meta"):
-        values = getattr(args, attr, None)
-        if values:
-            sample_entries.extend(list(values))
-    args.sample_header_entries = [s for s in sample_entries if s]
-
+    # Sample metadata: convert list of KEY=VALUE to dict
     sample_mapping: dict[str, str] = {}
-    for entry in args.sample_header_entries:
+    for entry in getattr(args, "sample_metadata_entries", []) or []:
         if "=" not in entry:
             continue
         key, value = entry.split("=", 1)
@@ -252,29 +214,32 @@ def _normalize_argument_namespace(args):
             sample_mapping[key] = value
     args.sample_metadata_entries = sample_mapping
 
-    # Normalize simple header metadata lines.
-    simple_lines: list[str] = list(getattr(args, "simple_header_lines", []) or [])
-    fallback_lines = getattr(args, "header_metadata_lines", None)
-    if fallback_lines:
-        for line in fallback_lines:
-            if not line:
-                continue
-            simple_lines.append(line if line.startswith("##") else f"##{line}")
-    args.simple_header_lines = [s for s in simple_lines if s]
+    # Normalize header metadata lines, ensure '##' prefix, drop empties and fileformat
+    normalized_headers: list[str] = []
+    for line in getattr(args, "header_metadata_lines", []) or []:
+        s = line.strip()
+        if not s:
+            continue
+        if not s.startswith("##"):
+            s = f"##{s}"
+        if s.lower().startswith("##fileformat"):
+            continue
+        normalized_headers.append(s)
+    # de-duplicate preserving order
+    seen = set()
+    args.header_metadata_lines = [x for x in normalized_headers if not (x in seen or seen.add(x))]
 
-    # Prefer explicit metadata file/template if provided via alternate argument name.
+    # Unify metadata file arg name
     metadata_file = getattr(args, "metadata_file", None)
     if metadata_file is None:
         metadata_file = getattr(args, "metadata_template_path", None)
     args.metadata_file = metadata_file
 
-    # Ensure commonly accessed attributes exist with sensible defaults.
+    # Ensure defaults
     if not hasattr(args, "allow_gvcf"):
         args.allow_gvcf = False
     if not hasattr(args, "verbose"):
         args.verbose = False
-    if not hasattr(args, "output_dir"):
-        args.output_dir = getattr(args, "out_dir", ".")
     if not hasattr(args, "qual_threshold"):
         args.qual_threshold = 30.0
     if not hasattr(args, "an_threshold"):
@@ -298,10 +263,11 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
 def main():
     args = _normalize_argument_namespace(parse_arguments())
     verbose = args.verbose
+    ref_genome = None
+    vcf_version = None
 
     # Phase 1: environment + autodetect metadata
     try:
-        # Infer a base input directory from provided files or explicit directory.
         input_files = list(getattr(args, "input_files", []) or [])
         explicit_input_dir = getattr(args, "input_dir", None)
 
@@ -323,30 +289,47 @@ def main():
         if not os.path.isdir(input_dir):
             raise ValidationError(f"Input directory does not exist: {input_dir}")
 
-        args.input_files = [str(Path(p)) for p in input_files]
-
-        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
+        # Output directory
+        output_dir_arg = getattr(args, "output_dir", None)
+        output_dir = os.path.abspath(output_dir_arg) if output_dir_arg else input_dir
+        if not output_dir:
+            raise ValueError("output_dir is not set and input_dir is empty")
         os.makedirs(output_dir, exist_ok=True)
 
+        # Logging
         log_path = os.path.join(output_dir, LOG_FILE)
         configure_logging(
             log_level=logging.DEBUG if verbose else logging.INFO,
             log_file=log_path,
             enable_file_logging=True,
-            enable_console=verbose,
+            enable_console=True,
         )
+        if not verbose:
+            for handler in logging.getLogger("vcf_merger").handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(logging.WARNING)
 
+        # Load extra header lines from template file
+        metadata_file = getattr(args, "metadata_file", None)
         extra_file_lines = (
-            metadata_module.load_metadata_lines(args.metadata_template_path, verbose)
-            if args.metadata_template_path
-            else []
+            metadata_module.load_metadata_lines(metadata_file, verbose) if metadata_file else []
         )
 
         log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         log_message(f"Input directory: {input_dir}")
         log_message(f"Output directory: {output_dir}")
 
-        detected_file, detected_fileformat, detected_reference = validation.find_first_vcf_with_header(input_dir, verbose)
+        # Detect reference and VCF version from first readable VCF
+        detected_file = None
+        detected_fileformat = None
+        detected_reference = None
+
+        (
+            detected_file,
+            detected_fileformat,
+            detected_reference,
+        ) = validation.find_first_vcf_with_header(input_dir, verbose)
+
         ref_genome = detected_reference
         vcf_version = validation.normalize_vcf_version(detected_fileformat)
 
@@ -375,10 +358,11 @@ def main():
 
     # Phase 2: validate, merge, annotate, finalize
     try:
-        out_dir = Path(args.output_dir)
+        out_dir = Path(output_dir or (input_dir or "."))
         out_dir.mkdir(parents=True, exist_ok=True)
         log_message(f"Output directory: {out_dir}", verbose)
 
+        # Validate inputs
         args_input_dir = getattr(args, "input_dir", None) or input_dir
         setattr(args, "input_dir", args_input_dir)
 
@@ -391,18 +375,24 @@ def main():
                 allow_gvcf=getattr(args, "allow_gvcf", False),
             )
         except ValidationError as exc:
-            message = str(exc)
+            msg = str(exc)
             if (
                 not getattr(args, "allow_gvcf", False)
-                and "No valid VCF files remain after validation" in message
+                and "No valid VCF files remain after validation" in msg
             ):
-                message = message.rstrip(".") + ". Use --allow-gvcf to include gVCF inputs."
-            raise ValidationError(message) from exc
+                msg = msg.rstrip(".") + ". Use --allow-gvcf to include gVCF inputs."
+            raise ValidationError(msg) from exc
 
-        qual_threshold = args.qual_threshold if args.qual_threshold >= 0 else None
-        an_threshold = args.an_threshold if args.an_threshold >= 0 else None
+        def _coerce_threshold(val):
+            if isinstance(val, (int, float)) and val >= 0:
+                return float(val)
+            return None
+
+        qual_threshold = _coerce_threshold(getattr(args, "qual_threshold", None))
+        an_threshold = _coerce_threshold(getattr(args, "an_threshold", None))
         allowed_filter_values = DEFAULT_ALLOWED_FILTER_VALUES
 
+        # Merge
         merged_vcf_path = merge_vcfs(
             valid_files,
             str(out_dir),
@@ -413,13 +403,30 @@ def main():
             allowed_filter_values=allowed_filter_values,
         )
 
-        # Combine file-provided header lines with CLI-provided simple headers
-        cli_header_metadata = getattr(args, "header_metadata_lines", None)
-        header_metadata_lines = (cli_header_metadata or []) + (extra_file_lines or [])
+        # Build header metadata (combine CLI + file), sanitize, de-dup
+        def _norm(s: str) -> str: return s.strip()
+        def _ensure_hashes(s: str) -> str: return s if s.startswith("##") else f"##{s}"
 
-        sample_metadata_entries = getattr(args, "sample_metadata_entries", {}) or {}
+        raw_header_sources = [
+            getattr(args, "header_metadata_lines", None),
+            extra_file_lines,
+        ]
+        header_metadata_lines: list[str] = []
+        for src in raw_header_sources:
+            if not src:
+                continue
+            for s in src:
+                s = _norm(s)
+                if not s or s.lower().startswith("##fileformat"):
+                    continue
+                header_metadata_lines.append(_ensure_hashes(s))
+        seen = set()
+        header_metadata_lines = [x for x in header_metadata_lines if not (x in seen or seen.add(x))]
+
+        # Sample metadata: build SAMPLE=<...> if provided as dict
+        sample_metadata_entries = getattr(args, "sample_metadata_entries", None)
         serialized_sample_line = None
-        if sample_metadata_entries:
+        if isinstance(sample_metadata_entries, dict) and sample_metadata_entries:
             try:
                 serialized_sample_line = metadata_module.build_sample_metadata_line(
                     sample_metadata_entries
@@ -427,14 +434,19 @@ def main():
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
 
+        # Append metadata
         final_vcf_path = append_metadata_to_merged_vcf(
             merged_vcf_path,
             sample_metadata_entries=sample_metadata_entries,
             header_metadata_lines=header_metadata_lines,
             serialized_sample_line=serialized_sample_line,
+            qual_threshold=qual_threshold,
+            an_threshold=an_threshold,
+            allowed_filter_values=allowed_filter_values,
             verbose=verbose,
         )
 
+        # Validate and place final artifact at standard path
         validate_merged_vcf(final_vcf_path, verbose=verbose)
 
         final_target = out_dir / "cohort_final.vcf.gz"
@@ -446,7 +458,9 @@ def main():
 
             if final_vcf_path.suffix != ".gz":
                 try:
-                    validation.pysam.tabix_compress(str(final_vcf_path), str(final_vcf_path) + ".gz", force=True)
+                    validation.pysam.tabix_compress(
+                        str(final_vcf_path), str(final_vcf_path) + ".gz", force=True
+                    )
                 except Exception as e:
                     raise MergeVCFError(f"Failed to compress final VCF: {e}")
                 try:
@@ -467,7 +481,10 @@ def main():
 
             final_vcf_path = final_target
 
-        log_message(f"Script execution completed successfully. Final cohort VCF: {final_vcf_path}", verbose)
+        log_message(
+            f"Script execution completed successfully. Final cohort VCF: {final_vcf_path}",
+            verbose,
+        )
         print(f"Wrote: {final_vcf_path} x 1.")
     except (ValidationError, MergeConflictError, MergeVCFError) as exc:
         print(f"ERROR: {exc}")

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import copy
-import glob
 import gzip
 import os
 from dataclasses import dataclass
@@ -415,7 +414,7 @@ def validate_all_vcfs(
 ):
     valid_vcfs: List[str] = []
     log_message(f"Validating all VCF files in {input_dir}", verbose, level=logging.INFO)
-    all_candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
+    all_candidates = _iter_candidate_vcfs(input_dir)
     log_message(
         f"Discovered {len(all_candidates)} VCF shard(s) prior to validation.",
         verbose,

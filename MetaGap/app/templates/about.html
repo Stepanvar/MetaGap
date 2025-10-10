@@ -7,7 +7,83 @@
 {% endblock %}
 
 {% block content %}
-<h2>{{ title }}.</h2>
-<h3>{{ message }}</h3>
-<p>Use this area to provide additional information.</p>
+<div class="container py-5">
+    <header class="mb-5 text-center">
+        <h1 class="display-5 fw-semibold">About {{ SITE_NAME }}</h1>
+        <p class="lead text-muted">MetaGaP is an open platform for harmonising variant frequency data so researchers can compare cohorts with confidence.</p>
+    </header>
+
+    <section class="mb-5">
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <article class="card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+                        <h2 class="h5">Why we built MetaGaP</h2>
+                        <p class="mb-0">Sequencing studies often store allele frequencies, metadata, and QC measurements in disconnected spreadsheets. MetaGaP streamlines that workflow by pairing a structured database with intuitive tooling for uploading VCF files, curating metadata, and sharing results with collaborators.</p>
+                    </div>
+                </article>
+            </div>
+            <div class="col-lg-4">
+                <article class="card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+                        <h2 class="h5">What you can do</h2>
+                        <ul class="mb-0 ps-3">
+                            <li>Import annotated VCF/BCF files and capture rich metadata alongside each sample group.</li>
+                            <li>Search across cohorts using genomic coordinates, variant identifiers, and laboratory metadata.</li>
+                            <li>Audit processing pipelines with full provenance of library prep, sequencing instruments, and bioinformatics steps.</li>
+                        </ul>
+                    </div>
+                </article>
+            </div>
+            <div class="col-lg-4">
+                <article class="card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+                        <h2 class="h5">Our commitments</h2>
+                        <p>We prioritise reproducibility, transparent data provenance, and accessibility. The interface is responsive by design, and the codebase is fully open-source so laboratories can adapt the platform to their governance requirements.</p>
+                        <p class="mb-0">Have feedback? Reach out via the <a href="{% url 'contact' %}">contact page</a>—we actively incorporate suggestions from the community.</p>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-5">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-6">
+                <h2 class="h4">Designed for collaborative genomics</h2>
+                <p>MetaGaP keeps track of each dataset’s origin, quality control metrics, and downstream analyses. Built-in validation routines protect against malformed uploads and highlight missing metadata so your team can resolve issues before downstream analyses begin.</p>
+                <p class="mb-0">Whether you are harmonising cohorts across institutions or building a reference atlas within your lab, MetaGaP gives you a consistent, well-documented workspace.</p>
+            </div>
+            <div class="col-lg-6">
+                <div class="ratio ratio-16x9 rounded-3 overflow-hidden shadow-sm bg-body">
+                    <div class="d-flex h-100 align-items-center justify-content-center flex-column p-4">
+                        <span class="display-6 text-primary mb-3"><i class="fas fa-dna"></i></span>
+                        <p class="text-muted text-center mb-0">Upload once, explore anywhere—variant summaries, metadata, and QC metrics stay in sync across the platform.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h2 class="h5">Funding &amp; availability</h2>
+                        <p>MetaGaP is maintained by an interdisciplinary team of bioinformaticians and software engineers. The project is released under an open-source license so academic groups can deploy it without licensing hurdles.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h2 class="h5">Get involved</h2>
+                        <p class="mb-0">Contributions are welcome—from UI refinements to new data ingestion pipelines. Visit the project repository to file issues, suggest enhancements, or share example datasets that would benefit the community.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
 {% endblock %}

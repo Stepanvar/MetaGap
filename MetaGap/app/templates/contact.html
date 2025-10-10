@@ -7,16 +7,39 @@
 {% endblock %}
 
 {% block content %}
-<h2>{{ title }}.</h2>
-<h3>{{ message }}</h3>
-<address>
-        One Microsoft Way<br />
-        Redmond, WA 98052-6399<br />
-        <abbr title="Phone">P:</abbr>
-        425.555.0100
-</address>
-<address>
-        <strong>Support:</strong>   <a href="mailto:Support@example.com">Support@example.com</a><br />
-        <strong>Marketing:</strong> <a href="mailto:Marketing@example.com">Marketing@example.com</a>
-</address>
+<div class="container py-5">
+    <header class="mb-4">
+        <h1 class="h3 mb-1">Connect with the MetaGaP team</h1>
+        <p class="text-muted mb-0">We are happy to answer questions about data ingestion, deployment guidance, or feature ideas.</p>
+    </header>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5">General enquiries</h2>
+                    <p class="mb-2">Email us and a member of the core team will respond within two business days.</p>
+                    <p class="mb-1"><strong>Email:</strong> <a href="mailto:support@metagap.org">support@metagap.org</a></p>
+                    <p class="mb-0"><strong>Community forum:</strong> <a href="https://github.com/metagap/metagap/discussions" target="_blank" rel="noopener">GitHub Discussions</a></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5">Collaborations &amp; partnerships</h2>
+                    <p class="mb-2">Planning a population-scale study or integrating MetaGaP with your laboratory information system? Let us know—our collaborators benefit from roadmap previews and integration support.</p>
+                    <p class="mb-0"><strong>Partnerships:</strong> <a href="mailto:partnerships@metagap.org">partnerships@metagap.org</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section class="mt-5">
+        <h2 class="h5">Office hours</h2>
+        <p class="mb-3">Join our open video call every second Wednesday at 15:00 UTC to see demos and ask questions live. Meeting links are shared on the community forum the week before.</p>
+        <div class="alert alert-info mb-0" role="note">
+            Prefer asynchronous updates? Subscribe to the release notes via the repository’s watch feature to be notified about new capabilities.</div>
+    </section>
+</div>
 {% endblock %}

@@ -54,6 +54,8 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
 
 
 INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
+FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
+CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
 def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:
@@ -659,30 +661,49 @@ def append_metadata_to_merged_vcf(
             header_lines = [line.rstrip("\n") for line in header_handle]
 
         fileformat_line = None
-        remaining_header_lines = []
+        original_meta_lines = []
         for line in header_lines:
             stripped = line.strip()
             if not stripped:
                 continue
             if stripped.startswith("#CHROM"):
                 continue
-            if stripped.startswith("##fileformat") and fileformat_line is None:
-                fileformat_line = stripped
+            if stripped.startswith("##fileformat"):
+                if fileformat_line is None:
+                    fileformat_line = stripped
                 continue
             if stripped.startswith("##SAMPLE="):
                 continue
-            remaining_header_lines.append(stripped)
+            original_meta_lines.append(stripped)
 
-        final_header_lines = []
-        if fileformat_line is not None:
-            final_header_lines.append(fileformat_line)
+        if fileformat_line is None:
+            fileformat_line = "##fileformat=VCFv4.2"
 
-        final_header_lines.extend(remaining_header_lines)
-        existing_header_lines = set(final_header_lines)
+        final_header_lines = [fileformat_line]
+        existing_header_lines = {fileformat_line}
 
-        ensure_standard_info_header_lines(
-            final_header_lines, existing_header_lines, verbose=verbose
-        )
+        template_info_ids = set()
+        template_filter_ids = set()
+        template_contig_ids = set()
+
+        for metadata_line in header_metadata_lines:
+            normalized = metadata_line.strip()
+            if not normalized:
+                continue
+            if not normalized.startswith("##"):
+                normalized = "##" + normalized
+            final_header_lines.append(normalized)
+            existing_header_lines.add(normalized)
+
+            info_match = INFO_HEADER_PATTERN.match(normalized)
+            if info_match:
+                template_info_ids.add(info_match.group(1))
+            filter_match = FILTER_HEADER_PATTERN.match(normalized)
+            if filter_match:
+                template_filter_ids.add(filter_match.group(1))
+            contig_match = CONTIG_HEADER_PATTERN.match(normalized)
+            if contig_match:
+                template_contig_ids.add(contig_match.group(1))
 
         if sample_metadata_entries:
             try:
@@ -698,16 +719,46 @@ def append_metadata_to_merged_vcf(
                 _cleanup_temp_files()
                 handle_critical_error(str(exc))
 
-        for metadata_line in header_metadata_lines:
-            normalized = metadata_line.strip()
-            if not normalized:
+        seen_info_ids = set(template_info_ids)
+        seen_filter_ids = set(template_filter_ids)
+        seen_contig_ids = set(template_contig_ids)
+
+        for meta_line in original_meta_lines:
+            if meta_line in existing_header_lines:
                 continue
-            if not normalized.startswith("##"):
-                normalized = "##" + normalized
-            if normalized in existing_header_lines:
+
+            info_match = INFO_HEADER_PATTERN.match(meta_line)
+            if info_match:
+                info_id = info_match.group(1)
+                if info_id in seen_info_ids:
+                    continue
+                seen_info_ids.add(info_id)
+                final_header_lines.append(meta_line)
+                existing_header_lines.add(meta_line)
                 continue
-            final_header_lines.append(normalized)
-            existing_header_lines.add(normalized)
+
+            filter_match = FILTER_HEADER_PATTERN.match(meta_line)
+            if filter_match:
+                filter_id = filter_match.group(1)
+                if filter_id in seen_filter_ids:
+                    continue
+                seen_filter_ids.add(filter_id)
+                final_header_lines.append(meta_line)
+                existing_header_lines.add(meta_line)
+                continue
+
+            contig_match = CONTIG_HEADER_PATTERN.match(meta_line)
+            if contig_match:
+                contig_id = contig_match.group(1)
+                if contig_id in seen_contig_ids:
+                    continue
+                seen_contig_ids.add(contig_id)
+                final_header_lines.append(meta_line)
+                existing_header_lines.add(meta_line)
+                continue
+
+            final_header_lines.append(meta_line)
+            existing_header_lines.add(meta_line)
 
         ensure_standard_info_header_lines(
             final_header_lines, existing_header_lines, verbose=verbose

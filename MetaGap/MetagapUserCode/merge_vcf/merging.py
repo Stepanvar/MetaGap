@@ -7,11 +7,10 @@ import datetime
 import os
 import re
 import shutil
-import subprocess
 from collections import OrderedDict
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from . import vcfpy
+from . import pysam, vcfpy
 from .logging_utils import handle_critical_error, log_message
 from .metadata import (
     _parse_sample_metadata_line,
@@ -178,7 +177,6 @@ def merge_vcfs(
 ) -> str:
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
-    filled_vcf = base_vcf + ".filled.vcf"
     gz_vcf = base_vcf + ".gz"
 
     file_count = len(valid_files)
@@ -198,13 +196,94 @@ def merge_vcfs(
         if pre != file_path:
             temp_files.append(pre)
 
-    log_message("Merging VCF files with bcftools...", verbose)
+    merged_header = None
+    info_ids: set[str] = set()
+    format_ids: set[str] = set()
+    filter_ids: set[str] = set()
+    contig_ids: set[str] = set()
+    discovered_samples: List[str] = []
+
+    record_store: "OrderedDict[Tuple[str, int, str, Tuple[str, ...]], Dict[str, object]]" = OrderedDict()
+
+    def _record_key(record) -> Tuple[str, int, str, Tuple[str, ...]]:
+        alts = tuple(str(alt) for alt in getattr(record, "ALT", []) or [])
+        return (str(record.CHROM), int(record.POS), str(record.REF), alts)
+
+    def _initialise_store(record) -> Dict[str, object]:
+        return {
+            "template": copy.deepcopy(record),
+            "format_keys": list(getattr(record, "FORMAT", []) or []),
+            "calls": {},
+        }
+
     try:
-        result = subprocess.run(
-            ["bcftools", "merge", "-m", "all", "-Ov", "-o", base_vcf, *preprocessed_files],
-            capture_output=True,
-            text=True,
-        )
+        for file_path in preprocessed_files:
+            try:
+                reader = vcfpy.Reader.from_path(file_path)
+            except Exception as exc:
+                handle_critical_error(f"Failed to read VCF file {file_path}: {exc}")
+
+            header = reader.header
+
+            if merged_header is None:
+                merged_header = copy.deepcopy(header)
+                for line in getattr(merged_header, "lines", []):
+                    if isinstance(line, vcfpy.header.InfoHeaderLine) and line.id:
+                        info_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine) and line.id:
+                        format_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FilterHeaderLine) and line.id:
+                        filter_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine) and line.id:
+                        contig_ids.add(line.id)
+                discovered_samples.extend(getattr(header.samples, "names", []))
+            else:
+                for line in getattr(header, "lines", []):
+                    try:
+                        cloned = copy.deepcopy(line)
+                    except Exception:
+                        cloned = line
+                    if isinstance(line, vcfpy.header.InfoHeaderLine) and line.id:
+                        if line.id not in info_ids:
+                            merged_header.add_line(cloned)
+                            info_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine) and line.id:
+                        if line.id not in format_ids:
+                            merged_header.add_line(cloned)
+                            format_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.FilterHeaderLine) and line.id:
+                        if line.id not in filter_ids:
+                            merged_header.add_line(cloned)
+                            filter_ids.add(line.id)
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine) and line.id:
+                        if line.id not in contig_ids:
+                            merged_header.add_line(cloned)
+                            contig_ids.add(line.id)
+
+                for sample_name in getattr(header.samples, "names", []):
+                    if sample_name not in discovered_samples:
+                        discovered_samples.append(sample_name)
+
+            for record in reader:
+                key = _record_key(record)
+                container = record_store.get(key)
+                if container is None:
+                    container = _initialise_store(record)
+                    record_store[key] = container
+                else:
+                    format_keys = container["format_keys"]
+                    for fmt_key in getattr(record, "FORMAT", []) or []:
+                        if fmt_key not in format_keys:
+                            format_keys.append(fmt_key)
+
+                call_mapping: Dict[str, dict] = container["calls"]  # type: ignore[assignment]
+                for call in getattr(record, "calls", []):
+                    sample_name = getattr(call, "sample", getattr(call, "name", None))
+                    if sample_name is None:
+                        continue
+                    call_mapping[sample_name] = copy.deepcopy(getattr(call, "data", {}))
+
+            reader.close()
     finally:
         for tmp in temp_files:
             try:
@@ -212,59 +291,73 @@ def merge_vcfs(
                     os.remove(tmp)
             except OSError:
                 pass
-    if result.returncode != 0:
-        handle_critical_error((result.stderr or "bcftools merge failed").strip())
 
-    try:
-        reader = vcfpy.Reader.from_path(base_vcf)
-    except Exception as exc:
-        handle_critical_error(f"Failed to open merged VCF for post-processing: {exc}")
+    if merged_header is None:
+        handle_critical_error("Failed to construct a merged VCF header from the provided files.")
+
+    final_sample_order = list(sample_order) if sample_order is not None else discovered_samples
+    if hasattr(merged_header, "samples") and hasattr(merged_header.samples, "names"):
+        merged_header.samples.names = list(final_sample_order)
 
     try:
         header = apply_metadata_to_header(
-            reader.header,
+            merged_header,
             sample_header_line=sample_header_line,
             simple_header_lines=simple_header_lines,
             verbose=verbose,
         )
     except SystemExit:
-        reader.close()
         raise
     except Exception as exc:
-        reader.close()
-        handle_critical_error(f"Failed to apply metadata to merged VCF: {exc}")
+        handle_critical_error(f"Failed to apply metadata to merged VCF header: {exc}")
 
     tmp_out = base_vcf + ".tmp"
     try:
         writer = vcfpy.Writer.from_path(tmp_out, header)
     except Exception as exc:
-        reader.close()
-        handle_critical_error(f"Failed to open temporary writer for merged VCF: {exc}")
+        handle_critical_error(f"Failed to create VCF writer for merged output: {exc}")
 
     try:
-        for record in reader:
-            writer.write_record(record)
+        for container in record_store.values():
+            template = copy.deepcopy(container["template"])  # type: ignore[index]
+            format_keys = list(container["format_keys"])  # type: ignore[index]
+            template.FORMAT = format_keys
+
+            factory = _create_missing_call_factory(format_keys, header)
+            default_values = factory()
+            updated_calls = []
+            call_mapping = container["calls"]  # type: ignore[index]
+            for sample_name in final_sample_order:
+                sample_data = call_mapping.get(sample_name)
+                data = {}
+                for fmt_key in format_keys:
+                    default_value = copy.deepcopy(default_values.get(fmt_key))
+                    if sample_data is not None and fmt_key in sample_data:
+                        value = sample_data[fmt_key]
+                        if isinstance(value, tuple):
+                            value = list(value)
+                        elif isinstance(value, list):
+                            value = list(value)
+                        data[fmt_key] = value
+                    else:
+                        data[fmt_key] = default_value
+                call = vcfpy.Call(sample_name, data)
+                updated_calls.append(call)
+
+            template.update_calls(updated_calls)
+            writer.write_record(template)
     finally:
-        reader.close()
         writer.close()
 
     shutil.move(tmp_out, base_vcf)
 
-    log_message("Recomputing AC, AN, AF with bcftools +fill-tags...", verbose)
-    res2 = subprocess.run(
-        ["bcftools", "+fill-tags", base_vcf, "-Ov", "-o", filled_vcf, "--", "-t", "AC,AN,AF"],
-        capture_output=True,
-        text=True,
-    )
-    if res2.returncode != 0:
-        handle_critical_error((res2.stderr or "bcftools +fill-tags failed").strip())
-    shutil.move(filled_vcf, base_vcf)
-
-    log_message("Compressing and indexing the final VCF...", verbose)
+    log_message("Compressing and indexing the final VCF with pysam...", verbose)
     try:
-        subprocess.run(["bgzip", "-f", base_vcf], check=True)
-        subprocess.run(["tabix", "-p", "vcf", "-f", gz_vcf], check=True)
-    except subprocess.CalledProcessError as exc:
+        pysam.tabix_compress(base_vcf, gz_vcf, force=True)
+        pysam.tabix_index(gz_vcf, preset="vcf", force=True)
+        if os.path.exists(base_vcf):
+            os.remove(base_vcf)
+    except Exception as exc:
         handle_critical_error(f"Failed to compress or index merged VCF ({base_vcf}): {exc}")
 
     log_message(f"Merged VCF file created and indexed successfully: {gz_vcf}", verbose)

@@ -235,6 +235,7 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
     pass_only = django_filters.BooleanFilter(
         method="filter_pass_only",
         label="PASS only",
+        widget=forms.CheckboxInput,
     )
     qual_min = django_filters.NumberFilter(
         field_name="qual",
@@ -323,7 +324,8 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
 
     def filter_pass_only(self, queryset, name, value):
         truthy_values = {True, "True", "true", "1", 1, "on", "ON", "On"}
-        if value in truthy_values:
+        raw_value = self.data.get(name)
+        if value in truthy_values or raw_value in truthy_values:
             return queryset.filter(filter__iexact="PASS")
         return queryset
 

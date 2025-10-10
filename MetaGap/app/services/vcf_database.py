@@ -309,7 +309,7 @@ class VCFDatabaseWriter:
         if not info:
             return None
 
-        structured: Dict[str, Any] = {}
+        mapped_fields: Dict[str, Any] = {}
         additional: Dict[str, Any] = {}
 
         for key, value in dict(info or {}).items():
@@ -318,22 +318,18 @@ class VCFDatabaseWriter:
                 mapped_key, field_type = INFO_FIELD_MAP[normalized]
                 coerced = self._coerce_info_value(value, field_type)
                 if coerced is not None:
-                    structured[mapped_key] = coerced
+                    mapped_fields[mapped_key] = coerced
             else:
                 normalized_value = self._normalize_additional_info_value(value)
                 if normalized_value is not None:
                     additional[normalized] = normalized_value
 
-        payload: Dict[str, Any] = {}
-        if structured:
-            payload["fields"] = structured
-        if additional:
-            payload["additional"] = additional
+        additional_payload = additional or None
 
-        if not payload:
+        if not mapped_fields and additional_payload is None:
             return None
 
-        return Info.objects.create(payload=payload)
+        return Info.objects.create(**mapped_fields, additional=additional_payload)
 
     def create_format_instance(
         self, samples: Any

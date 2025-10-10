@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import datetime
 import os
+import re
 import shutil
 import subprocess
 from collections import OrderedDict
@@ -40,6 +41,149 @@ def _require_callbacks() -> MergeCallbacks:
             "Merging callbacks were not configured. Call configure_callbacks() before using these helpers."
         )
     return _callbacks
+
+
+STANDARD_INFO_DEFINITIONS = OrderedDict(
+    [
+        (
+            "AC",
+            OrderedDict(
+                [
+                    ("Number", "A"),
+                    ("Type", "Integer"),
+                    (
+                        "Description",
+                        "Alternate allele count in genotypes, for each ALT allele",
+                    ),
+                ]
+            ),
+        ),
+        (
+            "AN",
+            OrderedDict(
+                [
+                    ("Number", "1"),
+                    ("Type", "Integer"),
+                    ("Description", "Total number of alleles in called genotypes"),
+                ]
+            ),
+        ),
+        (
+            "AF",
+            OrderedDict(
+                [
+                    ("Number", "A"),
+                    ("Type", "Float"),
+                    ("Description", "Alternate allele frequency"),
+                ]
+            ),
+        ),
+    ]
+)
+
+
+INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
+
+
+def _format_info_definition(info_id, definition_mapping):
+    parts = [f"ID={info_id}"]
+    for key, value in definition_mapping.items():
+        if value is None:
+            continue
+        if key == "Description":
+            escaped_value = str(value).replace('"', '\\"')
+            parts.append(f'Description="{escaped_value}"')
+            continue
+        parts.append(f"{key}={value}")
+    return "##INFO=<" + ",".join(parts) + ">"
+
+
+def ensure_standard_info_definitions(header, verbose=False):
+    callbacks = _require_callbacks()
+    vcfpy = callbacks.vcfpy
+    info_module = getattr(vcfpy, "header", None)
+    info_cls = getattr(info_module, "InfoHeaderLine", None) if info_module else None
+    if info_cls is None:
+        return header
+
+    existing_ids = set()
+    for line in getattr(header, "lines", []):
+        if isinstance(line, info_cls):
+            existing_ids.add(getattr(line, "id", None))
+
+    added_ids = []
+    for info_id, definition in STANDARD_INFO_DEFINITIONS.items():
+        if info_id in existing_ids:
+            continue
+
+        mapping = OrderedDict([("ID", info_id)])
+        mapping.update(definition)
+
+        try:
+            info_line = info_cls.from_mapping(mapping)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            callbacks.log_message(
+                f"WARNING: Unable to create INFO header definition for {info_id}: {exc}",
+                verbose,
+            )
+            continue
+
+        try:
+            header.add_line(info_line)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            callbacks.log_message(
+                f"WARNING: Failed to append INFO header definition for {info_id}: {exc}",
+                verbose,
+            )
+            continue
+
+        existing_ids.add(info_id)
+        added_ids.append(info_id)
+
+    if added_ids:
+        callbacks.log_message(
+            "Inserted INFO header definitions for missing fields: "
+            + ", ".join(added_ids),
+            verbose,
+        )
+
+    return header
+
+
+def ensure_standard_info_header_lines(final_header_lines, existing_header_lines, verbose=False):
+    callbacks = _require_callbacks()
+
+    current_ids = set()
+    for line in final_header_lines:
+        if not isinstance(line, str):
+            continue
+        match = INFO_HEADER_PATTERN.match(line.strip())
+        if match:
+            current_ids.add(match.group(1))
+
+    added_ids = []
+    for info_id, definition in STANDARD_INFO_DEFINITIONS.items():
+        if info_id in current_ids:
+            continue
+
+        formatted = _format_info_definition(info_id, definition)
+        if formatted in existing_header_lines:
+            current_ids.add(info_id)
+            continue
+
+        final_header_lines.append(formatted)
+        existing_header_lines.add(formatted)
+        current_ids.add(info_id)
+        added_ids.append(info_id)
+
+    if added_ids:
+        callbacks.log_message(
+            "Inserted INFO header definitions for missing fields: "
+            + ", ".join(added_ids),
+            verbose,
+        )
+
+    return final_header_lines
 
 
 def union_headers(valid_files, sample_order=None):
@@ -332,6 +476,7 @@ def merge_vcfs(
             simple_header_lines=simple_header_lines,
             verbose=verbose,
         )
+        header = ensure_standard_info_definitions(header, verbose=verbose)
     except SystemExit:
         reader.close()
         raise
@@ -550,6 +695,11 @@ def append_metadata_to_merged_vcf(
             final_header_lines.append(serialized_sample_line)
 
         final_header_lines.extend(remaining_header_lines)
+        existing_header_lines = set(final_header_lines)
+
+        ensure_standard_info_header_lines(
+            final_header_lines, existing_header_lines, verbose=verbose
+        )
 
         with open(final_plain_vcf, "w", encoding="utf-8") as final_handle:
             for line in final_header_lines:

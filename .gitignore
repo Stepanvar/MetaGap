@@ -363,3 +363,5 @@ MigrationBackup/
 FodyWeavers.xsddb.sqlite3
 .conda/
 .venv/
+bcftools/
+htslib/

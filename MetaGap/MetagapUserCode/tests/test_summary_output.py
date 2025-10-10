@@ -154,8 +154,8 @@ def test_main_emits_compact_summary(tmp_path, monkeypatch, capsys, merge_script_
 
     captured = capsys.readouterr()
     summary_line = captured.out.strip().splitlines()[-1]
-    expected_path = output_dir.resolve() / "SAMPLE_0001.vcf.gz"
-    assert summary_line == f"Wrote: {expected_path} x 2"
+    expected_path = output_dir.resolve() / "cohort_final.vcf.gz"
+    assert summary_line == f"Wrote: {expected_path} x 1."
 
 
 def test_parse_metadata_arguments_merges_template(tmp_path, merge_script_module):

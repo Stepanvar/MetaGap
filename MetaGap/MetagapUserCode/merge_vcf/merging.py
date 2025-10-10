@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import copy
 import datetime
 import heapq
@@ -484,7 +485,11 @@ def _filter_vcf_records(
     finally:
         reader.close(); writer.close()
     shutil.move(tmp, input_path)
-    log_message(f"Applied variant filter: kept {kept} of {total}.", verbose)
+    log_message(
+        f"Applied variant filter: kept {kept} of {total}.",
+        verbose,
+        level=logging.INFO,
+    )
 
 
 def merge_vcfs(
@@ -503,7 +508,11 @@ def merge_vcfs(
     gz_vcf = base_vcf + ".gz"
 
     file_count = len(valid_files)
-    log_message(f"Discovered {file_count} validated VCF shard(s) for merging.", verbose)
+    log_message(
+        f"Discovered {file_count} validated VCF shard(s) for merging.",
+        verbose,
+        level=logging.INFO,
+    )
 
     temp_files: List[str] = []
     preprocessed: List[str] = []
@@ -609,8 +618,8 @@ def merge_vcfs(
             try:
                 if os.path.exists(tmp):
                     os.remove(tmp)
-                except OSError:
-                    pass
+            except OSError:
+                pass
 
     if merged_header is None:
         handle_critical_error("Failed to construct a merged VCF header from the provided files.")
@@ -688,7 +697,11 @@ def merge_vcfs(
         _sort_record_alts(rec)
         return rec
 
-    log_message("Performing heap-based k-way merge of VCF shards...", verbose)
+    log_message(
+        "Performing heap-based k-way merge of VCF shards...",
+        verbose,
+        level=logging.DEBUG,
+    )
     heap: List[Tuple[Tuple[int, int, str, Tuple[str, ...]], int, int, "vcfpy.Record"]] = []
     counter = itertools.count()
     for i in range(len(iters)):
@@ -773,7 +786,11 @@ def merge_vcfs(
     shutil.move(anon_tmp, base_vcf)
 
     # BGZF compress + Tabix index using pysam
-    log_message("Compressing and indexing the final VCF...", verbose)
+    log_message(
+        "Compressing and indexing the final VCF...",
+        verbose,
+        level=logging.INFO,
+    )
     try:
         pysam.tabix_compress(base_vcf, gz_vcf, force=True)
         pysam.tabix_index(gz_vcf, preset="vcf", force=True)
@@ -783,7 +800,11 @@ def merge_vcfs(
             f"Failed to compress/index final VCF: {exc}",
             exc_cls=MergeConflictError,
         )
-    log_message(f"Merged VCF created and indexed successfully: {gz_vcf}", verbose)
+    log_message(
+        f"Merged VCF created and indexed successfully: {gz_vcf}",
+        verbose,
+        level=logging.INFO,
+    )
     return gz_vcf
 
 

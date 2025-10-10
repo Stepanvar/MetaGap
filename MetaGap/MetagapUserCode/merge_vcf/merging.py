@@ -144,38 +144,70 @@ def _merge_colliding_records(
     return base
 
 
-def preprocess_vcf(file_path: str) -> str:
+def preprocess_vcf(file_path: str, *, chunk_size: int = 1024) -> str:
+    """Normalize whitespace delimiters in ``file_path`` if necessary.
+
+    Tabs are mandatory between VCF columns; meta-info lines (##...) must be preserved as-is.
+    Returns original path if no changes were needed; otherwise writes a normalized .tmp file and returns its path.
+    """
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
+
     opener = gzip.open if str(file_path).endswith(".gz") else open
     mode = "rt" if opener is gzip.open else "r"
-    with opener(file_path, mode, encoding="utf-8") as fh:
-        lines = fh.readlines()
 
+    # First pass: detect whether normalization is needed, without buffering the whole file.
     modified = False
-    new_lines: List[str] = []
     header_found = False
-    for line in lines:
-        if line.startswith("##"):
-            new_lines.append(line)
-        elif line.startswith("#"):
-            nl = re.sub(r"\s+", "\t", line.rstrip()) + "\n"
-            new_lines.append(nl); header_found = True
-            modified |= nl != line
-        else:
-            if header_found:
-                nl = re.sub(r"\s+", "\t", line.rstrip()) + "\n"
-                new_lines.append(nl); modified |= nl != line
+    with opener(file_path, mode, encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("##"):
+                continue
+            if line.startswith("#"):
+                header_found = True
+                if re.sub(r"\s+", "\t", line.rstrip()) + "\n" != line:
+                    modified = True
+            elif header_found:
+                if re.sub(r"\s+", "\t", line.rstrip()) + "\n" != line:
+                    modified = True
+            # If not header_found yet, keep scanning as-is.
+
+    if not modified:
+        return file_path
+
+    # Second pass: rewrite with normalized tabs using a small buffer.
+    temp_file = f"{file_path}.tmp"
+    with opener(file_path, mode, encoding="utf-8") as read_handle, open(
+        temp_file, "w", encoding="utf-8"
+    ) as write_handle:
+        header_found = False
+        buffer: List[str] = []
+
+        def flush_buffer() -> None:
+            if buffer:
+                write_handle.writelines(buffer)
+                buffer.clear()
+
+        for line in read_handle:
+            if line.startswith("##"):
+                buffer.append(line)
+            elif line.startswith("#"):
+                header_found = True
+                buffer.append(re.sub(r"\s+", "\t", line.rstrip()) + "\n")
             else:
-                new_lines.append(line)
+                if header_found:
+                    buffer.append(re.sub(r"\s+", "\t", line.rstrip()) + "\n")
+                else:
+                    buffer.append(line)
 
-    if modified:
-        tmp = file_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as out:
-            out.writelines(new_lines)
-        return tmp
-    return file_path
+            if len(buffer) >= chunk_size:
+                flush_buffer()
 
+        flush_buffer()
 
-def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable[[], dict]:
+    return temp_file
+
+  def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable[[], dict]:
     if not format_keys:
         return lambda: {}
     template = {}

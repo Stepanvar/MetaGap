@@ -10,6 +10,9 @@ jobs:
   test:
     name: Run test suite
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MetaGap
 
     steps:
       - name: Check out repository
@@ -23,29 +26,27 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r MetaGap/requirements.txt coverage
+          pip install -r requirements.txt coverage
 
       - name: Run Django tests with coverage
         id: tests
         continue-on-error: true
         run: |
           set -o pipefail
-          cd MetaGap
-          coverage run manage.py test 2>&1 | tee ../test-output.log
+          python -m coverage run manage.py test 2>&1 | tee test-output.log
 
       - name: Generate coverage reports and enforce thresholds
         if: always()
         run: |
-          if [ ! -f MetaGap/.coverage ]; then
+          if [ ! -f .coverage ]; then
             echo "No coverage data generated" | tee coverage-summary.txt
             exit 1
           fi
 
-          cd MetaGap
-          coverage report --skip-empty | tee ../coverage-summary.txt
-          coverage report --include="*/MetagapUserCode/*" --fail-under=75
-          coverage report --include="*/app/*" --fail-under=80
-          coverage xml -o ../coverage.xml
+          coverage report --data-file=.coverage --skip-empty | tee coverage-summary.txt
+          coverage report --data-file=.coverage --include="*/MetagapUserCode/*" --fail-under=75
+          coverage report --data-file=.coverage --include="*/app/*" --fail-under=80
+          coverage xml --data-file=.coverage -o coverage.xml
 
       - name: Annotate metadata warnings
         if: always()
@@ -66,9 +67,9 @@ jobs:
         with:
           name: django-test-artifacts
           path: |
-            test-output.log
-            coverage-summary.txt
-            coverage.xml
+            MetaGap/test-output.log
+            MetaGap/coverage-summary.txt
+            MetaGap/coverage.xml
           if-no-files-found: warn
 
       - name: Fail if tests failed

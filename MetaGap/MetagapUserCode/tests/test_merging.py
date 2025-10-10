@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -247,6 +248,82 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     assert merged_record.call_for_sample["S2"].data["GT"] == "./."
     assert merged_record.call_for_sample["S1"].data["GT"] == "0/1"
     assert result_path.endswith(".gz")
+
+
+def test_filter_vcf_records_applies_thresholds(tmp_path, monkeypatch, caplog):
+    class _Record:
+        def __init__(self, qual, an, filters):
+            self.QUAL = qual
+            self.INFO = {} if an is None else {"AN": an}
+            self.FILTER = filters
+
+    records = [
+        _Record(50, 120, ["PASS"]),
+        _Record(35, 80, ["q10"]),
+        _Record(10, 80, ["q10"]),
+        _Record(40, 40, ["PASS"]),
+        _Record(45, 90, ["LowQual"]),
+        _Record(55, [150], []),
+        _Record(60, None, ["PASS"]),
+    ]
+
+    written_records = []
+
+    class _StubReader:
+        def __init__(self, entries):
+            self.header = SimpleNamespace()
+            self._entries = entries
+
+        def __iter__(self):
+            for entry in self._entries:
+                yield entry
+
+        def close(self):
+            return None
+
+    class _StubWriter:
+        def __init__(self, path, header):
+            self.path = Path(path)
+            self.header = header
+            self._handle = self.path.open("w", encoding="utf-8")
+
+        def write_record(self, record):
+            written_records.append(record)
+            self._handle.write("record\n")
+
+        def close(self):
+            self._handle.close()
+
+    class _ReaderFactory:
+        @staticmethod
+        def from_path(path):
+            return _StubReader(records)
+
+    class _WriterFactory:
+        @staticmethod
+        def from_path(path, header):
+            return _StubWriter(path, header)
+
+    monkeypatch.setattr(merging.vcfpy, "Reader", _ReaderFactory)
+    monkeypatch.setattr(merging.vcfpy, "Writer", _WriterFactory)
+
+    input_path = tmp_path / "input.vcf"
+    input_path.write_text("original\n", encoding="utf-8")
+
+    with caplog.at_level(logging.INFO, logger="vcf_merger"):
+        merging._filter_vcf_records(
+            str(input_path),
+            qual_threshold=20,
+            an_threshold=50,
+            allowed_filter_values=("PASS", "q10"),
+            verbose=False,
+        )
+
+    assert written_records == [records[0], records[1], records[5]]
+    assert input_path.read_text(encoding="utf-8").count("record\n") == 3
+
+    messages = [rec.message for rec in caplog.records if "Applied variant filter" in rec.message]
+    assert messages == ["Applied variant filter: kept 3 of 7."]
 
 
 def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):

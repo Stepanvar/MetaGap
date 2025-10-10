@@ -3,6 +3,8 @@ from typing import Dict, Iterable, List, Sequence
 import django_tables2 as tables
 from django.db import models
 
+from .models import AlleleFrequency
+
 
 NUMERIC_FIELD_TYPES = (
     models.AutoField,
@@ -120,3 +122,53 @@ def create_dynamic_table(
 
     # Create and return the table class.
     return type(table_name, (tables.Table,), columns)
+
+
+DEFAULT_ALLELE_PRIORITY_FIELDS: Sequence[str] = (
+    "chrom",
+    "pos",
+    "ref",
+    "alt",
+    "qual",
+    "filter",
+    "info__af",
+    "info__ac",
+    "info__an",
+    "info__dp",
+    "info__mq",
+)
+
+DEFAULT_ALLELE_EXCLUDE_FIELDS: Sequence[str] = (
+    "info__additional",
+    "format__payload",
+)
+
+
+def build_allele_frequency_table(
+    *,
+    priority_extra: Sequence[str] | None = None,
+    exclude_extra: Iterable[str] | None = None,
+    table_name: str = "AlleleFrequencyTable",
+    include_related: bool = True,
+):
+    """Create an :class:`~django_tables2.Table` for :class:`AlleleFrequency` records.
+
+    Parameters allow callers to extend the shared priority and exclusion lists while
+    keeping their defaults aligned across the application.
+    """
+
+    priority_fields: List[str] = list(DEFAULT_ALLELE_PRIORITY_FIELDS)
+    if priority_extra:
+        priority_fields.extend(priority_extra)
+
+    exclude_fields = list(DEFAULT_ALLELE_EXCLUDE_FIELDS)
+    if exclude_extra:
+        exclude_fields.extend(exclude_extra)
+
+    return create_dynamic_table(
+        AlleleFrequency,
+        table_name=table_name,
+        include_related=include_related,
+        priority_fields=priority_fields,
+        exclude_fields=exclude_fields,
+    )

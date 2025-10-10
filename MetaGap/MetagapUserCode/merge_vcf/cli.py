@@ -46,7 +46,20 @@ def parse_arguments():
         description="Consolidate multiple VCF files into a single merged VCF.",
     )
     parser.add_argument("input_vcfs", nargs="*", help="Input VCF files.")
-    parser.add_argument("--inputs", nargs="+", dest="input_list", help="Alternate way to pass input VCFs.")
+
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "-i",
+        "--input-dir",
+        dest="input_dir",
+        help="Directory containing input VCF files. All *.vcf and *.vcf.gz files will be merged.",
+    )
+    input_group.add_argument(
+        "--inputs",
+        nargs="+",
+        dest="input_list",
+        help="Alternate way to pass input VCFs.",
+    )
     parser.add_argument(
         "-o",
         "--out-dir",
@@ -55,51 +68,131 @@ def parse_arguments():
         dest="output_dir",
         help="Output directory for the merged VCF. Defaults to current directory.",
     )
+    parser.add_argument("--ref", dest="ref", help="Reference genome build to use.")
+    parser.add_argument("--vcf-version", dest="vcf_version", help="VCF version for the merged output.")
+    parser.add_argument(
+        "--allow-gvcf",
+        dest="allow_gvcf",
+        action="store_true",
+        help="Allow gVCF inputs when validating files.",
+    )
     parser.add_argument("--qual-threshold", type=float, default=30.0, help="Minimum QUAL to keep a variant. <0 disables.")
     parser.add_argument("--an-threshold", type=float, default=50.0, help="Minimum INFO/AN to keep a variant. <0 disables.")
     parser.add_argument(
-        "--sample-header",
+        "--sample-metadata",
         action="append",
-        dest="sample_header_entries",
+        dest="sample_metadata_entries",
         type=_validate_metadata_entry,
         default=[],
         help="SAMPLE header KEY=VALUE entry (repeatable). Must include ID=...",
     )
     parser.add_argument(
-        "--simple-header",
+        "--header-metadata",
         action="append",
-        dest="simple_header_lines",
+        dest="header_metadata_lines",
         type=_validate_metadata_entry,
         default=[],
         help="Additional header KEY=VALUE (repeatable). '##' is auto-prefixed.",
     )
     parser.add_argument(
-        "--metadata-file",
-        dest="metadata_file",
+        "-m",
+        "--metadata-template",
+        dest="metadata_template_path",
         help="Optional file with extra header lines. One entry per line. Lines without '##' will be prefixed.",
+    )
+    parser.add_argument(
+        "--meta",
+        action="append",
+        dest="meta_entries",
+        type=_validate_metadata_entry,
+        default=[],
+        help="Generic metadata KEY=VALUE entry. ID keys route to sample metadata; others to header metadata.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose console logging.")
     args = parser.parse_args()
 
     # Collect inputs
-    input_files: list[str] = []
+    explicit_inputs: list[str] = []
     if args.input_list:
-        input_files.extend(args.input_list)
+        explicit_inputs.extend(args.input_list)
     if args.input_vcfs:
-        input_files.extend(args.input_vcfs)
+        explicit_inputs.extend(args.input_vcfs)
+
+    if args.input_dir and explicit_inputs:
+        parser.error("Provide either --input-dir or explicit VCF paths, not both.")
+    if not args.input_dir and not explicit_inputs:
+        parser.error("No input VCF files specified. Provide paths or --input-dir.")
+
+    input_files: list[str] = []
+    if args.input_dir:
+        input_dir_path = Path(args.input_dir)
+        if not input_dir_path.is_dir():
+            parser.error(f"Input directory does not exist: {args.input_dir}")
+        globbed_files = list(input_dir_path.glob("*.vcf")) + list(input_dir_path.glob("*.vcf.gz"))
+        input_files = [str(p) for p in sorted(globbed_files)]
+    else:
+        input_files = explicit_inputs
+
     if not input_files:
         parser.error("No input VCF files specified.")
 
-    # Clean metadata
-    cleaned_sample_entries = [s for s in args.sample_header_entries if s and s.strip()]
-    args.sample_header_entries = cleaned_sample_entries
-    args.sample_metadata_entries = list(cleaned_sample_entries)
+# Clean metadata (conflict-resolved)
+	def _norm(s: str) -> str:
+		return s.strip()
 
-    cleaned_header_lines = [
-        s if s.startswith("##") else f"##{s}" for s in args.simple_header_lines if s and s.strip()
-    ]
-    args.simple_header_lines = cleaned_header_lines
-    args.header_metadata_lines = list(cleaned_header_lines)
+	def _ensure_hashes(s: str) -> str:
+		return s if s.startswith("##") else f"##{s}"
+
+	def _route_meta(entry: str) -> tuple[str, str]:
+		# SAMPLE=... goes to sample metadata; everything else goes to header metadata
+		body = entry.lstrip("#").strip()
+		if body.upper().startswith("SAMPLE="):
+			return "sample", _ensure_hashes(body)
+		return "header", _ensure_hashes(body)
+
+	def _dedupe(seq: list[str]) -> list[str]:
+		seen = set()
+		out = []
+		for x in seq:
+			if x not in seen:
+				seen.add(x)
+				out.append(x)
+		return out
+
+	sample_src = (getattr(args, "sample_header_entries", []) or []) + \
+				 (getattr(args, "sample_metadata_entries", []) or [])
+	header_src = (getattr(args, "simple_header_lines", []) or []) + \
+				 (getattr(args, "header_metadata_lines", []) or [])
+	meta_src   = (getattr(args, "meta_entries", []) or [])
+
+	sample_list: list[str] = []
+	header_list: list[str] = []
+
+	for s in sample_src:
+		s = _norm(s)
+		if s:
+			sample_list.append(_ensure_hashes(s))
+
+	for h in header_src:
+		h = _norm(h)
+		if h:
+			header_list.append(_ensure_hashes(h))
+
+	for m in meta_src:
+		m = _norm(m)
+		if not m:
+			continue
+		which, v = _route_meta(m)
+		(sample_list if which == "sample" else header_list).append(v)
+
+	# drop fileformat lines; dedupe; set canonical fields
+	args.sample_metadata_entries = _dedupe([x for x in sample_list if not x.startswith("##fileformat")])
+	args.header_metadata_lines   = _dedupe([x for x in header_list if not x.startswith("##fileformat")])
+
+	# optional: clear legacy fields to avoid later confusion
+	args.sample_header_entries = []
+	args.simple_header_lines = []
+	args.meta_entries = []
 
     # Require SAMPLE ID if any SAMPLE metadata present
     has_id = any(
@@ -107,11 +200,16 @@ def parse_arguments():
         for ent in args.sample_metadata_entries
     )
     if args.sample_metadata_entries and not has_id:
-        parser.error("Provide a non-empty SAMPLE ID (e.g., --sample-header ID=SampleName).")
+        parser.error("Provide a non-empty SAMPLE ID (e.g., --sample-metadata ID=SampleName).")
 
     # Normalize paths
     args.output_dir = str(Path(args.output_dir)) if args.output_dir else "."
+    args.input_dir = str(Path(args.input_dir)) if args.input_dir else None
+    args.metadata_template_path = (
+        str(Path(args.metadata_template_path)) if args.metadata_template_path else None
+    )
     args.input_files = [str(Path(p)) for p in input_files]
+    args.meta_entries = meta_entries
     return args
 
 
@@ -150,7 +248,11 @@ def main():
             enable_console=verbose,
         )
 
-        extra_file_lines = metadata_module.load_metadata_lines(args.metadata_file, verbose) if args.metadata_file else []
+        extra_file_lines = (
+            metadata_module.load_metadata_lines(args.metadata_template_path, verbose)
+            if args.metadata_template_path
+            else []
+        )
 
         log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         log_message(f"Input directory: {input_dir}")

@@ -18,7 +18,7 @@ import re
 import shutil
 import tempfile
 from collections import OrderedDict
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Mapping
 
 import logging
 import subprocess
@@ -48,43 +48,23 @@ DEFAULT_AN_THRESHOLD: Optional[float] = 50.0
 DEFAULT_ALLOWED_FILTER_VALUES: Tuple[str, ...] = ("PASS",)
 
 
-STANDARD_INFO_DEFINITIONS = OrderedDict(
-    [
-        (
-            "AC",
-            collections.OrderedDict(
-                [
-                    ("Number", "A"),
-                    ("Type", "Integer"),
-                    (
-                        "Description",
-                        "Alternate allele count in genotypes, for each ALT allele",
-                    ),
-                ]
-            ),
-        ),
-        (
-            "AN",
-            collections.OrderedDict(
-                [
-                    ("Number", "1"),
-                    ("Type", "Integer"),
-                    ("Description", "Total number of alleles in called genotypes"),
-                ]
-            ),
-        ),
-        (
-            "AF",
-            collections.OrderedDict(
-                [
-                    ("Number", "A"),
-                    ("Type", "Float"),
-                    ("Description", "Alternate allele frequency"),
-                ]
-            ),
-        ),
-    ]
-)
+STANDARD_INFO_DEFINITIONS: dict[str, dict[str, str]] = {
+    "AC": {
+        "Number": "A",
+        "Type": "Integer",
+        "Description": "Alternate allele count in genotypes, for each ALT allele",
+    },
+    "AN": {
+        "Number": "1",
+        "Type": "Integer",
+        "Description": "Total number of alleles in called genotypes",
+    },
+    "AF": {
+        "Number": "A",
+        "Type": "Float",
+        "Description": "Alternate allele frequency",
+    },
+}
 
 
 INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
@@ -92,9 +72,7 @@ FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
 CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
-def _format_info_definition(
-    info_id: str, definition_mapping: collections.OrderedDict[str, object]
-) -> str:
+def _format_info_definition(info_id: str, definition_mapping: Mapping[str, object]) -> str:
     parts = [f"ID={info_id}"]
     for key, value in definition_mapping.items():
         if value is None:
@@ -137,7 +115,7 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
         if info_id in existing_ids:
             continue
 
-        mapping = collections.OrderedDict([("ID", info_id)])
+        mapping: dict[str, object] = {"ID": info_id}
         mapping.update(definition)
 
         try:
@@ -360,34 +338,7 @@ def _format_sample_metadata_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _open_vcf_stream(path: str):
-    """Return a text-mode handle for ``path`` that transparently handles gzip."""
-
-    return (
-        gzip.open(path, "rt", encoding="utf-8")
-        if path.endswith(".gz")
-        else open(path, "r", encoding="utf-8")
-    )
-
-
-def _read_vcf_header_lines(path: str) -> List[str]:
-    """Return the header lines from ``path`` without consuming variant records.
-
-    The function mirrors the streaming logic used in :func:`vcfpy.Reader` but
-    returns raw strings without trailing newlines so callers can merge them with
-    additional metadata before writing to disk.
-    """
-
-    header_lines: List[str] = []
-    with _open_vcf_stream(path) as handle:
-        for raw in handle:
-            if not raw.startswith("#"):
-                break
-            header_lines.append(raw.rstrip("\n"))
-    return header_lines
-
-
-def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
+def build_sample_metadata_line(entries: Mapping[str, str]) -> str:
     """Serialize an ordered mapping into a single ``##SAMPLE`` metadata line."""
 
     id_value = entries.get("ID", "").strip()
@@ -407,7 +358,7 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
-def _parse_sample_metadata_line(serialized: str) -> collections.OrderedDict[str, str]:
+def _parse_sample_metadata_line(serialized: str) -> dict[str, str]:
     """Return an ordered mapping extracted from a serialized ``##SAMPLE`` line."""
 
     if not isinstance(serialized, str):
@@ -420,7 +371,7 @@ def _parse_sample_metadata_line(serialized: str) -> collections.OrderedDict[str,
         raise ValueError("Serialized sample metadata must be in '##SAMPLE=<...>' format.")
 
     body = text[len(prefix) : -len(suffix)]
-    entries = collections.OrderedDict()
+    entries: dict[str, str] = {}
 
     token: list[str] = []
     stack: list[str] = []
@@ -519,8 +470,8 @@ def _parse_simple_metadata_line(line: str) -> tuple[str, str] | None:
 
 
 def _load_metadata_template(
-    template_path: str | None, verbose: bool = False
-) -> tuple[collections.OrderedDict[str, str] | None, list, list[str], str | None]:
+    template_path: Optional[str], verbose: bool = False
+) -> Tuple[Optional[dict[str, str]], List, List[str], Optional[str]]:
     """Return metadata derived from a user-supplied template header file."""
 
     if not template_path:
@@ -536,9 +487,9 @@ def _load_metadata_template(
             f"Metadata template header path is not a file: {template_path}"
         )
 
-    template_sample_mapping: collections.OrderedDict[str, str] | None = None
-    template_serialized_sample: str | None = None
-    sanitized_lines: list[str] = []
+    template_sample_mapping: Optional[dict[str, str]] = None
+    template_serialized_sample: Optional[str] = None
+    sanitized_lines: List[str] = []
     simple_header_lines = []
     existing_simple = set()
     existing_sanitized = set()
@@ -578,7 +529,7 @@ def _load_metadata_template(
                             verbose,
                             level=logging.WARNING,
                         )
-                    template_sample_mapping = collections.OrderedDict(parsed_sample.items())
+                    template_sample_mapping = dict(parsed_sample.items())
                     template_serialized_sample = stripped
                     continue
 
@@ -803,7 +754,7 @@ def append_metadata_to_merged_vcf(
             return ("%g" % value)
         return str(value)
 
-    def _serialize_info(info: OrderedDict) -> str:
+    def _serialize_info(info: Mapping[str, object]) -> str:
         entries = []
         for key, value in info.items():
             if value is None:
@@ -867,12 +818,19 @@ def append_metadata_to_merged_vcf(
 
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
-        genotypes = (
-            getattr(call, "data", {}).get("GT")
-            for call in getattr(record, "calls", []) or []
-        )
-        ac, an, af = _compute_ac_an_af(genotypes, alt_count)
-        info = getattr(record, "INFO", OrderedDict())
+        ac = [0] * alt_count
+        an = 0
+        for call in getattr(record, "calls", []):
+            data = getattr(call, "data", {})
+            alleles = _extract_called_alleles(data.get("GT"))
+            for allele in alleles:
+                if allele is None:
+                    continue
+                if allele >= 0:
+                    an += 1
+                if 1 <= allele <= alt_count:
+                    ac[allele - 1] += 1
+        info = getattr(record, "INFO", {})
         info["AC"] = ac if alt_count else []
         info["AN"] = an
         info["AF"] = af if an else []
@@ -925,9 +883,7 @@ def append_metadata_to_merged_vcf(
         )
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
         qual_field = _format_scalar(qual_value) if qual_value is not None else "."
-        info_field = _serialize_info(
-            getattr(record, "INFO", collections.OrderedDict())
-        )
+        info_field = _serialize_info(getattr(record, "INFO", {}))
         filter_field = _normalize_filter(getattr(record, "FILTER", None))
         record_id = getattr(record, "ID", None)
         if isinstance(record_id, list):

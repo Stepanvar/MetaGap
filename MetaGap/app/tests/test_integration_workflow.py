@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.contrib.auth.forms import PasswordResetForm
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -45,13 +46,21 @@ class UserWorkflowIntegrationTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        User = get_user_model()
-        self.user = User.objects.create_user(
+        self.user = self._create_user(
             username="workflow_user",
             email="workflow@example.com",
-            password="workflow-pass",
         )
         mail.outbox.clear()
+
+    def _create_user(
+        self, *, username: str, email: str, password: str = "workflow-pass"
+    ):
+        User = get_user_model()
+        return User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+        )
 
     def _import_vcf_content(self, content: str, filename: str) -> SampleGroup:
         importer = VCFImporter(self.user)
@@ -224,3 +233,40 @@ class UserWorkflowIntegrationTests(TestCase):
         values = row.split("\t")
         self.assertIn(str(allele.pos), values)
         self.assertIn(allele.variant_id, values)
+
+    def test_sample_group_delete_respects_ownership(self) -> None:
+        sample_group = SampleGroup.objects.create(
+            name="Workflow Delete Cohort",
+            created_by=self.user.organization_profile,
+            contact_email="owner@example.com",
+        )
+        intruder = self._create_user(
+            username="workflow_intruder",
+            email="intruder@example.com",
+        )
+        delete_url = reverse("sample_group_delete", args=[sample_group.pk])
+
+        with mock.patch("app.views.messages.success") as mock_success:
+            self.client.force_login(intruder)
+            intruder_response = self.client.post(delete_url)
+            self.assertEqual(intruder_response.status_code, 404)
+            self.assertTrue(SampleGroup.objects.filter(pk=sample_group.pk).exists())
+            intruder_messages = list(get_messages(intruder_response.wsgi_request))
+            self.assertFalse(intruder_messages)
+            mock_success.assert_not_called()
+
+            self.client.logout()
+            self.client.force_login(self.user)
+            owner_response = self.client.delete(delete_url)
+
+        self.assertEqual(owner_response.status_code, 302)
+        self.assertEqual(owner_response["Location"], reverse("profile"))
+        self.assertFalse(SampleGroup.objects.filter(pk=sample_group.pk).exists())
+
+        mock_success.assert_called_once_with(
+            mock.ANY,
+            f"Deleted {sample_group.name} successfully.",
+        )
+
+        follow_response = self.client.get(reverse("profile"))
+        self.assertEqual(follow_response.status_code, 200)

@@ -281,6 +281,30 @@ def test_pad_record_samples_normalizes_blank_genotypes():
     assert record.call_for_sample["S1"].data["GT"] == "./."
 
 
+def test_merge_colliding_records_recomputes_ac_an_af_from_calls():
+    header = _header_with_formats(["S1", "S2"])
+    r1 = _StubRecord("S1", "0/1")
+    r1.INFO.update({"AC": [5], "AN": 8, "AF": [0.6]})
+    r2 = _StubRecord("S2", "1/1")
+    r2.INFO.update({"AC": [2], "AN": 4, "AF": [0.5]})
+
+    merged = merging._merge_colliding_records([(r1, 0), (r2, 1)], header, ["S1", "S2"])
+    merging._recompute_ac_an_af(merged)
+
+    assert merged.INFO["AC"] == [3]
+    assert merged.INFO["AN"] == 4
+    assert merged.INFO["AF"] == pytest.approx([0.75])
+
+
+def test_recompute_ac_an_af_defaults_zero_frequencies_when_an_missing():
+    record = _StubRecord("S1", "./.")
+    record.INFO.update({"AC": [7], "AN": 10, "AF": [0.7]})
+
+    merging._recompute_ac_an_af(record)
+
+    assert record.INFO["AC"] == [0]
+    assert record.INFO["AN"] == 0
+    assert record.INFO["AF"] == [0.0]
 def test_merge_colliding_records_inserts_missing_sample_defaults(monkeypatch):
     header = _header_with_formats(["X"])
 

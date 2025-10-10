@@ -7,7 +7,14 @@ from types import SimpleNamespace
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from app.models import Format, GenomeComplexity, Info, SampleGroup
+from app.models import (
+    BioinfoAlignment,
+    BioinfoVariantCalling,
+    Format,
+    GenomeComplexity,
+    Info,
+    SampleGroup,
+)
 from app.services.vcf_importer import VCFImporter
 
 
@@ -121,6 +128,28 @@ class ImportHelpersTests(TestCase):
         self.assertIn(raw_key.lower(), consumed)
         self.assertIn("genome_complexity-extra_metric", consumed)
         self.assertEqual(additional, {"extra_metric": "observed"})
+
+    def test_extract_section_data_prefers_section_specific_tool_keys(self):
+        """Section-specific aliases win over bare tool keys for overlapping sections."""
+
+        metadata = {
+            "bioinfoalignment_software": "BWA",
+            "tool": "GATK",
+            "bioinfoalignment_params": "-M",
+            "bioinfovariantcalling_tool": "GATK",
+        }
+
+        alignment_data, alignment_consumed, _ = self.importer._extract_section_data(
+            metadata, "bioinfo_alignment", BioinfoAlignment
+        )
+        variant_data, variant_consumed, _ = self.importer._extract_section_data(
+            metadata, "bioinfo_variant_calling", BioinfoVariantCalling
+        )
+
+        self.assertEqual(alignment_data["tool"], "BWA")
+        self.assertEqual(variant_data["tool"], "GATK")
+        self.assertIn("bioinfoalignment_software", alignment_consumed)
+        self.assertIn("bioinfovariantcalling_tool", variant_consumed)
 
     def test_extract_section_data_falls_back_to_section_value(self):
         """Section-level metadata populates the configured primary field when needed."""

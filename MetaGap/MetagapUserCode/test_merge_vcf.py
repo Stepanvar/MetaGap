@@ -78,6 +78,21 @@ def run_workflow(args=None):
     if args is None:
         args = parse_arguments()
     verbose = args.verbose
+    parse_kwargs = {}
+    try:
+        import inspect
+
+        signature = inspect.signature(parse_metadata_arguments)
+        if "log_message" in signature.parameters:
+            parse_kwargs["log_message"] = log_message
+        if "handle_critical_error" in signature.parameters:
+            parse_kwargs["handle_critical_error"] = handle_critical_error
+    except (ImportError, ValueError):  # pragma: no cover - defensive guard
+        parse_kwargs = {
+            "log_message": log_message,
+            "handle_critical_error": handle_critical_error,
+        }
+
     (
         sample_header_line,
         simple_header_lines,
@@ -87,8 +102,7 @@ def run_workflow(args=None):
     ) = parse_metadata_arguments(
         args,
         verbose,
-        log_message=log_message,
-        handle_critical_error=handle_critical_error,
+        **parse_kwargs,
     )
 
     log_message(

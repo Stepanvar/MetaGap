@@ -808,6 +808,7 @@ def append_metadata_to_merged_vcf(
     serialized_sample_line=None,
     sample_header_entries=None,
     simple_header_lines=None,
+    *,
     qual_threshold: Optional[float] = DEFAULT_QUAL_THRESHOLD,
     an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
     allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
@@ -1142,6 +1143,150 @@ def append_metadata_to_merged_vcf(
             ]
         )
 
+    def append_metadata_to_merged_vcf(
+    merged_vcf: str,
+    sample_metadata_entries=None,
+    header_metadata_lines=None,
+    serialized_sample_line=None,
+    qual_threshold: Optional[float] = DEFAULT_QUAL_THRESHOLD,
+    an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
+    allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
+    verbose: bool = False,
+    ):
+        """Finalize the merged VCF by applying metadata, AC/AN/AF recomputation, filtering, anonymization, and optional BGZF+Tabix."""
+        if not PYSAM_AVAILABLE or not VCFPY_AVAILABLE:  # pragma: no cover
+            handle_critical_error("vcfpy and pysam must be available to finalize the merged VCF output.")
+
+        header_metadata_lines = header_metadata_lines or []
+
+        # Decide final output names from input suffix.
+        expects_gzip = merged_vcf.endswith(".gz")
+        if merged_vcf.endswith(".vcf.gz"):
+            base = merged_vcf[: -len(".vcf.gz")]
+            final_plain_vcf = f"{base}.anonymized.vcf"
+            final_vcf = f"{final_plain_vcf}.gz"
+        elif merged_vcf.endswith(".vcf"):
+            base = merged_vcf[: -len(".vcf")]
+            final_plain_vcf = f"{base}.anonymized.vcf"
+            final_vcf = final_plain_vcf
+        elif merged_vcf.endswith(".gz"):
+            base = merged_vcf[: -len(".gz")]
+            final_plain_vcf = f"{base}.anonymized.vcf"
+            final_vcf = f"{final_plain_vcf}.gz"
+        else:
+            final_plain_vcf = f"{merged_vcf}.anonymized.vcf"
+            final_vcf = final_plain_vcf
+
+    # ----- Build final header (line-based) -----
+    def _read_header_lines(path: str) -> list[str]:
+        op = gzip.open if path.endswith(".gz") else open
+        out = []
+        with op(path, "rt", encoding="utf-8") as fh:
+            for ln in fh:
+                if ln.startswith("#"):
+                    out.append(ln.rstrip("\n"))
+                    if ln.startswith("#CHROM"):
+                        break
+                else:
+                    break
+        return out
+
+    def _ensure_standard_info_lines(lines: list[str]) -> None:
+        need = {
+            "AC": '##INFO=<ID=AC,Number=A,Type=Integer,Description="Alternate allele count in genotypes, for each ALT allele">',
+            "AN": '##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">',
+            "AF": '##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency, for each ALT allele">',
+        }
+        present = set()
+        for l in lines:
+            if l.startswith("##INFO=<ID="):
+                try:
+                    kid = l.split("##INFO=<ID=", 1)[1].split(",", 1)[0].split(">", 1)[0]
+                    present.add(kid)
+                except Exception:
+                    pass
+        for k, v in need.items():
+            if k not in present:
+                lines.append(v)
+
+    header_lines = _read_header_lines(merged_vcf)
+    fileformat_line = None
+    remaining_header_lines: list[str] = []
+    for line in header_lines:
+        s = line.strip()
+        if not s or s.startswith("#CHROM"):
+            continue
+        if s.startswith("##fileformat") and fileformat_line is None:
+            fileformat_line = s
+            continue
+        if s.startswith("##SAMPLE="):
+            continue  # drop per-sample meta; we'll add cohort SAMPLE
+        remaining_header_lines.append(s)
+
+    final_header_lines: list[str] = [fileformat_line or "##fileformat=VCFv4.2", *remaining_header_lines]
+    existing = set(final_header_lines)
+
+    _ensure_standard_info_lines(final_header_lines)
+
+    if sample_metadata_entries or serialized_sample_line:
+        try:
+            smp = serialized_sample_line or build_sample_metadata_line(sample_metadata_entries)
+            if not smp.startswith("##"):
+                smp = "##" + smp
+            if smp not in existing:
+                final_header_lines.append(smp)
+                existing.add(smp)
+        except ValueError as exc:
+            handle_critical_error(str(exc))
+
+    for meta in header_metadata_lines:
+        nm = (meta or "").strip()
+        if not nm:
+            continue
+        if not nm.startswith("##"):
+            nm = "##" + nm
+        if nm in existing:
+            continue
+        final_header_lines.append(nm)
+        existing.add(nm)
+
+    _ensure_standard_info_lines(final_header_lines)
+    final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
+
+    # ----- Serializer for 8-column anonymized records -----
+    def _fmt_filter(filt) -> str:
+        if not filt:
+            return "."
+        if isinstance(filt, (list, tuple)):
+            if not filt:
+                return "."
+            if filt == ["PASS"] or filt == ("PASS",):
+                return "PASS"
+            return ",".join(str(x) for x in filt)
+        return str(filt)
+
+    def _fmt_info(info: dict) -> str:
+        if not info:
+            return "."
+        parts = []
+        for k, v in info.items():
+            if v is None:
+                parts.append(k)
+            elif isinstance(v, (list, tuple)):
+                parts.append(f"{k}=" + ",".join("" if vv is None else str(vv) for vv in v))
+            else:
+                parts.append(f"{k}={v}")
+        return ";".join(parts) if parts else "."
+
+    def _serialize_record_8col(rec) -> str:
+        chrom = str(getattr(rec, "CHROM", "."))
+        pos = str(getattr(rec, "POS", "."))
+        rid = getattr(rec, "ID", None)
+        rid_field = ";".join(rid) if isinstance(rid, (list, tuple)) else (rid if rid else ".")
+        ref = str(getattr(rec, "REF", "."))
+        alts = getattr(rec, "ALT", []) or []
+        alt_field = ",".join(str(a) for a in alts) if alts else "."
+        qual = getattr(rec, "QUAL", None)
         qual_field = "." if qual is None else str(qual)
         filt_field = _fmt_filter(getattr(rec, "FILTER", None))
         info_field = _fmt_info(getattr(rec, "INFO", {}) or {})

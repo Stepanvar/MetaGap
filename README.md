@@ -25,6 +25,16 @@ After loading the data you can sign in with either demo account and visit the pr
 - Run checks with `python manage.py check` and execute the test suite using `python manage.py test`.
 - Static files are served from the `static/` directory; new assets should be collected with `python manage.py collectstatic` in production environments.
 
+### Continuous integration expectations
+
+- Every pull request and push to `main` runs the Django test suite (`python manage.py test`) under coverage on GitHub Actions.
+- The workflow archives the raw test log and coverage summary so failures can be triaged without re-running the suite locally.
+- Coverage is enforced for critical apps:
+  - `MetaGap/app`: minimum 80% line coverage.
+  - `MetaGap/MetagapUserCode`: minimum 75% line coverage.
+- Test output is scanned for `Unhandled metadata key` warnings; when present they surface as CI annotations so developers can address missing metadata handlers before merging.
+- New features should maintain or improve coverage. If code changes introduce new modules, add tests to keep the coverage thresholds passing.
+
 ## Merging VCF files
 
 The production CLI for the MetaGap VCF merging workflow lives in

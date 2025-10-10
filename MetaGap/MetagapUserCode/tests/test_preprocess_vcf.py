@@ -1,3 +1,4 @@
+import gzip
 import importlib
 import pathlib
 
@@ -12,6 +13,47 @@ def vcf_header() -> str:
 def _load_preprocess_vcf():
     module = importlib.import_module("MetagapUserCode.merge_vcf.merging")
     return getattr(module, "preprocess_vcf")
+
+
+@pytest.fixture(params=[".vcf", ".vcf.gz"])
+def pre_tabbed_vcf(
+    tmp_path: pathlib.Path, vcf_header: str, request: pytest.FixtureRequest
+) -> tuple[pathlib.Path, str]:
+    content = (
+        vcf_header
+        + "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+        + "chr1\t1\t.\tA\tT\t.\tPASS\t.\n"
+    )
+    suffix = request.param
+    vcf_path = tmp_path / f"pre_tabbed{suffix}"
+
+    if suffix.endswith(".gz"):
+        with gzip.open(vcf_path, "wt", encoding="utf-8") as fh:
+            fh.write(content)
+    else:
+        vcf_path.write_text(content, encoding="utf-8")
+
+    return vcf_path, content
+
+
+def test_preprocess_vcf_preserves_pre_tabbed(
+    pre_tabbed_vcf: tuple[pathlib.Path, str], tmp_path: pathlib.Path, cli_module
+) -> None:
+    preprocess_vcf = _load_preprocess_vcf()
+
+    vcf_path, expected_content = pre_tabbed_vcf
+
+    result = preprocess_vcf(str(vcf_path))
+
+    assert result == str(vcf_path)
+
+    if vcf_path.suffix == ".gz":
+        with gzip.open(vcf_path, "rt", encoding="utf-8") as fh:
+            assert fh.read() == expected_content
+    else:
+        assert vcf_path.read_text(encoding="utf-8") == expected_content
+
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_preprocess_vcf_no_changes(

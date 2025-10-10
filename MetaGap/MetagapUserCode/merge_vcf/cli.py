@@ -9,6 +9,23 @@ from .logging_utils import MergeConflictError, MergeVCFError, ValidationError, l
 from . import metadata as metadata_module
 from . import validation
 from . import merging
+from .logging_utils import (
+    LOG_FILE,
+    MergeConflictError,
+    MergeVCFError,
+    ValidationError,
+    configure_logging,
+    handle_critical_error,
+    log_message,
+)
+from .metadata import append_metadata_to_merged_vcf, load_metadata_lines
+from .merging import merge_vcfs
+from .validation import (
+    find_first_vcf_with_header,
+    normalize_vcf_version,
+    validate_all_vcfs,
+    validate_merged_vcf,
+)
 
 def _validate_metadata_entry(arg: str) -> str:
     """Validate that a metadata argument is in KEY=VALUE format and return a sanitized string."""
@@ -127,6 +144,11 @@ def main():
     """Main entry point for the VCF merging CLI. Parses arguments, runs the merging pipeline, and handles output."""
     args = parse_arguments()
     verbose = args.verbose
+
+    log_directory = os.path.abspath(args.output_dir) if args.output_dir else os.getcwd()
+    log_path = os.path.join(log_directory, LOG_FILE)
+    configure_logging(verbose=verbose, log_file=log_path)
+
     try:
         out_dir = Path(args.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)

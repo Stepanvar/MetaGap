@@ -154,64 +154,52 @@ def main():
     try:
         input_dir = os.path.abspath(args.input_dir)
         if not os.path.isdir(input_dir):
-            handle_critical_error(
-                f"Input directory does not exist: {input_dir}",
-                exc_cls=ValidationError,
-            )
+            raise ValidationError(f"Input directory does not exist: {input_dir}")
 
         output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
         log_path = os.path.join(output_dir, LOG_FILE)
         configure_logging(
             log_level=logging.DEBUG if verbose else logging.INFO,
             log_file=log_path,
             enable_file_logging=True,
+            enable_console=verbose,
         )
 
         metadata_header_lines = load_metadata_lines(args.metadata_file, verbose)
 
-        log_message(
-            "Script Execution Log - "
-            + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            verbose,
-        )
+        log_message("Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        log_message(f"Input directory: {input_dir}")
+        log_message(f"Output directory: {output_dir}")
 
-        log_message("Input directory: " + input_dir, verbose)
-
-        log_message("Output directory: " + output_dir, verbose)
-
-        (
-            detected_file,
-            detected_fileformat,
-            detected_reference,
-        ) = find_first_vcf_with_header(input_dir, verbose)
+        detected_file, detected_fileformat, detected_reference = find_first_vcf_with_header(input_dir, verbose)
         ref_genome = detected_reference
         vcf_version = normalize_vcf_version(detected_fileformat)
 
         if not ref_genome:
-            handle_critical_error(
-                "Reference genome build must be auto-detectable from input files.",
-                exc_cls=ValidationError,
-            )
+            raise ValidationError("Reference genome build must be auto-detectable from input files.")
         if not vcf_version:
-            handle_critical_error(
-                "VCF version must be auto-detectable from input files.",
-                exc_cls=ValidationError,
-            )
+            raise ValidationError("VCF version must be auto-detectable from input files.")
 
         if detected_file:
             log_message(
-                f"Auto-detected metadata from {detected_file} -> reference={detected_reference or 'unknown'}, "
-                f"version={detected_fileformat or 'unknown'}",
-                verbose,
+                f"Auto-detected metadata from {detected_file} -> "
+                f"reference={detected_reference or 'unknown'}, version={detected_fileformat or 'unknown'}"
             )
+        log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}")
 
-        log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
-    log_directory = os.path.abspath(args.output_dir) if args.output_dir else os.getcwd()
-    log_path = os.path.join(log_directory, LOG_FILE)
-    configure_logging(verbose=verbose, log_file=log_path)
+    except ValidationError as e:
+        handle_critical_error(str(e), exc_cls=ValidationError)
+    except FileNotFoundError as e:
+        handle_critical_error(f"File not found: {e}", exc_cls=ValidationError)
+    except PermissionError as e:
+        handle_critical_error(f"Permission error: {e}", exc_cls=MergeVCFError)
+    except OSError as e:
+        handle_critical_error(f"Filesystem error: {e}", exc_cls=MergeVCFError)
+    except Exception as e:
+        handle_critical_error(f"Unexpected error: {e}", exc_cls=MergeVCFError)
+
 
     try:
         out_dir = Path(args.output_dir)

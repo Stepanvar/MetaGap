@@ -626,7 +626,7 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
         required=True,
         widget=forms.ClearableFileInput(attrs={"class": "form-control"}),
         help_text=(
-            "Upload a VCF (.vcf, .vcf.gz) or BCF file containing the variants you want to ingest."
+            "Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants you want to ingest."
         ),
     )
 

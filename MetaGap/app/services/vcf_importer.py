@@ -1,43 +1,18 @@
-"""Application views."""
+"""Utilities for importing VCF files into the relational schema."""
 
-import csv
+from __future__ import annotations
+
+import json
 import logging
 import os
+import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth import logout
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.files.storage import default_storage
-from django.db import models as django_models
-from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404
-from django.urls import reverse_lazy
-from django.utils.text import slugify
-from django.views.generic import (
-    CreateView,
-    DeleteView,
-    DetailView,
-    FormView,
-    ListView,
-    TemplateView,
-    UpdateView,
-)
-from django_filters.views import FilterView
-from django_tables2 import RequestConfig
-from django_tables2.views import SingleTableMixin
 
-from .filters import AlleleFrequencySearchFilter, SampleGroupFilter
-from .forms import (
-    CustomUserCreationForm,
-    DeleteAccountForm,
-    EditProfileForm,
-    ImportDataForm,
-    SampleGroupForm,
-    SearchForm,
-)
-from .models import (
+import pysam
+from django.db import models as django_models
+
+from ..models import (
     AlleleFrequency,
     BioinfoAlignment,
     BioinfoPostProc,
@@ -45,9 +20,9 @@ from .models import (
     Format,
     GenomeComplexity,
     IlluminaSeq,
+    Info,
     InputQuality,
     IonTorrentSeq,
-    Info,
     LibraryConstruction,
     MaterialType,
     OntSeq,
@@ -56,607 +31,12 @@ from .models import (
     SampleGroup,
     SampleOrigin,
 )
-from .tables import build_allele_frequency_table, create_dynamic_table
-from .services.vcf_importer import VCFImporter
-from .tables import create_dynamic_table
-from .mixins import OrganizationSampleGroupMixin
-
 
 logger = logging.getLogger(__name__)
 
-class SampleGroupTableView(ListView):
-    """Display a django-tables2 listing of sample groups."""
 
-    model = SampleGroup
-    template_name = "sample_group_table.html"
-    context_object_name = "sample_groups"
-    paginate_by = 10
-    ordering = ("name",)
-
-    def get_queryset(self):
-        # Optimize query by selecting related metadata and prefetching variants
-        queryset = (
-            super()
-            .get_queryset()
-            .select_related(
-                "reference_genome_build",
-                "genome_complexity",
-                "sample_origin",
-                "material_type",
-                "library_construction",
-                "illumina_seq",
-                "ont_seq",
-                "pacbio_seq",
-                "iontorrent_seq",
-                "bioinfo_alignment",
-                "bioinfo_variant_calling",
-                "bioinfo_post_proc",
-                "input_quality",
-            )
-            .prefetch_related("allele_frequencies")
-        )
-        return queryset.order_by("name", "pk")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        table_class = create_dynamic_table(
-            SampleGroup, table_name="SampleGroupTable", include_related=True
-        )
-        table = table_class(self.get_queryset())
-        RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(table)
-        context["table"] = table
-        return context
-
-class SearchResultsView(SingleTableMixin, FilterView):
-    template_name = "results.html"
-    model = AlleleFrequency
-    context_object_name = "allele_frequencies"
-    paginate_by = 10
-    filterset_class = AlleleFrequencySearchFilter
-    ordering = ("chrom", "pos", "ref", "alt", "pk")
-
-    # Dynamically create a table class prioritising variant descriptors first.
-    table_class = build_allele_frequency_table()
-
-    def get_queryset(self):
-        base_queryset = (
-            AlleleFrequency.objects.select_related(
-                "info",
-                "format",
-                "sample_group",
-                "sample_group__reference_genome_build",
-                "sample_group__genome_complexity",
-                "sample_group__sample_origin",
-                "sample_group__material_type",
-                "sample_group__library_construction",
-                "sample_group__illumina_seq",
-                "sample_group__ont_seq",
-                "sample_group__pacbio_seq",
-                "sample_group__iontorrent_seq",
-                "sample_group__bioinfo_alignment",
-                "sample_group__bioinfo_variant_calling",
-                "sample_group__bioinfo_post_proc",
-                "sample_group__input_quality",
-                "sample_group__created_by",
-            )
-        )
-
-        # Instantiate the filter set manually so that we can reuse it in the template context.
-        self.filterset = self.filterset_class(
-            self.request.GET or None, queryset=base_queryset.order_by(*self.ordering)
-        )
-        return self.filterset.qs.order_by(*self.ordering).distinct()
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault("filter", getattr(self, "filterset", None))
-        if hasattr(self, "filterset"):
-            context["filter_form"] = self.filterset.form
-        return context
-
-
-class HomePageView(TemplateView):
-    """Landing page that exposes the primary search form."""
-
-    template_name = "index.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["form"] = SearchForm()
-        return context
-
-
-class ProfileView(LoginRequiredMixin, OrganizationSampleGroupMixin, TemplateView):
-    """Display the user's organisation profile and related import tools."""
-
-    template_name = "profile.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        organization_profile = self.get_organization_profile()
-        sample_groups = self.get_owned_sample_groups().order_by("name")
-
-        context.update(
-            {
-                "organization_profile": organization_profile,
-                "sample_groups": sample_groups,
-                "import_form": ImportDataForm(),
-                "import_form_action": reverse_lazy("import_data"),
-                "import_form_enctype": "multipart/form-data",
-            }
-        )
-        return context
-
-
-def _serialize_info(info: Optional[Info]) -> str:
-    """Serialise an ``Info`` instance into a flattened key/value string."""
-
-    if not info:
-        return ""
-
-    serialized: Dict[str, Any] = {}
-    for field in info._meta.concrete_fields:
-        if field.name == "id":
-            continue
-        value = getattr(info, field.name)
-        if value in (None, "", {}):
-            continue
-        if field.name == "additional":
-            if isinstance(value, dict):
-                for key, additional_value in value.items():
-                    if additional_value in (None, "", {}):
-                        continue
-                    serialized[str(key).upper()] = additional_value
-            continue
-        serialized[field.name.upper()] = value
-
-    return ";".join(f"{key}={value}" for key, value in serialized.items())
-
-
-@login_required
-def export_sample_group_variants(request, pk: int) -> HttpResponse:
-    """Export allele frequency data for a user's sample group."""
-
-    sample_group = get_object_or_404(
-        SampleGroup.objects.select_related("created_by"), pk=pk
-    )
-    organization_profile = getattr(request.user, "organization_profile", None)
-
-    if organization_profile is None or sample_group.created_by != organization_profile:
-        raise Http404("Sample group not found.")
-
-    export_format = request.GET.get("format", "csv").lower()
-    if export_format == "tsv":
-        delimiter = "\t"
-        file_extension = "tsv"
-        content_type = "text/tab-separated-values"
-    else:
-        delimiter = ","
-        file_extension = "csv"
-        content_type = "text/csv"
-
-    filename = slugify(sample_group.name) or f"sample-group-{sample_group.pk}"
-    response = HttpResponse(content_type=content_type)
-    response["Content-Disposition"] = (
-        f"attachment; filename=\"{filename}.{file_extension}\""
-    )
-
-    allele_frequencies_qs = sample_group.allele_frequencies.select_related("info").order_by(
-        "chrom", "pos", "pk"
-    )
-    allele_frequencies = list(allele_frequencies_qs)
-
-    info_field_columns = [
-        f"info_{field.name.lower()}"
-        for field in Info._meta.concrete_fields
-        if field.name not in {"id", "additional"}
-    ]
-
-    additional_info_keys = set()
-    for allele in allele_frequencies:
-        info = allele.info
-        if info and isinstance(info.additional, dict):
-            additional_info_keys.update(str(key) for key in info.additional.keys())
-
-    additional_info_columns = [
-        f"info_{key.lower()}" for key in sorted(additional_info_keys)
-    ]
-
-    fieldnames = [
-        "chrom",
-        "pos",
-        "ref",
-        "alt",
-        "variant_id",
-        *info_field_columns,
-        *additional_info_columns,
-    ]
-
-    writer = csv.DictWriter(response, fieldnames=fieldnames, delimiter=delimiter)
-    writer.writeheader()
-
-    for allele in allele_frequencies:
-        info = allele.info
-        row: Dict[str, Any] = {
-            "chrom": allele.chrom,
-            "pos": allele.pos,
-            "ref": allele.ref,
-            "alt": allele.alt,
-            "variant_id": allele.variant_id or "",
-        }
-
-        if info:
-            for field in Info._meta.concrete_fields:
-                if field.name in {"id", "additional"}:
-                    continue
-                column = f"info_{field.name.lower()}"
-                value = getattr(info, field.name)
-                if value not in (None, ""):
-                    row[column] = value
-
-            if isinstance(info.additional, dict):
-                for key, value in info.additional.items():
-                    column = f"info_{str(key).lower()}"
-                    if value not in (None, ""):
-                        row[column] = value
-
-        for column in fieldnames:
-            row.setdefault(column, "")
-
-        writer.writerow(row)
-
-    return response
-
-
-class DashboardView(LoginRequiredMixin, TemplateView):
-    """Authenticated dashboard summarising recent datasets and activity."""
-
-    template_name = "dashboard.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-
-        dataset_queryset = (
-            SampleGroup.objects.select_related("created_by", "created_by__user")
-            .order_by("-pk")
-        )
-        action_queryset = (
-            AlleleFrequency.objects.select_related(
-                "sample_group",
-                "sample_group__created_by",
-                "sample_group__created_by__user",
-            )
-            .order_by("-pk")
-        )
-
-        if organization_profile is not None:
-            dataset_queryset = dataset_queryset.filter(created_by=organization_profile)
-            action_queryset = action_queryset.filter(
-                sample_group__created_by=organization_profile
-            )
-
-        context.update(
-            {
-                "recent_datasets": list(dataset_queryset[:6]),
-                "recent_actions": list(action_queryset[:6]),
-            }
-        )
-        return context
-
-
-class EditProfileView(LoginRequiredMixin, FormView):
-    form_class = EditProfileForm
-    template_name = "edit_profile.html"
-    success_url = reverse_lazy("profile")
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["instance"] = self.request.user
-        return kwargs
-
-    def form_valid(self, form):
-        form.save()
-        messages.success(self.request, "Your profile has been updated.")
-        return super().form_valid(form)
-
-
-class DeleteAccountView(LoginRequiredMixin, FormView):
-    form_class = DeleteAccountForm
-    template_name = "confirm_delete.html"
-    success_url = reverse_lazy("home")
-
-    def form_valid(self, form):
-        user = self.request.user
-        logout(self.request)
-        user.delete()
-        messages.success(self.request, "Your account has been deleted.")
-        return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault(
-            "form_extra_actions",
-            [
-                {
-                    "url": reverse_lazy("profile"),
-                    "class": "btn btn-secondary",
-                    "label": "Cancel",
-                    "text": "Cancel",
-                }
-            ],
-        )
-        return context
-
-class UserRegistrationView(CreateView):
-    form_class = CustomUserCreationForm
-    template_name = "signup.html"
-    success_url = reverse_lazy("login")
-
-
-class ContactView(TemplateView):
-    template_name = "contact.html"
-
-
-class AboutView(TemplateView):
-    template_name = "about.html"
-
-
-class SampleGroupUpdateView(
-    LoginRequiredMixin, OrganizationSampleGroupMixin, UpdateView
-):
-    """Allow organisation members to edit their sample group metadata."""
-
-    model = SampleGroup
-    form_class = SampleGroupForm
-    template_name = "sample_group_form.html"
-    success_url = reverse_lazy("profile")
-
-    def get_queryset(self):
-        """Restrict editing to groups owned by the user's organisation."""
-
-        return self.get_owned_sample_groups()
-
-    def get_form_kwargs(self) -> Dict[str, Any]:
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
-
-    def form_valid(self, form):
-        messages.success(self.request, "Sample group metadata updated successfully.")
-        return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault(
-            "form_extra_actions",
-            [
-                {
-                    "url": reverse_lazy("profile"),
-                    "class": "btn btn-outline-secondary",
-                    "label": "Cancel",
-                    "text": "Cancel",
-                }
-            ],
-        )
-        return context
-
-
-class SampleGroupDeleteView(
-    LoginRequiredMixin, OrganizationSampleGroupMixin, DeleteView
-):
-    """Provide a confirmation flow for removing imported sample groups."""
-
-    model = SampleGroup
-    template_name = "sample_group_confirm_delete.html"
-    success_url = reverse_lazy("profile")
-
-    def get_queryset(self):
-        return self.get_owned_sample_groups()
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault(
-            "cancel_url",
-            reverse_lazy("sample_group_detail", args=[self.object.pk]),
-        )
-        return context
-
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        group_name = self.object.name
-        response = super().delete(request, *args, **kwargs)
-        messages.success(request, f"Deleted {group_name} successfully.")
-        return response
-
-
-class SampleGroupDetailView(
-    LoginRequiredMixin, OrganizationSampleGroupMixin, DetailView
-):
-    """Display an individual sample group's metadata and variant catalogue."""
-
-    model = SampleGroup
-    template_name = "sample_group_detail.html"
-    context_object_name = "sample_group"
-
-    def get_queryset(self):
-        """Limit access to groups owned by the requesting organisation."""
-
-        return (
-            self.get_owned_sample_groups()
-            .select_related(
-                "created_by",
-                "created_by__user",
-                "reference_genome_build",
-                "genome_complexity",
-                "sample_origin",
-                "material_type",
-                "library_construction",
-                "illumina_seq",
-                "ont_seq",
-                "pacbio_seq",
-                "iontorrent_seq",
-                "bioinfo_alignment",
-                "bioinfo_variant_calling",
-                "bioinfo_post_proc",
-                "input_quality",
-            )
-            .prefetch_related(
-                "allele_frequencies",
-                "allele_frequencies__info",
-                "allele_frequencies__format",
-            )
-        )
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        sample_group_field_names = [
-            field.name
-            for field in SampleGroup._meta.get_fields()
-            if isinstance(field, django_models.Field) and not field.auto_created
-        ]
-        exclude_columns = [
-            "sample_group",
-            "sample_group__id",
-            *[f"sample_group__{name}" for name in sample_group_field_names],
-            "info__id",
-            "format__id",
-        ]
-        table_class = build_allele_frequency_table(
-            priority_extra=("variant_id", "format__genotype"),
-            exclude_extra=exclude_columns,
-        )
-        allele_qs = self.object.allele_frequencies.all()
-        table = table_class(allele_qs)
-        RequestConfig(self.request, paginate={"per_page": 25}).configure(table)
-        sample_group = self.object
-
-        def build_section(title: str, items: Iterable[Tuple[str, Any, Optional[str]]]):
-            section: Dict[str, Any] = {"title": title, "items": []}
-            for key, value, item_type in items:
-                label = key
-                value_key = slugify(key).replace("-", "_")
-                section[value_key] = value
-                item_context = {"label": label, "value": value}
-                if item_type:
-                    item_context["type"] = item_type
-                section["items"].append(item_context)
-            return section
-
-        metadata_sections = [
-            build_section(
-                "Summary",
-                [
-                    ("Name", sample_group.name, None),
-                    ("DOI", sample_group.doi, None),
-                    ("Source lab", sample_group.source_lab, None),
-                    ("Total samples", sample_group.total_samples, None),
-                    ("Contact email", sample_group.contact_email, "email"),
-                    ("Contact phone", sample_group.contact_phone, None),
-                    (
-                        "Created by",
-                        getattr(sample_group.created_by, "organization_name", None)
-                        or sample_group.created_by,
-                        None,
-                    ),
-                ],
-            ),
-            build_section(
-                "Criteria",
-                [
-                    ("Inclusion", sample_group.inclusion_criteria, None),
-                    ("Exclusion", sample_group.exclusion_criteria, None),
-                    ("Comments", sample_group.comments, None),
-                ],
-            ),
-            build_section(
-                "Sample & Material",
-                [
-                    (
-                        "Reference genome build",
-                        getattr(
-                            sample_group.reference_genome_build,
-                            "build_name",
-                            sample_group.reference_genome_build,
-                        ),
-                        None,
-                    ),
-                    (
-                        "Genome complexity",
-                        getattr(
-                            sample_group.genome_complexity,
-                            "size",
-                            sample_group.genome_complexity,
-                        ),
-                        None,
-                    ),
-                    ("Sample origin", sample_group.sample_origin, None),
-                    ("Material type", sample_group.material_type, None),
-                    ("Library construction", sample_group.library_construction, None),
-                ],
-            ),
-            build_section(
-                "Sequencing & Bioinformatics",
-                [
-                    ("Illumina", sample_group.illumina_seq, None),
-                    ("Oxford Nanopore", sample_group.ont_seq, None),
-                    ("PacBio", sample_group.pacbio_seq, None),
-                    ("Ion Torrent", sample_group.iontorrent_seq, None),
-                    ("Alignment", sample_group.bioinfo_alignment, None),
-                    ("Variant calling", sample_group.bioinfo_variant_calling, None),
-                    ("Post-processing", sample_group.bioinfo_post_proc, None),
-                ],
-            ),
-            build_section(
-                "Input Quality",
-                [
-                    ("A260/A280", getattr(sample_group.input_quality, "a260_a280", None), None),
-                    ("A260/A230", getattr(sample_group.input_quality, "a260_a230", None), None),
-                    (
-                        "DNA concentration",
-                        getattr(sample_group.input_quality, "dna_concentration", None),
-                        None,
-                    ),
-                    (
-                        "RNA concentration",
-                        getattr(sample_group.input_quality, "rna_concentration", None),
-                        None,
-                    ),
-                    ("Notes", getattr(sample_group.input_quality, "notes", None), None),
-                ],
-            ),
-        ]
-
-        additional_metadata = sample_group.additional_metadata
-        if isinstance(additional_metadata, dict) and additional_metadata:
-            metadata_sections.append(
-                build_section(
-                    "Custom metadata",
-                    [
-                        (key, value, None)
-                        for key, value in additional_metadata.items()
-                    ],
-                )
-            )
-
-        context["metadata_sections"] = metadata_sections
-        context["allele_frequency_table"] = table
-        context["variant_table"] = table
-        return context
-
-
-class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView):
-    """Handle ingestion of VCF uploads into the relational schema."""
-
-    template_name = "import_data.html"
-    form_class = ImportDataForm
-    success_url = reverse_lazy("profile")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        sample_groups = self.get_owned_sample_groups().order_by("name")
-        context.setdefault("sample_groups", sample_groups)
-        return context
+class VCFImporter:
+    """Encapsulate the VCF parsing workflow previously handled in the view."""
 
     METADATA_SECTION_MAP = {
         "SAMPLE_GROUP": "sample_group",
@@ -838,7 +218,6 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     INFO_FIELD_STRING = "string"
     INFO_FIELD_INT = "int"
     INFO_FIELD_FLOAT = "float"
-    INFO_PLACEHOLDER_VALUES = {".", ""}
 
     INFO_FIELD_MAP = {
         "aa": ("aa", INFO_FIELD_STRING),
@@ -879,30 +258,14 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         "ps": "ps",
     }
 
-    def form_valid(self, form):
-        data_file = form.cleaned_data["data_file"]
-        temp_path = default_storage.save(f"tmp/{data_file.name}", data_file)
-        full_path = os.path.join(settings.MEDIA_ROOT, temp_path)
+    def __init__(self, user: Any) -> None:
+        self.user = user
+        self.warnings: list[str] = []
 
-        importer = VCFImporter(self.request.user)
-        try:
-            created_group = importer.import_file(full_path)
-        except Exception as exc:  # pragma: no cover - defensive feedback channel
-            messages.error(self.request, f"An error occurred: {exc}")
-        else:
-            messages.success(
-                self.request,
-                f"Imported {created_group.name} successfully.",
-            )
-            for warning in importer.warnings:
-                messages.warning(self.request, warning)
-        finally:
-            default_storage.delete(temp_path)
+    def import_file(self, file_path: str) -> SampleGroup:
+        """Import the provided VCF file and return the created sample group."""
 
-        return super().form_valid(form)
-
-    def parse_vcf_file(self, file_path: str) -> SampleGroup:
-        organization_profile = getattr(self.request.user, "organization_profile", None)
+        organization_profile = getattr(self.user, "organization_profile", None)
         if organization_profile is None:
             raise ValueError("The current user does not have an organisation profile.")
 
@@ -916,11 +279,13 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                 )
 
                 self._populate_sample_group_from_pysam(vcf_in, sample_group)
-        except (OSError, ValueError) as exc:  # pragma: no cover - defensive fallback
-            messages.warning(
-                self.request,
-                f"Could not parse VCF metadata with pysam: {exc}. Falling back to a text parser.",
+        except (OSError, ValueError) as exc:
+            warning = (
+                f"Could not parse VCF metadata with pysam: {exc}. "
+                "Falling back to a text parser."
             )
+            logger.warning("%s", warning)
+            self.warnings.append(warning)
             if sample_group is not None:
                 sample_group.delete()
             metadata = self._extract_metadata_text_fallback(file_path)
@@ -952,8 +317,6 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                 format_instance=format_instance,
                 format_sample=format_sample,
             )
-
-        return None
 
     def _create_sample_group(
         self,
@@ -1077,7 +440,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     def _get_model_field(model_cls: Any, field_name: str) -> Optional[django_models.Field]:
         try:
             return model_cls._meta.get_field(field_name)
-        except django_models.FieldDoesNotExist:  # pragma: no cover - defensive
+        except django_models.FieldDoesNotExist:
             return None
 
     def _find_metadata_key(
@@ -1218,77 +581,6 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                 return candidate
         return None
 
-    @staticmethod
-    def _split_sample_attributes(content: str) -> Iterable[str]:
-        items: list[str] = []
-        current: list[str] = []
-        quote_char: Optional[str] = None
-        escape = False
-        bracket_stack: list[str] = []
-        opening = {"{": "}", "[": "]", "(": ")"}
-        closing = {value: key for key, value in opening.items()}
-
-        for char in content:
-            if quote_char:
-                current.append(char)
-                if escape:
-                    escape = False
-                    continue
-                if char == "\\":
-                    escape = True
-                    continue
-                if char == quote_char:
-                    quote_char = None
-                continue
-
-            if char in {'"', "'"}:
-                quote_char = char
-                current.append(char)
-                continue
-
-            if char in opening:
-                bracket_stack.append(char)
-                current.append(char)
-                continue
-
-            if char in closing:
-                if bracket_stack and bracket_stack[-1] == closing[char]:
-                    bracket_stack.pop()
-                current.append(char)
-                continue
-
-            if char == "," and not bracket_stack:
-                item = "".join(current).strip()
-                if item:
-                    items.append(item)
-                current = []
-                continue
-
-            current.append(char)
-
-        tail = "".join(current).strip()
-        if tail:
-            items.append(tail)
-
-        return items
-
-    @staticmethod
-    def _normalize_metadata_value(value: str) -> str:
-        stripped = value.strip()
-        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
-            stripped = stripped[1:-1]
-        if "\\" in stripped:
-            try:
-                stripped = bytes(stripped, "utf-8").decode("unicode_escape")
-            except UnicodeDecodeError:  # pragma: no cover - defensive decoding
-                pass
-        return stripped
-
-    @staticmethod
-    def _normalize_metadata_key(key: Any) -> str:
-        normalized = re.sub(r"[^0-9a-z]+", "", str(key).lower())
-        return normalized
-
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -1311,48 +603,6 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                 if stripped.startswith("#CHROM"):
                     break
         return metadata
-
-    def _create_allele_frequency(
-        self,
-        sample_group: SampleGroup,
-        *,
-        chrom: str,
-        pos: int,
-        variant_id: Optional[str],
-        ref: str,
-        alt: str,
-        qual: Optional[float],
-        filter_value: Optional[str],
-        info: Optional[Info],
-        format_instance: Optional[Format],
-        format_sample: Optional[str],
-    ) -> AlleleFrequency:
-        allele = AlleleFrequency.objects.create(
-            sample_group=sample_group,
-            chrom=chrom,
-            pos=pos,
-            variant_id=variant_id,
-            ref=ref,
-            alt=alt,
-            qual=qual,
-            filter=filter_value,
-            info=info,
-            format=format_instance,
-        )
-
-        if format_instance and format_sample:
-            payload: Dict[str, Any] = dict(format_instance.payload or {})
-            additional = dict(payload.get("additional") or {})
-            if additional.get("sample_id") != format_sample:
-                additional["sample_id"] = format_sample
-                if additional:
-                    payload["additional"] = additional
-                elif "additional" in payload:
-                    payload.pop("additional")
-                format_instance.payload = payload or None
-                format_instance.save(update_fields=["payload"])
-
-        return allele
 
     def _parse_vcf_text_fallback(
         self, file_path: str, sample_group: SampleGroup
@@ -1417,8 +667,6 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                     format_sample=sample_identifier,
                 )
 
-        return None
-
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         for record in vcf_in.header.records:
@@ -1469,7 +717,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             return "ont_seq"
         if "pacbio" in normalized or "sequel" in normalized or "revio" in normalized:
             return "pacbio_seq"
-        if "ion" in normalized:
+        if "iontorrent" in normalized or "ion" in normalized:
             return "iontorrent_seq"
         return None
 
@@ -1487,12 +735,12 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         return collected
 
     def _process_metadata_section(
-        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]) -> None:
+        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
+    ) -> None:
         def normalize_alias_key(candidate: str) -> str:
             stripped = candidate.rstrip("?!.,;:")
             return stripped or candidate
 
-        # alias lookup including punctuation-stripped variants
         alias_lookup: Dict[str, str] = {}
         for field_name, aliases in self.METADATA_FIELD_ALIASES.get(section, {}).items():
             canonical = field_name.lower()
@@ -1526,31 +774,12 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                 metadata_key = f"{section}_{field_name}"
                 metadata[metadata_key] = value
 
-        custom_keys: list[str] = []
         for raw_key, value in leftovers.items():
-            if not raw_key:
-                continue
-
-            normalized_custom_key = self._normalize_metadata_key(raw_key)
-            if not normalized_custom_key:
-                continue
-
-            metadata_key = f"{section}_{normalized_custom_key}"
-            suffix = 2
-            while metadata_key in metadata:
-                metadata_key = f"{section}_{normalized_custom_key}_{suffix}"
-                suffix += 1
-
-            metadata[metadata_key] = value
-            custom_keys.append(str(raw_key))
-
-        if custom_keys:
-            joined_keys = ", ".join(sorted(custom_keys))
-            logger.info(
-                "Preserved custom metadata keys (%s) for section '%s'.",
-                joined_keys,
-                section,
-            )
+            if raw_key:
+                metadata[f"{section}_{raw_key}"] = value
+                logger.warning(
+                    "Unhandled metadata key '%s' in section '%s'", raw_key, section
+                )
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)
@@ -1558,15 +787,14 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         additional: Dict[str, Any] = {}
 
         for key, value in info_dict.items():
-            normalized = key.lower()
+            normalized = str(key).lower()
             mapped_field = self.INFO_FIELD_MAP.get(normalized)
             if mapped_field:
                 field_name, field_type = mapped_field
                 structured[field_name] = self._coerce_info_value(value, field_type)
             else:
                 additional_value = self._normalize_additional_info_value(value)
-                if additional_value is not None:
-                    additional[normalized] = additional_value
+                additional[normalized] = additional_value
 
         if not structured and not additional:
             return None
@@ -1584,7 +812,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         additional: Dict[str, Any] = {}
 
         for key in sample_data.keys():
-            normalized = key.lower()
+            normalized = str(key).lower()
             if normalized == "gt":
                 serialized = self._serialize_genotype(sample_data, key)
             else:
@@ -1621,16 +849,18 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         if value is None:
             return None
         if isinstance(value, (list, tuple)):
-            normalized_items = []
-            for item in value:
-                normalized_item = cls._normalize_info_scalar(item)
-                if normalized_item is None:
-                    continue
-                normalized_items.append(normalized_item)
-            return normalized_items or None
+            normalized_items = [
+                cls._normalize_info_scalar(item)
+                for item in value
+                if item not in (None, "")
+            ]
+            flattened = [item for item in normalized_items if item not in (None, "")]
+            if not flattened:
+                return None
+            return flattened
         if isinstance(value, str):
             stripped = value.strip()
-            if not stripped or stripped in cls.INFO_PLACEHOLDER_VALUES:
+            if not stripped:
                 return None
             return stripped
         return value
@@ -1669,14 +899,13 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     @classmethod
     def _normalize_additional_info_value(cls, value: Any) -> Any:
         if isinstance(value, (list, tuple)):
-            normalized_list = []
-            for item in value:
-                normalized_item = cls._normalize_additional_info_value(item)
-                if normalized_item is None:
-                    continue
-                normalized_list.append(normalized_item)
+            normalized_list = [
+                cls._normalize_additional_info_value(item)
+                for item in value
+                if item not in (None, "")
+            ]
             return normalized_list or None
-        if value in (None, "", "."):
+        if value in (None, ""):
             return None
         if isinstance(value, (int, float, bool)):
             return value
@@ -1713,3 +942,115 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         if isinstance(value, (list, tuple)):
             return ",".join(str(item) for item in value)
         return str(value)
+
+    def _create_allele_frequency(
+        self,
+        sample_group: SampleGroup,
+        *,
+        chrom: str,
+        pos: int,
+        variant_id: Optional[str],
+        ref: str,
+        alt: str,
+        qual: Optional[float],
+        filter_value: Optional[str],
+        info: Optional[Info],
+        format_instance: Optional[Format],
+        format_sample: Optional[str],
+    ) -> AlleleFrequency:
+        allele = AlleleFrequency.objects.create(
+            sample_group=sample_group,
+            chrom=chrom,
+            pos=pos,
+            variant_id=variant_id,
+            ref=ref,
+            alt=alt,
+            qual=qual,
+            filter=filter_value,
+            info=info,
+            format=format_instance,
+        )
+
+        if format_instance and format_sample:
+            payload: Dict[str, Any] = dict(format_instance.payload or {})
+            additional = dict(payload.get("additional") or {})
+            if additional.get("sample_id") != format_sample:
+                additional["sample_id"] = format_sample
+                if additional:
+                    payload["additional"] = additional
+                elif "additional" in payload:
+                    payload.pop("additional")
+                format_instance.payload = payload or None
+                format_instance.save(update_fields=["payload"])
+
+        return allele
+
+    def _split_sample_attributes(self, content: str) -> Iterable[str]:
+        items: list[str] = []
+        current: list[str] = []
+        quote_char: Optional[str] = None
+        escape = False
+        bracket_stack: list[str] = []
+        opening = {"{": "}", "[": "]", "(": ")"}
+        closing = {value: key for key, value in opening.items()}
+
+        for char in content:
+            if quote_char:
+                current.append(char)
+                if escape:
+                    escape = False
+                    continue
+                if char == "\\":
+                    escape = True
+                    continue
+                if char == quote_char:
+                    quote_char = None
+                continue
+
+            if char in {'"', "'"}:
+                quote_char = char
+                current.append(char)
+                continue
+
+            if char in opening:
+                bracket_stack.append(char)
+                current.append(char)
+                continue
+
+            if char in closing:
+                if bracket_stack and bracket_stack[-1] == closing[char]:
+                    bracket_stack.pop()
+                current.append(char)
+                continue
+
+            if char == "," and not bracket_stack:
+                item = "".join(current).strip()
+                if item:
+                    items.append(item)
+                current = []
+                continue
+
+            current.append(char)
+
+        tail = "".join(current).strip()
+        if tail:
+            items.append(tail)
+
+        return items
+
+    @staticmethod
+    def _normalize_metadata_value(value: str) -> str:
+        stripped = value.strip()
+        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
+            stripped = stripped[1:-1]
+        if "\\" in stripped:
+            try:
+                stripped = bytes(stripped, "utf-8").decode("unicode_escape")
+            except UnicodeDecodeError:
+                pass
+        return stripped
+
+    @staticmethod
+    def _normalize_metadata_key(key: Any) -> str:
+        normalized = re.sub(r"[^0-9a-z]+", "", str(key).lower())
+        return normalized

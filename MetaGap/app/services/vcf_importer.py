@@ -63,11 +63,21 @@ class VCFImporter:
             self.warnings.append(warning)
             if sample_group is not None:
                 sample_group.delete()
-            metadata = self._extract_metadata_text_fallback(file_path)
-            sample_group = self._create_sample_group(
-                metadata, file_path, organization_profile
-            )
-            parse_vcf_text_fallback(file_path, sample_group, self.database_writer)
+            try:
+                metadata = self._extract_metadata_text_fallback(file_path)
+                sample_group = self._create_sample_group(
+                    metadata, file_path, organization_profile
+                )
+                parse_vcf_text_fallback(
+                    file_path, sample_group, self.database_writer
+                )
+            except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
+                if sample_group is not None:
+                    sample_group.delete()
+                raise ValidationError(
+                    "The uploaded VCF file appears to be invalid or corrupted. "
+                    "Please verify the file contents and try again."
+                ) from fallback_exc
 
         assert sample_group is not None
         return sample_group

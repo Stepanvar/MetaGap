@@ -177,6 +177,132 @@ def ensure_standard_info_header_lines(
     return final_header_lines
 
 
+def _open_vcf(path: str):
+    return (
+        gzip.open(path, "rt", encoding="utf-8")
+        if path.endswith(".gz")
+        else open(path, "r", encoding="utf-8")
+    )
+
+
+def _read_header_lines(path: str) -> List[str]:
+    header_lines: List[str] = []
+    with _open_vcf(path) as handle:
+        for raw in handle:
+            if not raw.startswith("#"):
+                break
+            header_lines.append(raw.rstrip("\n"))
+    return header_lines
+
+
+def _format_scalar(value) -> str:
+    if value is None:
+        return "."
+    if isinstance(value, float):
+        return "%g" % value
+    return str(value)
+
+
+def _serialize_info(info: OrderedDict) -> str:
+    entries = []
+    for key, value in info.items():
+        if value is None:
+            continue
+        if isinstance(value, list):
+            if not value:
+                serialized = "."
+            else:
+                serialized = ",".join(_format_scalar(item) for item in value)
+        else:
+            serialized = _format_scalar(value)
+        entries.append(f"{key}={serialized}")
+    return ";".join(entries) if entries else "."
+
+
+def _normalize_filter(field) -> str:
+    if field in {None, [], ["PASS"], "PASS"}:
+        return "PASS"
+    if isinstance(field, list):
+        return ";".join(str(entry) for entry in field)
+    return str(field)
+
+
+def _normalize_quality(qual_value):
+    if qual_value in {None, ".", ""}:
+        return None
+    try:
+        return float(qual_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_called_alleles(gt_value) -> List[int]:
+    if gt_value is None:
+        return []
+    if isinstance(gt_value, (list, tuple)):
+        tokens = []
+        for item in gt_value:
+            if item is None:
+                continue
+            tokens.extend(str(item).replace("|", "/").split("/"))
+    else:
+        tokens = str(gt_value).replace("|", "/").split("/")
+    allele_indices: List[int] = []
+    for token in tokens:
+        cleaned = token.strip()
+        if not cleaned or cleaned == ".":
+            continue
+        try:
+            allele_indices.append(int(cleaned))
+        except ValueError:
+            continue
+    return allele_indices
+
+
+def _serialize_record(record) -> str:
+    alt_values = getattr(record, "ALT", []) or []
+    alt_field = ",".join(str(alt) for alt in alt_values) if alt_values else "."
+    qual_value = _normalize_quality(getattr(record, "QUAL", None))
+    qual_field = _format_scalar(qual_value) if qual_value is not None else "."
+    info_field = _serialize_info(getattr(record, "INFO", OrderedDict()))
+    filter_field = _normalize_filter(getattr(record, "FILTER", None))
+    record_id = getattr(record, "ID", None)
+    if isinstance(record_id, list):
+        record_id_field = ";".join(str(entry) for entry in record_id)
+    else:
+        record_id_field = str(record_id or ".")
+    return "\t".join(
+        [
+            str(getattr(record, "CHROM", ".")),
+            str(getattr(record, "POS", ".")),
+            record_id_field,
+            str(getattr(record, "REF", ".")),
+            alt_field,
+            qual_field,
+            filter_field,
+            info_field,
+        ]
+    )
+
+
+def _cleanup_temp_files(
+    joint_temp: str, filtered_temp: str, verbose: bool = False
+) -> None:
+    for path in (joint_temp, filtered_temp):
+        if not path:
+            continue
+        if not os.path.exists(path):
+            continue
+        try:
+            os.remove(path)
+        except OSError as exc:  # pragma: no cover - defensive logging
+            log_message(
+                f"Failed to remove temporary file {path}: {exc}",
+                verbose,
+                level=logging.WARNING,
+            )
+
+
 def _format_sample_metadata_value(value: str) -> str:
     """Return a VCF-safe representation of the provided metadata value."""
 
@@ -608,79 +734,6 @@ def append_metadata_to_merged_vcf(
             final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
             final_vcf = final_plain_vcf
 
-    def _open_vcf(path):
-        return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, "r", encoding="utf-8")
-
-    def _read_header_lines(path: str) -> List[str]:
-        header_lines: List[str] = []
-        with _open_vcf(path) as handle:
-            for raw in handle:
-                if not raw.startswith("#"):
-                    break
-                header_lines.append(raw.rstrip("\n"))
-        return header_lines
-
-    def _format_scalar(value) -> str:
-        if value is None:
-            return "."
-        if isinstance(value, float):
-            return ("%g" % value)
-        return str(value)
-
-    def _serialize_info(info: OrderedDict) -> str:
-        entries = []
-        for key, value in info.items():
-            if value is None:
-                continue
-            if isinstance(value, list):
-                if not value:
-                    serialized = "."
-                else:
-                    serialized = ",".join(_format_scalar(item) for item in value)
-            else:
-                serialized = _format_scalar(value)
-            entries.append(f"{key}={serialized}")
-        return ";".join(entries) if entries else "."
-
-    def _normalize_filter(field) -> str:
-        if field in {None, [], ["PASS"], "PASS"}:
-            return "PASS"
-        if isinstance(field, list):
-            return ";".join(str(entry) for entry in field)
-        return str(field)
-
-    def _normalize_quality(qual_value):
-        if qual_value in {None, ".", ""}:
-            return None
-        try:
-            return float(qual_value)
-        except (TypeError, ValueError):
-            return None
-
-    def _extract_called_alleles(gt_value) -> List[int]:
-        if gt_value is None:
-            return []
-        if isinstance(gt_value, (list, tuple)):
-            tokens = []
-            for item in gt_value:
-                if item is None:
-                    continue
-                tokens.extend(str(item).replace("|", "/").split("/"))
-        else:
-            tokens = str(gt_value).replace("|", "/").split("/")
-        allele_indices: List[int] = []
-        for token in tokens:
-            cleaned = token.strip()
-            if not cleaned or cleaned == ".":
-                continue
-    def _cleanup_temp_files():
-        for path in [joint_temp, filtered_temp]:
-            try:
-                allele_indices.append(int(cleaned))
-            except ValueError:
-                continue
-        return allele_indices
-
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
         ac = [0] * alt_count
@@ -843,7 +896,7 @@ def append_metadata_to_merged_vcf(
 
     if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
         if pysam is None:
-            _cleanup_temp_files()
+            _cleanup_temp_files(joint_temp, filtered_temp, verbose=verbose)
             handle_critical_error(
                 "pysam is required to BGZF-compress and index the anonymized VCF."
             )
@@ -853,7 +906,7 @@ def append_metadata_to_merged_vcf(
             pysam.bgzip(final_plain_vcf, final_vcf, force=True)
             pysam.tabix_index(final_vcf, preset="vcf", force=True)
         except (OSError, ValueError) as exc:
-            _cleanup_temp_files()
+            _cleanup_temp_files(joint_temp, filtered_temp, verbose=verbose)
             if os.path.exists(final_plain_vcf):
                 try:
                     os.remove(final_plain_vcf)

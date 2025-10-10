@@ -8,82 +8,52 @@
 
 {% block content %}
 <div class="container py-5">
-    <header class="mb-5 text-center">
-        <h1 class="display-5 fw-semibold">About {{ SITE_NAME }}</h1>
-        <p class="lead text-muted">MetaGaP is an open platform for harmonising variant frequency data so researchers can compare cohorts with confidence.</p>
-    </header>
+  <header class="text-center mb-4">
+    <h1 class="display-5">{{ SITE_NAME }}</h1>
+    <p class="lead">MetaGaP — веб-платформа для объединения, агрегирования и просмотра вариативности из VCF/gVCF.</p>
+  </header>
 
-    <section class="mb-5">
-        <div class="row g-4">
-            <div class="col-lg-4">
-                <article class="card h-100 border-0 shadow-sm">
-                    <div class="card-body">
-                        <h2 class="h5">Why we built MetaGaP</h2>
-                        <p class="mb-0">Sequencing studies often store allele frequencies, metadata, and QC measurements in disconnected spreadsheets. MetaGaP streamlines that workflow by pairing a structured database with intuitive tooling for uploading VCF files, curating metadata, and sharing results with collaborators.</p>
-                    </div>
-                </article>
-            </div>
-            <div class="col-lg-4">
-                <article class="card h-100 border-0 shadow-sm">
-                    <div class="card-body">
-                        <h2 class="h5">What you can do</h2>
-                        <ul class="mb-0 ps-3">
-                            <li>Import annotated VCF/BCF files and capture rich metadata alongside each sample group.</li>
-                            <li>Search across cohorts using genomic coordinates, variant identifiers, and laboratory metadata.</li>
-                            <li>Audit processing pipelines with full provenance of library prep, sequencing instruments, and bioinformatics steps.</li>
-                        </ul>
-                    </div>
-                </article>
-            </div>
-            <div class="col-lg-4">
-                <article class="card h-100 border-0 shadow-sm">
-                    <div class="card-body">
-                        <h2 class="h5">Our commitments</h2>
-                        <p>We prioritise reproducibility, transparent data provenance, and accessibility. The interface is responsive by design, and the codebase is fully open-source so laboratories can adapt the platform to their governance requirements.</p>
-                        <p class="mb-0">Have feedback? Reach out via the <a href="{% url 'contact' %}">contact page</a>—we actively incorporate suggestions from the community.</p>
-                    </div>
-                </article>
-            </div>
-        </div>
-    </section>
+  <section class="mb-5">
+    <h2>Что умеет платформа</h2>
+    <ul class="list-unstyled ps-3">
+      <li>Импорт и базовая валидация VCF/gVCF; поддержка сборок GRCh37 и GRCh38.</li>
+      <li>Объединение нескольких VCF в когортный файл и пересчёт AC/AN/AF через <code>bcftools +fill-tags</code>.</li>
+      <li>Фильтрация (QUAL, PASS и др.) и деидентификация при экспорте (удаление столбцов генотипов).</li>
+      <li>Таблицы и фильтры (django-tables2, django-filter) для удобного просмотра и навигации.</li>
+    </ul>
+  </section>
 
-    <section class="mb-5">
-        <div class="row g-4 align-items-center">
-            <div class="col-lg-6">
-                <h2 class="h4">Designed for collaborative genomics</h2>
-                <p>MetaGaP keeps track of each dataset’s origin, quality control metrics, and downstream analyses. Built-in validation routines protect against malformed uploads and highlight missing metadata so your team can resolve issues before downstream analyses begin.</p>
-                <p class="mb-0">Whether you are harmonising cohorts across institutions or building a reference atlas within your lab, MetaGaP gives you a consistent, well-documented workspace.</p>
-            </div>
-            <div class="col-lg-6">
-                <div class="ratio ratio-16x9 rounded-3 overflow-hidden shadow-sm bg-body">
-                    <div class="d-flex h-100 align-items-center justify-content-center flex-column p-4">
-                        <span class="display-6 text-primary mb-3"><i class="fas fa-dna"></i></span>
-                        <p class="text-muted text-center mb-0">Upload once, explore anywhere—variant summaries, metadata, and QC metrics stay in sync across the platform.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+  <section class="mb-5">
+    <h2>Как это работает</h2>
+    <ol class="ps-3">
+      <li>Все входные VCF приводятся к <code>bgzip + tabix</code> и проверяются на читаемость и корректный заголовок.</li>
+      <li>Когортное объединение выполняется командой <code>bcftools merge -m all</code>, затем пересчитываются теги сводной информации (AC/AN/AF).</li>
+      <li>Применяются заданные фильтры; при необходимости генотипы удаляются (<code>bcftools view -G</code>). Формируется итоговый VCF и индекс.</li>
+    </ol>
+  </section>
 
-    <section>
-        <div class="row g-4">
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <h2 class="h5">Funding &amp; availability</h2>
-                        <p>MetaGaP is maintained by an interdisciplinary team of bioinformaticians and software engineers. The project is released under an open-source license so academic groups can deploy it without licensing hurdles.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <h2 class="h5">Get involved</h2>
-                        <p class="mb-0">Contributions are welcome—from UI refinements to new data ingestion pipelines. Visit the project repository to file issues, suggest enhancements, or share example datasets that would benefit the community.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+  <section class="mb-5">
+    <h2>Надёжность и контроль качества</h2>
+    <ul class="list-unstyled ps-3">
+      <li>Проверки форматов и логирование ошибок внешних инструментов (bcftools, bgzip, tabix).</li>
+      <li>Автоматические тесты покрывают ключевые сценарии объединения и импорта; принимаются регрессионные тесты от сообщества.</li>
+    </ul>
+  </section>
+
+  <section class="mb-5">
+    <h2>Ограничения и отказ от ответственности</h2>
+    <p>Платформа предназначена только для исследовательского использования и не является медицинским устройством. Не загружайте персональные или клинические геномные данные; используйте синтетические примеры или деперсонифицированные метаданные.</p>
+  </section>
+
+  <section class="mb-5">
+    <h2>Технологический стек</h2>
+    <p>Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-bootstrap5, django-tables2, django-filter; БД — SQLite / PostgreSQL.</p>
+  </section>
+
+  <section>
+    <h2>Участие и обратная связь</h2>
+    <p>Репозиторий: <a href="https://github.com/Stepanvar/MetaGap" target="_blank" rel="noopener">github.com/Stepanvar/MetaGap</a>. Принимаются pull-request’ы с улучшениями пайплайна, тестами и доработками интерфейса.</p>
+  </section>
 </div>
 {% endblock %}
+

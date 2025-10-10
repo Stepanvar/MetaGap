@@ -258,15 +258,16 @@ class StaticPageViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "contact.html")
-        self.assertContains(response, "Support@example.com")
-        self.assertContains(response, "Marketing@example.com")
+        self.assertContains(response, "support@metagap.org")
+        self.assertContains(response, "GitHub Discussions")
 
     def test_about_page_renders_expected_information(self) -> None:
         response = self.client.get(reverse("about"))
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "about.html")
-        self.assertContains(response, "Use this area to provide additional information.")
+        self.assertContains(response, "About")
+        self.assertContains(response, "MetaGaP is an open platform")
 
 
 class ProfileViewTests(TestCase):

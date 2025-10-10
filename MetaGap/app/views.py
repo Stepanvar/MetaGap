@@ -1,14 +1,17 @@
 """Application views."""
 
 import csv
+import json
 import logging
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
 from django.db import models as django_models
 from django.http import Http404, HttpResponse
@@ -888,17 +891,33 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         importer = VCFImporter(self.request.user)
         try:
             created_group = importer.import_file(full_path)
-        except Exception as exc:  # pragma: no cover - defensive feedback channel
-            messages.error(self.request, f"An error occurred: {exc}")
-        else:
-            messages.success(
+        except ValidationError as exc:
+            form.add_error("data_file", exc)
+            messages.error(
                 self.request,
-                f"Imported {created_group.name} successfully.",
+                "We could not import the file because some required metadata was missing or invalid.",
             )
-            for warning in importer.warnings:
-                messages.warning(self.request, warning)
+            return self.form_invalid(form)
+        except Exception as exc:  # pragma: no cover - defensive feedback channel
+            logger.exception("VCF import failed", exc_info=exc)
+            form.add_error(
+                "data_file",
+                "An unexpected error occurred while importing the file. Please review the file and try again.",
+            )
+            messages.error(
+                self.request,
+                "Something went wrong while processing the upload. Check the error above for details.",
+            )
+            return self.form_invalid(form)
         finally:
             default_storage.delete(temp_path)
+
+        messages.success(
+            self.request,
+            f"Imported {created_group.name} successfully.",
+        )
+        for warning in importer.warnings:
+            messages.warning(self.request, warning)
 
         return super().form_valid(form)
 

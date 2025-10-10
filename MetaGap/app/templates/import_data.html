@@ -17,7 +17,7 @@
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' submit_button_label='Upload and import' extra_actions=form_extra_actions|default:'' %}
+                    {% include 'partials/form.html' with form=form form_action=form_action form_enctype=form_enctype submit_button_label='Upload and import' extra_actions=form_extra_actions|default:'' %}
                 </div>
             </div>
         </div>

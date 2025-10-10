@@ -59,6 +59,8 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
 
 
 INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
+FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
+CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
 def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:

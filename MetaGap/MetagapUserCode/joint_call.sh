@@ -71,7 +71,7 @@ echo "Recalculating AC, AN, AF tags across the merged cohort..."
 bcftools +fill-tags "$MERGED_VCF" -Oz -o "$JOINT_VCF" -- -t AC,AN,AF
 
 echo "Applying quality filters to remove low-confidence variants..."
-# Filter variants: QUAL > 30, total alleles > 50, and PASS only
+# Filter variants: QUAL > DEFAULT_QUAL_THRESHOLD (30) and total alleles > DEFAULT_AN_THRESHOLD (50), PASS only
 bcftools view -i 'QUAL>0' -Oz -o "$FILTERED_VCF" "$JOINT_VCF"
 
 echo "Removing individual sample genotype columns (anonymizing data)..."

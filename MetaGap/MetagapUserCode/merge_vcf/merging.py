@@ -281,6 +281,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
     computed_sample_order: List[str] = []
     merged_sample_metadata = None
 
+    initial_sample_names: List[str] = []
+
     for file_path in valid_files:
         preprocessed_file = preprocess_vcf(file_path)
         reader = None
@@ -290,6 +292,10 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
 
             if combined_header is None:
                 combined_header = header.copy()
+                if hasattr(combined_header, "samples") and hasattr(
+                    combined_header.samples, "names"
+                ):
+                    initial_sample_names = list(combined_header.samples.names)
                 for line in combined_header.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
                         info_ids.add(line.id)
@@ -303,12 +309,7 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                             merged_sample_metadata = OrderedDict(mapping)
 
                 _remove_format_and_sample_definitions(combined_header)
-                if hasattr(combined_header, "samples") and hasattr(
-                    combined_header.samples, "names"
-                ):
-                    computed_sample_order = list(combined_header.samples.names)
-                else:
-                    computed_sample_order = []
+                computed_sample_order = list(initial_sample_names)
                 continue
 
             if hasattr(header, "samples") and hasattr(header.samples, "names"):
@@ -355,12 +356,16 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
         handle_critical_error("Unable to construct a merged VCF header.")
 
     target_sample_order = sample_order if sample_order is not None else computed_sample_order
-    if target_sample_order and hasattr(combined_header, "samples") and hasattr(
+    samples_attr_present = hasattr(combined_header, "samples") and hasattr(
         combined_header.samples, "names"
-    ):
+    )
+    if target_sample_order and samples_attr_present:
         combined_header.samples.names = list(target_sample_order)
 
     _remove_format_and_sample_definitions(combined_header)
+
+    if target_sample_order and samples_attr_present:
+        combined_header.samples.names = list(target_sample_order)
 
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)

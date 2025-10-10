@@ -36,16 +36,19 @@ jobs:
       - name: Generate coverage reports and enforce thresholds
         if: always()
         run: |
-          if [ ! -f MetaGap/.coverage ]; then
+          if [ -f MetaGap/.coverage ] && [ ! -f .coverage ]; then
+            cp MetaGap/.coverage .coverage
+          fi
+
+          if [ ! -f .coverage ]; then
             echo "No coverage data generated" | tee coverage-summary.txt
             exit 1
           fi
 
-          cd MetaGap
-          coverage report --skip-empty | tee ../coverage-summary.txt
-          coverage report --include="*/MetagapUserCode/*" --fail-under=75
-          coverage report --include="*/app/*" --fail-under=80
-          coverage xml -o ../coverage.xml
+          coverage report --data-file=.coverage --skip-empty | tee coverage-summary.txt
+          coverage report --data-file=.coverage --include="*/MetagapUserCode/*" --fail-under=75
+          coverage report --data-file=.coverage --include="*/app/*" --fail-under=80
+          coverage xml --data-file=.coverage -o coverage.xml
 
       - name: Annotate metadata warnings
         if: always()

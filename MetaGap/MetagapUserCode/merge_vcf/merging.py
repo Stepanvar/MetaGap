@@ -9,8 +9,7 @@ import gzip
 import os
 import re
 import shutil
-from collections import OrderedDict
-from typing import Callable, List, Optional, Sequence, Tuple, Iterable
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 import pysam  # BGZF + Tabix
 import concurrent.futures
@@ -66,7 +65,7 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
     ]
     if not contig_lines:
         return
-    contig_lookup: OrderedDict[str, object] = OrderedDict()
+    contig_lookup: dict[str, object] = {}
     for line in contig_lines:
         identifier = getattr(line, "id", None)
         if identifier is None:
@@ -94,7 +93,7 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
     # Also reorder header.contigs attribute if present
     contigs_attr = getattr(header, "contigs", None)
     if contigs_attr:
-        reordered = OrderedDict()
+        reordered: dict[str, object] = {}
         for name in ordered_ids:
             if name in contigs_attr:
                 reordered[name] = contigs_attr[name]
@@ -163,7 +162,7 @@ def _merge_colliding_records(
                 merged_filters.append(f)
     base.FILTER = merged_filters
     # Unified ALT allele list across all records (ensure consistent indexing for genotypes)
-    alt_objects: OrderedDict[str, object] = OrderedDict()
+    alt_objects: dict[str, object] = {}
     for record, _ in grouped_records:
         for alt in (record.ALT or []):
             val = _alt_value(alt)
@@ -301,12 +300,33 @@ def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable
 def _ensure_info_header_lines(header) -> None:
     """Ensure that standard AC/AN/AF INFO header definitions are present in the VCF header."""
     info_defs = (
-        ("AC", OrderedDict((("ID", "AC"), ("Number", "A"), ("Type", "Integer"),
-                             ("Description", "Alternate allele count in genotypes, for each ALT allele")))),
-        ("AN", OrderedDict((("ID", "AN"), ("Number", "1"), ("Type", "Integer"),
-                             ("Description", "Total number of alleles in called genotypes")))),
-        ("AF", OrderedDict((("ID", "AF"), ("Number", "A"), ("Type", "Float"),
-                             ("Description", "Allele frequency, for each ALT allele")))),
+        (
+            "AC",
+            {
+                "ID": "AC",
+                "Number": "A",
+                "Type": "Integer",
+                "Description": "Alternate allele count in genotypes, for each ALT allele",
+            },
+        ),
+        (
+            "AN",
+            {
+                "ID": "AN",
+                "Number": "1",
+                "Type": "Integer",
+                "Description": "Total number of alleles in called genotypes",
+            },
+        ),
+        (
+            "AF",
+            {
+                "ID": "AF",
+                "Number": "A",
+                "Type": "Float",
+                "Description": "Allele frequency, for each ALT allele",
+            },
+        ),
     )
     for key, mapping in info_defs:
         try:
@@ -386,7 +406,7 @@ def _remove_format_and_sample_definitions(header) -> None:
         try:
             header.formats.clear()
         except AttributeError:
-            header.formats = OrderedDict()
+            header.formats = {}
     # Remove all sample names from header
     if hasattr(header, "samples") and hasattr(header.samples, "names"):
         header.samples.names = []
@@ -521,7 +541,6 @@ def merge_vcfs(
 ) -> str:
     """Merge multiple VCF files into one .vcf.gz and index it."""
     import os, copy, datetime, concurrent.futures
-    from collections import OrderedDict
     import vcfpy, pysam
 
     os.makedirs(output_dir, exist_ok=True)
@@ -589,7 +608,7 @@ def merge_vcfs(
     def _rec_key(rec: vcfpy.Record) -> tuple[str, int, str, tuple[str, ...]]:
         return (rec.CHROM, rec.POS, rec.REF, _alt_tuple(rec))
 
-    record_store: Dict[tuple, dict] = {}
+    record_store: dict[tuple, dict] = {}
 
     try:
         for path in preprocessed:
@@ -617,7 +636,7 @@ def merge_vcfs(
                             if fk not in fmt:
                                 fmt.append(fk)
 
-                    calls_map: Dict[str, dict] = container["calls"]
+                    calls_map: dict[str, dict] = container["calls"]
                     for call in rec.calls or []:
                         sname = getattr(call, "sample", None) or getattr(call, "name", None)
                         if sname:
@@ -639,7 +658,7 @@ def merge_vcfs(
             return ordered
 
         # sort by header contig order then position
-        contig_order: Dict[str, int] = {}
+        contig_order: dict[str, int] = {}
         try:
             from vcfpy import header as vcfhdr
             idx = 0
@@ -662,7 +681,7 @@ def merge_vcfs(
                 calls_out: List[vcfpy.Call] = []
                 for s in final_sample_order:
                     data = cont["calls"].get(s, {})
-                    filled = OrderedDict()
+                    filled: dict[str, object] = {}
                     for fk in fmt_keys:
                         filled[fk] = data.get(fk, "./." if fk == "GT" else ".")
                     calls_out.append(vcfpy.Call(sample=s, data=filled))
@@ -902,17 +921,17 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
     """Merge the headers of all VCF files in `valid_files` into a combined header."""
     combined_header = None
     # Dictionaries to keep track of seen header lines by ID
-    info_lines: OrderedDict[str, vcfpy.header.InfoHeaderLine] = OrderedDict()
-    filter_lines: OrderedDict[str, vcfpy.header.FilterHeaderLine] = OrderedDict()
-    contig_lines: OrderedDict[str, vcfpy.header.ContigHeaderLine] = OrderedDict()
-    format_lines: OrderedDict[str, vcfpy.header.FormatHeaderLine] = OrderedDict()
+    info_lines: dict[str, vcfpy.header.InfoHeaderLine] = {}
+    filter_lines: dict[str, vcfpy.header.FilterHeaderLine] = {}
+    contig_lines: dict[str, vcfpy.header.ContigHeaderLine] = {}
+    format_lines: dict[str, vcfpy.header.FormatHeaderLine] = {}
     computed_sample_order: List[str] = []
     merged_sample_metadata = None
 
-    def _line_mapping(line) -> OrderedDict[str, str]:
-        """Helper to get an OrderedDict of a header line's mapping (ID, Number, Type, etc)."""
+    def _line_mapping(line) -> dict[str, str]:
+        """Helper to get an ordered mapping of a header line's metadata (ID, Number, Type, etc)."""
         mapping = getattr(line, "mapping", None)
-        return OrderedDict(mapping) if isinstance(mapping, dict) else OrderedDict()
+        return dict(mapping) if isinstance(mapping, dict) else {}
 
     for file_path in valid_files:
         pre = preprocess_vcf(file_path)  # ensure file is normalized (idempotent if already done)
@@ -939,7 +958,7 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         # Keep sample metadata line for merging
                         mapping = _line_mapping(line)
                         if mapping.get("ID"):
-                            merged_sample_metadata = OrderedDict(mapping)
+                            merged_sample_metadata = dict(mapping)
                 continue  # move to next file
             # For subsequent files, merge header lines:
             if hasattr(hdr, "samples") and hasattr(hdr.samples, "names"):
@@ -1014,7 +1033,7 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                     if not sid:
                         continue
                     if merged_sample_metadata is None:
-                        merged_sample_metadata = OrderedDict(mapping)
+                        merged_sample_metadata = dict(mapping)
                     else:
                         for k, v in mapping.items():
                             if k not in merged_sample_metadata or not merged_sample_metadata[k]:

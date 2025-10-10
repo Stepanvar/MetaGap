@@ -7,8 +7,7 @@ import copy
 import gzip
 import os
 import re
-from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
 
 import logging
 import subprocess
@@ -27,43 +26,23 @@ except ImportError:  # pragma: no cover - exercised in environments without pysa
     pysam = None
 
 
-STANDARD_INFO_DEFINITIONS = OrderedDict(
-    [
-        (
-            "AC",
-            OrderedDict(
-                [
-                    ("Number", "A"),
-                    ("Type", "Integer"),
-                    (
-                        "Description",
-                        "Alternate allele count in genotypes, for each ALT allele",
-                    ),
-                ]
-            ),
-        ),
-        (
-            "AN",
-            OrderedDict(
-                [
-                    ("Number", "1"),
-                    ("Type", "Integer"),
-                    ("Description", "Total number of alleles in called genotypes"),
-                ]
-            ),
-        ),
-        (
-            "AF",
-            OrderedDict(
-                [
-                    ("Number", "A"),
-                    ("Type", "Float"),
-                    ("Description", "Alternate allele frequency"),
-                ]
-            ),
-        ),
-    ]
-)
+STANDARD_INFO_DEFINITIONS: dict[str, dict[str, str]] = {
+    "AC": {
+        "Number": "A",
+        "Type": "Integer",
+        "Description": "Alternate allele count in genotypes, for each ALT allele",
+    },
+    "AN": {
+        "Number": "1",
+        "Type": "Integer",
+        "Description": "Total number of alleles in called genotypes",
+    },
+    "AF": {
+        "Number": "A",
+        "Type": "Float",
+        "Description": "Alternate allele frequency",
+    },
+}
 
 
 INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
@@ -71,7 +50,7 @@ FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
 CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
-def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:
+def _format_info_definition(info_id: str, definition_mapping: Mapping[str, object]) -> str:
     parts = [f"ID={info_id}"]
     for key, value in definition_mapping.items():
         if value is None:
@@ -103,7 +82,7 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
         if info_id in existing_ids:
             continue
 
-        mapping = OrderedDict([("ID", info_id)])
+        mapping: dict[str, object] = {"ID": info_id}
         mapping.update(definition)
 
         try:
@@ -189,7 +168,7 @@ def _format_sample_metadata_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
+def build_sample_metadata_line(entries: Mapping[str, str]) -> str:
     """Serialize an ordered mapping into a single ``##SAMPLE`` metadata line."""
 
     id_value = entries.get("ID", "").strip()
@@ -209,7 +188,7 @@ def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
     return f"##SAMPLE=<{serialized}>"
 
 
-def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
+def _parse_sample_metadata_line(serialized: str) -> dict[str, str]:
     """Return an ordered mapping extracted from a serialized ``##SAMPLE`` line."""
 
     if not isinstance(serialized, str):
@@ -222,7 +201,7 @@ def _parse_sample_metadata_line(serialized: str) -> "OrderedDict[str, str]":
         raise ValueError("Serialized sample metadata must be in '##SAMPLE=<...>' format.")
 
     body = text[len(prefix) : -len(suffix)]
-    entries = OrderedDict()
+    entries: dict[str, str] = {}
 
     token: List[str] = []
     stack: List[str] = []
@@ -322,7 +301,7 @@ def _parse_simple_metadata_line(line: str) -> Optional[Tuple[str, str]]:
 
 def _load_metadata_template(
     template_path: Optional[str], verbose: bool = False
-) -> Tuple[Optional["OrderedDict[str, str]"], List, List[str], Optional[str]]:
+) -> Tuple[Optional[dict[str, str]], List, List[str], Optional[str]]:
     """Return metadata derived from a user-supplied template header file."""
 
     if not template_path:
@@ -340,7 +319,7 @@ def _load_metadata_template(
             exc_cls=ValidationError,
         )
 
-    template_sample_mapping: Optional["OrderedDict[str, str]"] = None
+    template_sample_mapping: Optional[dict[str, str]] = None
     template_serialized_sample: Optional[str] = None
     sanitized_lines: List[str] = []
     simple_header_lines = []
@@ -383,7 +362,7 @@ def _load_metadata_template(
                             verbose,
                             level=logging.WARNING,
                         )
-                    template_sample_mapping = OrderedDict(parsed_sample.items())
+                    template_sample_mapping = dict(parsed_sample.items())
                     template_serialized_sample = stripped
                     continue
 
@@ -627,7 +606,7 @@ def append_metadata_to_merged_vcf(
             return ("%g" % value)
         return str(value)
 
-    def _serialize_info(info: OrderedDict) -> str:
+    def _serialize_info(info: Mapping[str, object]) -> str:
         entries = []
         for key, value in info.items():
             if value is None:
@@ -695,7 +674,7 @@ def append_metadata_to_merged_vcf(
                     an += 1
                 if 1 <= allele <= alt_count:
                     ac[allele - 1] += 1
-        info = getattr(record, "INFO", OrderedDict())
+        info = getattr(record, "INFO", {})
         info["AC"] = ac if alt_count else []
         info["AN"] = an
         info["AF"] = [count / an for count in ac] if an else []
@@ -720,7 +699,7 @@ def append_metadata_to_merged_vcf(
         )
         qual_value = _normalize_quality(getattr(record, "QUAL", None))
         qual_field = _format_scalar(qual_value) if qual_value is not None else "."
-        info_field = _serialize_info(getattr(record, "INFO", OrderedDict()))
+        info_field = _serialize_info(getattr(record, "INFO", {}))
         filter_field = _normalize_filter(getattr(record, "FILTER", None))
         record_id = getattr(record, "ID", None)
         if isinstance(record_id, list):

@@ -1,7 +1,6 @@
 import importlib
 import sys
 import types
-from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,7 +27,7 @@ def metadata_module(monkeypatch):
     class SampleHeaderLine:
         def __init__(self, mapping=None):
             self.key = "SAMPLE"
-            self.mapping = OrderedDict(mapping or {})
+            self.mapping = dict(mapping or {})
 
         @classmethod
         def from_mapping(cls, mapping):
@@ -62,9 +61,10 @@ def metadata_module(monkeypatch):
 def test_parse_metadata_arguments_combines_multiple_sources(metadata_module):
     module = metadata_module
 
-    module.template_sample_mapping = OrderedDict(
-        [("ID", "TEMPLATE"), ("Description", "Template Provided")]
-    )
+    module.template_sample_mapping = {
+        "ID": "TEMPLATE",
+        "Description": "Template Provided",
+    }
     module.template_serialized_sample = (
         "##SAMPLE=<ID=TEMPLATE,Description=Template Provided>"
     )

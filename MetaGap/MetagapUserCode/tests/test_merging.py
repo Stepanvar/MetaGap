@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import gzip
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+import shutil
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -408,3 +410,78 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
     data_lines = [line for line in contents.splitlines() if line and not line.startswith("#")]
     assert data_lines == [SAMPLE_BODY_TRIMMED.strip()]
     assert all(len(line.split("\t")) == 8 for line in data_lines)
+
+
+def test_merge_vcfs_emits_anonymized_gzip(tmp_path, monkeypatch):
+    shard_template = """##fileformat=VCFv4.2
+##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count\">
+##INFO=<ID=AN,Number=1,Type=Integer,Description=\"Allele number\">
+##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele frequency\">
+##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample}
+1\t{pos}\t.\tA\tC\t99\tPASS\tAC=1;AN=2;AF=0.5\tGT\t0/1
+"""
+
+    shard_paths = []
+    for idx, pos in enumerate((100, 200), start=1):
+        shard_path = tmp_path / f"shard{idx}.vcf"
+        shard_path.write_text(shard_template.format(sample=f"S{idx}", pos=pos), encoding="utf-8")
+        shard_paths.append(str(shard_path))
+
+    compressed = {}
+
+    def fake_tabix_compress(src, dest, force=True):
+        with open(src, "rb") as src_handle, gzip.open(dest, "wb") as dest_handle:
+            shutil.copyfileobj(src_handle, dest_handle)
+        compressed["source"] = Path(src)
+        compressed["dest"] = Path(dest)
+
+    def fake_tabix_index(path, preset="vcf", force=True):
+        index_path = Path(f"{path}.tbi")
+        index_path.write_text("stub-index", encoding="utf-8")
+        compressed["index"] = index_path
+
+    monkeypatch.setattr(
+        merging,
+        "pysam",
+        SimpleNamespace(tabix_compress=fake_tabix_compress, tabix_index=fake_tabix_index),
+    )
+
+    result_path = Path(
+        merging.merge_vcfs(
+            shard_paths,
+            str(tmp_path),
+            qual_threshold=None,
+            an_threshold=None,
+        )
+    )
+
+    assert result_path.suffixes[-2:] == [".vcf", ".gz"]
+    assert "dest" in compressed, "tabix compression should have been invoked"
+
+    with gzip.open(result_path, "rt", encoding="utf-8") as handle:
+        lines = [line.rstrip("\n") for line in handle if line.strip()]
+
+    header_lines = [line for line in lines if line.startswith("##")]
+    assert header_lines, "Expected anonymized VCF to retain meta-information lines"
+    assert all("##FORMAT=" not in line for line in header_lines)
+
+    columns_line = next(line for line in lines if line.startswith("#CHROM"))
+    assert columns_line.split("\t") == [
+        "#CHROM",
+        "POS",
+        "ID",
+        "REF",
+        "ALT",
+        "QUAL",
+        "FILTER",
+        "INFO",
+    ]
+
+    records = [line for line in lines if not line.startswith("#")]
+    assert records, "Expected anonymized VCF to include variant records"
+    assert all(len(record.split("\t")) == 8 for record in records)
+
+    plain_path = result_path.with_suffix("")
+    assert not plain_path.exists(), "Uncompressed intermediate VCF should be removed"
+    assert not Path(f"{plain_path}.anon").exists(), "Temporary anonymization file should not leak"

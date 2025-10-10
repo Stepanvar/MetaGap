@@ -5,13 +5,11 @@ customising how the merger reports progress. Downstream tools can reuse the
 default configuration or redirect logs to a specific location::
 
     from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
-
     configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
 
 The helper is idempotent and clears previously registered handlers so repeated
 configuration does not accumulate duplicate outputs.
 """
-
 from __future__ import annotations
 
 import logging
@@ -19,8 +17,6 @@ import os
 from typing import Iterable
 
 LOG_FILE = "script_execution.log"
-"""Default filename for log output when file logging is enabled."""
-
 LOG_FORMAT = "%(asctime)s : %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -29,67 +25,75 @@ logger.propagate = False
 
 
 def _normalize_level(level: int | str) -> int:
-    """Return a numeric logging level for *level*.
-
-    Accepts either an integer logging constant or a string such as ``"INFO"``.
-    """
-
+    """Return a numeric logging level for *level*."""
     if isinstance(level, str):
-        upper = level.upper()
-        if upper not in logging._nameToLevel:  # type: ignore[attr-defined]
-            raise ValueError(f"Unknown log level: {level}")
-        return logging._nameToLevel[upper]  # type: ignore[attr-defined]
-    return level
+        name = level.upper()
+        try:
+            return logging._nameToLevel[name]  # type: ignore[attr-defined]
+        except KeyError:
+            raise ValueError(f"Unknown log level: {level}") from None
+    return int(level)
 
 
 def _clear_handlers(existing: Iterable[logging.Handler]) -> None:
-    for handler in list(existing):
+    for h in list(existing):
         try:
-            handler.close()
+            h.close()
         finally:
-            logger.removeHandler(handler)
+            logger.removeHandler(h)
 
 
 def configure_logging(
     *,
-    log_level: int | str = logging.DEBUG,
+    log_level: int | str = logging.INFO,
     log_file: str | os.PathLike[str] | None = LOG_FILE,
     enable_file_logging: bool = True,
+    enable_console: bool = True,
+    create_dirs: bool = True,
+    **legacy: object,  # accepts legacy 'verbose='
 ) -> None:
-    """Configure logging for the VCF merger.
+    """Idempotent logger setup for the VCF merger.
 
     Parameters
     ----------
-    log_level:
-        Logging level to apply to the ``vcf_merger`` logger. Accepts both the
-        numeric constants from :mod:`logging` and their string counterparts
-        (e.g., ``"INFO"`` or ``"WARNING"``).
-    log_file:
-        Destination path for file-based logging. Ignored when
-        ``enable_file_logging`` is ``False``. Paths provided as
-        :class:`~os.PathLike` objects are resolved with :func:`os.fspath`.
-    enable_file_logging:
-        When ``True`` (the default) a :class:`logging.FileHandler` is attached
-        in addition to the console stream handler. Set to ``False`` to disable
-        file logging entirely.
+    log_level : int | str
+        e.g. logging.INFO or "WARNING".
+    log_file : str | PathLike | None
+        File path for logs; ignored if enable_file_logging=False or None.
+    enable_file_logging : bool
+        Attach FileHandler when True.
+    enable_console : bool
+        Attach StreamHandler when True.
+    create_dirs : bool
+        Create parent dirs for log_file when needed.
+
+    Notes
+    -----
+    Supports legacy ``verbose=bool`` (maps to enable_console).
     """
+    if "verbose" in legacy:
+        enable_console = bool(legacy["verbose"])
 
-    resolved_level = _normalize_level(log_level)
-
+    level = _normalize_level(log_level)
     _clear_handlers(logger.handlers)
+    logger.setLevel(level)
 
-    logger.setLevel(resolved_level)
+    fmt = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
 
-    formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+    if enable_file_logging and log_file:
+        path = os.fspath(log_file)
+        if create_dirs:
+            d = os.path.dirname(path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+        fh = logging.FileHandler(path)
+        fh.setFormatter(fmt)
+        logger.addHandler(fh)
 
-    if enable_file_logging and log_file is not None:
-        file_handler = logging.FileHandler(os.fspath(log_file))
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
+    if enable_console:
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        logger.addHandler(sh)
 
 
 class MergeVCFError(RuntimeError):
@@ -105,33 +109,26 @@ class MergeConflictError(MergeVCFError):
 
 
 def log_message(message: str, verbose: bool = False) -> None:
-    """Log *message* and optionally echo it to stdout."""
-
+    """Log *message* using the configured handlers."""
     logger.info(message)
-    if verbose:
-        print(message)
 
 
-def handle_critical_error(message: str, exc_cls=None) -> None:
+def handle_critical_error(message: str, exc_cls: type[BaseException] | None = None) -> None:
     """Log and raise a fatal error before exiting."""
-
-    log_message("CRITICAL ERROR: " + message)
-    exception_class = exc_cls or MergeVCFError
-    raise exception_class(message)
+    logger.error("CRITICAL ERROR: %s", message)
+    raise (exc_cls or MergeVCFError)(message)
 
 
 def handle_non_critical_error(message: str) -> None:
-    """Log and print a recoverable error."""
-
-    log_message("WARNING: " + message)
-    print("Warning: " + message)
+    """Log a recoverable error."""
+    logger.warning("WARNING: %s", message)
 
 
 __all__ = [
     "LOG_FILE",
+    "configure_logging",
     "logger",
     "log_message",
-    "configure_logging",
     "handle_critical_error",
     "MergeVCFError",
     "ValidationError",
@@ -139,5 +136,5 @@ __all__ = [
     "handle_non_critical_error",
 ]
 
-
+# Default configuration: file + console at INFO level.
 configure_logging()

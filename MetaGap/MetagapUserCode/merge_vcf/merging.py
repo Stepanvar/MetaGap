@@ -1,7 +1,6 @@
-"""Routines for combining VCF shards into a merged cohort file (Python-native)."""
-
 from __future__ import annotations
 
+import logging
 import copy
 import datetime
 import heapq
@@ -14,6 +13,7 @@ from collections import OrderedDict
 from typing import Callable, List, Optional, Sequence, Tuple, Iterable
 
 import pysam  # BGZF + Tabix
+import concurrent.futures
 from . import vcfpy
 from .logging_utils import (
     MergeConflictError,
@@ -26,26 +26,23 @@ from .metadata import (
     build_sample_metadata_line,
 )
 
-
 def _alt_value(alt) -> str:
     if alt is None:
         return ""
     return getattr(alt, "value", str(alt))
-
 
 def _normalized_alt_key(record) -> Tuple[str, ...]:
     alts = record.ALT or []
     values = {_alt_value(alt) for alt in alts if alt is not None}
     return tuple(sorted(values)) if values else ()
 
-
 def _record_sort_key(record, contig_ranks: dict) -> Tuple[int, int, str, Tuple[str, ...]]:
+    """Sorting key for records: by contig rank, position, REF, and ALT alleles."""
     chrom = getattr(record, "CHROM", "")
     rank = contig_ranks.get(chrom, len(contig_ranks))
     pos = getattr(record, "POS", 0) or 0
     ref = getattr(record, "REF", "") or ""
     return (rank, pos, ref, _normalized_alt_key(record))
-
 
 def _sort_record_alts(record) -> None:
     """Sort the ALT alleles of *record* lexicographically in-place."""
@@ -58,25 +55,25 @@ def _sort_record_alts(record) -> None:
     if list(alts) != sorted_alts:
         record.ALT = list(sorted_alts)
 
-
 def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
     """Ensure *header* preserves *contig_order* for contig definitions."""
     if header is None or not contig_order:
         return
+    # Reorder contig header lines to match the given contig_order
     contig_lines = [
-        line
-        for line in getattr(header, "lines", [])
+        line for line in getattr(header, "lines", [])
         if isinstance(line, vcfpy.header.ContigHeaderLine)
     ]
     if not contig_lines:
         return
-    contig_lookup: "OrderedDict[str, object]" = OrderedDict()
+    contig_lookup: OrderedDict[str, object] = OrderedDict()
     for line in contig_lines:
         identifier = getattr(line, "id", None)
         if identifier is None:
             continue
         if identifier not in contig_lookup:
             contig_lookup[identifier] = line
+    # Build ordered list of contig IDs: first those in contig_order, then the rest
     ordered_ids: List[str] = []
     for name in contig_order:
         if name in contig_lookup:
@@ -84,6 +81,7 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
     for name in contig_lookup:
         if name not in ordered_ids:
             ordered_ids.append(name)
+    # Replace header lines with ordered contigs
     ordered_lines = [contig_lookup[name] for name in ordered_ids]
     iterator = iter(ordered_lines)
     new_lines: List[object] = []
@@ -93,6 +91,7 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
         else:
             new_lines.append(line)
     header.lines = new_lines
+    # Also reorder header.contigs attribute if present
     contigs_attr = getattr(header, "contigs", None)
     if contigs_attr:
         reordered = OrderedDict()
@@ -106,15 +105,17 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
             header.contigs = reordered
         except Exception:
             pass
+    # Store the applied contig order (for reference/debugging)
     setattr(header, "_metagap_contig_order", list(ordered_ids))
 
-
 def _remap_genotype(value: Optional[str], allele_map: dict) -> Optional[str]:
+    """Remap genotype allele indices in a GT string according to allele_map."""
     if value is None:
         return None
     text = str(value)
     if not text or text in {".", "./.", ".|."}:
         return text
+    # Split genotype string by separator ("/" or "|"), preserve separators in parts
     parts = re.split(r"([/|])", text)
     out: List[str] = []
     for tok in parts:
@@ -135,18 +136,18 @@ def _remap_genotype(value: Optional[str], allele_map: dict) -> Optional[str]:
             out.append(str(allele_map.get(a, a)))
     return "".join(out)
 
-
 def _merge_colliding_records(
-    grouped_records: Sequence[Tuple["vcfpy.Record", int]],
+    grouped_records: Sequence[Tuple[vcfpy.Record, int]],
     header,
     sample_order: Sequence[str],
-) -> "vcfpy.Record":
+) -> vcfpy.Record:
+    """Merge multiple VCF records representing the same variant into one record."""
+    # Start with a deep copy of the first record as the base
     base = copy.deepcopy(grouped_records[0][0])
-
-    # IDs
+    # Merge IDs: collect unique IDs from all records
     merged_ids: List[str] = []
-    for r, _ in grouped_records:
-        rid = getattr(r, "ID", None)
+    for record, _ in grouped_records:
+        rid = getattr(record, "ID", None)
         if not rid or rid == ".":
             continue
         for tok in str(rid).split(";"):
@@ -154,130 +155,118 @@ def _merge_colliding_records(
             if tok and tok not in merged_ids:
                 merged_ids.append(tok)
     base.ID = ";".join(merged_ids) if merged_ids else "."
-
-    # FILTER
+    # Merge FILTERs: combine unique filter flags from all records
     merged_filters: List[str] = []
-    for r, _ in grouped_records:
-        for f in (r.FILTER or []):
+    for record, _ in grouped_records:
+        for f in (record.FILTER or []):
             if f not in merged_filters:
                 merged_filters.append(f)
     base.FILTER = merged_filters
-
-    # Unified ALT order
+    # Unified ALT allele list across all records (ensure consistent indexing for genotypes)
     alt_objects: OrderedDict[str, object] = OrderedDict()
-    for r, _ in grouped_records:
-        for alt in (r.ALT or []):
+    for record, _ in grouped_records:
+        for alt in (record.ALT or []):
             val = _alt_value(alt)
             if val not in alt_objects:
                 alt_objects[val] = copy.deepcopy(alt)
     base.ALT = list(alt_objects.values())
+    # Mapping from original allele value to new allele index (for genotype remapping)
     allele_map_global = {val: i for i, val in enumerate(alt_objects.keys(), start=1)}
-
-    # FORMAT keys union
+    # Union of all FORMAT keys across records
     fmt_keys: List[str] = []
-    for r, _ in grouped_records:
-        for k in (r.FORMAT or []):
-            if k not in fmt_keys:
-                fmt_keys.append(k)
+    for record, _ in grouped_records:
+        for key in (record.FORMAT or []):
+            if key not in fmt_keys:
+                fmt_keys.append(key)
     base.FORMAT = fmt_keys
-
-    # Merge calls across all samples; union of samples
+    # Merge genotype calls for all samples, remapping allele indices in GT fields
     calls_by_sample: dict = {}
-    for r, _ in grouped_records:
-        # per-record allele remap (old ALT indices -> new)
-        per_map = {}
-        for idx, alt in enumerate(r.ALT or [], start=1):
+    for record, _ in grouped_records:
+        # Map allele indices from this record's ALT set to global ALT indices
+        per_map: dict = {}
+        for idx, alt in enumerate(record.ALT or [], start=1):
             per_map[idx] = allele_map_global[_alt_value(alt)]
-        for call in (getattr(r, "calls", []) or []):
+        for call in (record.calls or []):
+            sample_name = call.sample  # vcfpy.Call.sample holds the sample name
             data = copy.deepcopy(call.data) if call.data is not None else {}
             if "GT" in data:
                 data["GT"] = _remap_genotype(data["GT"], per_map)
-            calls_by_sample[call.sample] = vcfpy.Call(call.sample, data)
-
-    ordered: List["vcfpy.Call"] = []
+            calls_by_sample[sample_name] = vcfpy.Call(sample_name, data)
+    # Order merged calls by the final sample order, add empty calls for missing samples
+    ordered_calls: List[vcfpy.Call] = []
     for name in sample_order:
         call = calls_by_sample.get(name)
         if call is None:
             call = vcfpy.Call(name, {})
-        ordered.append(call)
-
-    base.update_calls(ordered)
+        ordered_calls.append(call)
+    base.update_calls(ordered_calls)
+    # Pad any missing FORMAT fields with default values for all calls
     _pad_record_samples(base, header, sample_order)
     return base
 
-
 def preprocess_vcf(file_path: str, *, chunk_size: int = 1024) -> str:
-    """Normalize whitespace delimiters in ``file_path`` if necessary.
-
-    Tabs are mandatory between VCF columns; meta-info lines (##...) must be preserved as-is.
-    Returns original path if no changes were needed; otherwise writes a normalized .tmp file and returns its path.
-    """
+    """Normalize whitespace delimiters in `file_path` if necessary (tabs between columns). 
+    Returns the original path if no changes were needed; otherwise writes a normalized `.tmp` file and returns its path."""
     if chunk_size <= 0:
         raise ValueError("chunk_size must be a positive integer")
-
     opener = gzip.open if str(file_path).endswith(".gz") else open
     mode = "rt" if opener is gzip.open else "r"
-
-    # First pass: detect whether normalization is needed, without buffering the whole file.
+    # First pass: detect if normalization is needed without loading entire file
     modified = False
     header_found = False
     with opener(file_path, mode, encoding="utf-8") as handle:
         for line in handle:
             if line.startswith("##"):
-                continue
+                continue  # meta-info lines can be left as-is
             if line.startswith("#"):
                 header_found = True
+                # Check if header line has correct tab separation
                 if re.sub(r"\s+", "\t", line.rstrip()) + "\n" != line:
                     modified = True
             elif header_found:
+                # For data lines after header, check delimiter normalization
                 if re.sub(r"\s+", "\t", line.rstrip()) + "\n" != line:
                     modified = True
-            # If not header_found yet, keep scanning as-is.
-
+            # if header not reached, continue scanning without modification check
     if not modified:
-        return file_path
-
-    # Second pass: rewrite with normalized tabs using a small buffer.
+        return file_path  # no changes needed
+    # Second pass: rewrite file with normalized tabs
     temp_file = f"{file_path}.tmp"
-    with opener(file_path, mode, encoding="utf-8") as read_handle, open(
-        temp_file, "w", encoding="utf-8"
-    ) as write_handle:
+    with opener(file_path, mode, encoding="utf-8") as read_handle, open(temp_file, "w", encoding="utf-8") as write_handle:
         header_found = False
         buffer: List[str] = []
-
-        def flush_buffer() -> None:
+        def flush_buffer():
             if buffer:
                 write_handle.writelines(buffer)
                 buffer.clear()
-
         for line in read_handle:
             if line.startswith("##"):
-                buffer.append(line)
+                buffer.append(line)  # preserve meta-info lines exactly
             elif line.startswith("#"):
                 header_found = True
                 buffer.append(re.sub(r"\s+", "\t", line.rstrip()) + "\n")
             else:
                 if header_found:
+                    # normalize delimiters in variant data lines
                     buffer.append(re.sub(r"\s+", "\t", line.rstrip()) + "\n")
                 else:
+                    # (In case file has weird content before header)
                     buffer.append(line)
-
             if len(buffer) >= chunk_size:
                 flush_buffer()
-
         flush_buffer()
-
     return temp_file
 
-
 def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable[[], dict]:
+    """Create a factory for default call data given a set of FORMAT keys."""
     if not format_keys:
         return lambda: {}
-    template = {}
+    template: dict = {}
     for key in format_keys:
         if key == "GT":
             template[key] = "./."
             continue
+        # Determine default value based on the FORMAT definition's number
         try:
             fi = header.get_format_field_info(key)
         except Exception:
@@ -302,24 +291,22 @@ def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable
         else:
             default_value = None
         template.setdefault(key, default_value)
-
     def factory() -> dict:
-        data = {}
+        data: dict = {}
         for k, d in template.items():
             data[k] = ([None] * len(d)) if isinstance(d, list) else d
         return data
-
     return factory
 
-
 def _ensure_info_header_lines(header) -> None:
+    """Ensure that standard AC/AN/AF INFO header definitions are present in the VCF header."""
     info_defs = (
         ("AC", OrderedDict((("ID", "AC"), ("Number", "A"), ("Type", "Integer"),
-            ("Description", "Alternate allele count in genotypes, for each ALT allele")))),
+                             ("Description", "Alternate allele count in genotypes, for each ALT allele")))),
         ("AN", OrderedDict((("ID", "AN"), ("Number", "1"), ("Type", "Integer"),
-            ("Description", "Total number of alleles in called genotypes")))),
+                             ("Description", "Total number of alleles in called genotypes")))),
         ("AF", OrderedDict((("ID", "AF"), ("Number", "A"), ("Type", "Float"),
-            ("Description", "Allele frequency, for each ALT allele")))),
+                             ("Description", "Allele frequency, for each ALT allele")))),
     )
     for key, mapping in info_defs:
         try:
@@ -329,8 +316,8 @@ def _ensure_info_header_lines(header) -> None:
         if existing is None:
             header.add_info_line(mapping)
 
-
 def _iter_called_genotype_alleles(value) -> Iterable[int]:
+    """Yield all allele indices present in a genotype field value (handles complex structures)."""
     if value is None:
         return
     if isinstance(value, (list, tuple)):
@@ -338,7 +325,8 @@ def _iter_called_genotype_alleles(value) -> Iterable[int]:
             yield from _iter_called_genotype_alleles(item)
         return
     if isinstance(value, int):
-        yield value; return
+        yield value
+        return
     if isinstance(value, str):
         s = value.strip()
         if not s or s == ".":
@@ -353,77 +341,83 @@ def _iter_called_genotype_alleles(value) -> Iterable[int]:
             except ValueError:
                 continue
         return
+    # Attempt to cast other types to int
     try:
         yield int(value)
     except (TypeError, ValueError):
         return
 
-
 def _recompute_ac_an_af(record) -> None:
+    """Recompute the AC, AN, AF INFO fields for a merged record based on its genotype calls."""
     alt_n = len(record.ALT or [])
     ac = [0] * alt_n
     an = 0
     for call in (record.calls or []):
-        g = (call.data or {}).get("GT")
-        for ai in _iter_called_genotype_alleles(g):
-            if isinstance(ai, bool):  # guard
-                continue
+        gt_value = (call.data or {}).get("GT")
+        for allele_index in _iter_called_genotype_alleles(gt_value):
+            if isinstance(allele_index, bool):
+                continue  # skip boolean values (if any)
             an += 1
-            if ai is None or ai <= 0:
-                continue
-            if 1 <= ai <= alt_n:
-                ac[ai - 1] += 1
+            if allele_index is None or allele_index <= 0:
+                continue  # 0 or None = reference/missing allele, not counted in AC
+            if 1 <= allele_index <= alt_n:
+                ac[allele_index - 1] += 1
     record.INFO["AC"] = ac
     record.INFO["AN"] = an
     record.INFO["AF"] = ([c / an for c in ac] if an > 0 else [0.0] * alt_n)
 
-
 def _remove_format_and_sample_definitions(header) -> None:
+    """Strip all FORMAT definitions and sample names from the VCF header (for anonymization)."""
     if header is None:
         return
+    # Remove FORMAT lines from header lines list
     if hasattr(header, "lines"):
-        filtered = []
+        new_lines = []
         for line in header.lines:
             if isinstance(line, vcfpy.header.FormatHeaderLine):
                 continue
             key = getattr(line, "key", None)
             if isinstance(key, str) and key.upper() == "FORMAT":
                 continue
-            filtered.append(line)
-        header.lines = filtered
+            new_lines.append(line)
+        header.lines = new_lines
+    # Clear the header.formats dictionary if present
     if hasattr(header, "formats"):
         try:
             header.formats.clear()
         except AttributeError:
             header.formats = OrderedDict()
+    # Remove all sample names from header
     if hasattr(header, "samples") and hasattr(header.samples, "names"):
         header.samples.names = []
 
-
 def _pad_record_samples(record, header, sample_order: Sequence[str]) -> None:
+    """Ensure that *record* has calls for all samples in sample_order and all FORMAT keys present."""
     if not sample_order or not hasattr(record, "call_for_sample"):
         return
     fmt_keys = list(record.FORMAT or [])
     factory = _create_missing_call_factory(fmt_keys, header)
-    new_calls = []
+    new_calls: List[vcfpy.Call] = []
     for name in sample_order:
         call = record.call_for_sample.get(name)
         if call is None:
+            # If sample is missing, create a new call with default values
             call = vcfpy.Call(name, factory())
         else:
+            # Fill missing format fields in existing calls with defaults
             defaults = factory()
-            for k in fmt_keys:
-                if k not in call.data:
-                    call.data[k] = defaults.get(k)
+            for key in fmt_keys:
+                if key not in call.data:
+                    call.data[key] = defaults.get(key)
                 else:
-                    cur = call.data[k]
-                    if isinstance(cur, tuple):
-                        call.data[k] = list(cur)
+                    # Convert tuple values to list for consistency
+                    if isinstance(call.data[key], tuple):
+                        call.data[key] = list(call.data[key])
+        # Ensure GT is not None/empty for proper output (use default "./." if so)
         if "GT" in call.data and call.data["GT"] in {None, "", "."}:
-            call.data["GT"] = defaults.get("GT", "./.")
+            call.data["GT"] = (factory().get("GT", "./."))
         new_calls.append(call)
     record.update_calls(new_calls)
-
 
 def _record_passes_filters(
     record,
@@ -431,6 +425,8 @@ def _record_passes_filters(
     an_threshold: Optional[float],
     allowed_filter_values: Optional[Sequence[str]],
 ) -> bool:
+    """Check if a record meets the quality and AN thresholds and has allowed FILTER values."""
+    # QUAL threshold
     if qual_threshold is not None:
         q = getattr(record, "QUAL", None)
         try:
@@ -438,6 +434,7 @@ def _record_passes_filters(
                 return False
         except (TypeError, ValueError):
             return False
+    # AN (allele number) threshold
     if an_threshold is not None:
         an_val = record.INFO.get("AN")
         if isinstance(an_val, list):
@@ -447,6 +444,7 @@ def _record_passes_filters(
                 return False
         except (TypeError, ValueError):
             return False
+    # FILTER field check: only allow records with filter values in allowed_filter_values (default "PASS")
     filters = record.FILTER or []
     if not filters:
         return True
@@ -457,7 +455,6 @@ def _record_passes_filters(
     allowed_set = {v for v in allowed if v not in {None, "", "."}}
     return bool(allowed_set) and all(v in allowed_set for v in vals)
 
-
 def _filter_vcf_records(
     input_path: str,
     qual_threshold: Optional[float],
@@ -465,26 +462,50 @@ def _filter_vcf_records(
     allowed_filter_values: Optional[Sequence[str]],
     verbose: bool,
 ) -> None:
+    """In-place filter of VCF records based on quality/AN thresholds and FILTER values."""
+    import os
+
+    tmp_path = input_path + ".filtered"
+    kept = 0
+    total = 0
+
     try:
-        reader = vcfpy.Reader.from_path(input_path)
+        import vcfpy  # local import to avoid global dependency at import time
+
+        # Read → write filtered → atomic replace
+        try:
+            with vcfpy.Reader.from_path(input_path) as reader:
+                try:
+                    with vcfpy.Writer.from_path(tmp_path, header=reader.header) as writer:
+                        for rec in reader:
+                            total += 1
+                            if _record_passes_filters(rec, qual_threshold, an_threshold, allowed_filter_values):
+                                writer.write_record(rec)
+                                kept += 1
+                except Exception as exc:
+                    # Best-effort cleanup of partial tmp file
+                    try:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                    except OSError:
+                        pass
+                    handle_critical_error(f"Failed to write filtered VCF ({input_path}): {exc}", exc_cls=MergeVCFError)
+        except Exception as exc:
+            handle_critical_error(f"Failed to read VCF for filtering ({input_path}): {exc}", exc_cls=MergeVCFError)
+
+        try:
+            os.replace(tmp_path, input_path)  # atomic on same filesystem
+        except Exception as exc:
+            handle_critical_error(
+                f"Failed to replace original with filtered VCF ({input_path}): {exc}", exc_cls=MergeVCFError
+            )
+
+        log_message(f"Applied variant filter: kept {kept} of {total}.", verbose, level=logging.INFO)
+
+    except MergeVCFError:
+        raise
     except Exception as exc:
-        handle_critical_error(f"Failed to read VCF for filtering ({input_path}): {exc}")
-    tmp = input_path + ".filtered"
-    kept = 0; total = 0
-    try:
-        writer = vcfpy.Writer.from_path(tmp, reader.header)
-    except Exception as exc:
-        reader.close()
-        handle_critical_error(f"Failed to open filtered VCF writer ({input_path}): {exc}")
-    try:
-        for rec in reader:
-            total += 1
-            if _record_passes_filters(rec, qual_threshold, an_threshold, allowed_filter_values):
-                writer.write_record(rec); kept += 1
-    finally:
-        reader.close(); writer.close()
-    shutil.move(tmp, input_path)
-    log_message(f"Applied variant filter: kept {kept} of {total}.", verbose)
+        handle_critical_error(f"Unexpected filtering error for {input_path}: {exc}", exc_cls=MergeVCFError)
 
 
 def merge_vcfs(
@@ -498,112 +519,176 @@ def merge_vcfs(
     an_threshold: Optional[float] = 50.0,
     allowed_filter_values: Optional[Sequence[str]] = ("PASS",),
 ) -> str:
+    """Merge multiple VCF files into one .vcf.gz and index it."""
+    import os, copy, datetime, concurrent.futures
+    from collections import OrderedDict
+    import vcfpy, pysam
+
+    os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base_vcf = os.path.join(output_dir, f"merged_vcf_{timestamp}.vcf")
     gz_vcf = base_vcf + ".gz"
 
     file_count = len(valid_files)
-    log_message(f"Discovered {file_count} validated VCF shard(s) for merging.", verbose)
+    log_message(
+        f"Discovered {file_count} validated VCF shard(s) for merging.",
+        verbose,
+        level=logging.INFO,
+    )
 
     temp_files: List[str] = []
     preprocessed: List[str] = []
-    for p in valid_files:
-        try:
-            pre = preprocess_vcf(p)
-        except Exception as exc:
-            handle_critical_error(f"Failed to preprocess {p}: {exc}", exc_cls=MergeConflictError)
-        preprocessed.append(pre)
-        if pre != p:
-            temp_files.append(pre)
 
-    merged_header = None
-    info_ids: set[str] = set()
-    format_ids: set[str] = set()
-    filter_ids: set[str] = set()
-    contig_ids: set[str] = set()
-    discovered_samples: List[str] = []
+    # Preprocess inputs in parallel
+    try:
+        def _run_pre(p: str) -> str:
+            return preprocess_vcf(
+                p,
+                qual_threshold=qual_threshold,
+                an_threshold=an_threshold,
+                allowed_filter_values=allowed_filter_values,
+                verbose=verbose,
+            )
 
-    record_store: "OrderedDict[Tuple[str, int, str, Tuple[str, ...]], Dict[str, object]]" = OrderedDict()
+        max_workers = min(8, max(1, len(valid_files)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(_run_pre, valid_files))
+    except Exception as exc:
+        handle_critical_error(f"Failed to preprocess input VCF files: {exc}", exc_cls=MergeConflictError)
 
-    def _record_key(record) -> Tuple[str, int, str, Tuple[str, ...]]:
-        alts = tuple(str(alt) for alt in getattr(record, "ALT", []) or [])
-        return (str(record.CHROM), int(record.POS), str(record.REF), alts)
+    for orig_path, pre_path in zip(valid_files, results):
+        preprocessed.append(pre_path)
+        if pre_path != orig_path:
+            temp_files.append(pre_path)
 
-    def _initialise_store(record) -> Dict[str, object]:
-        return {
-            "template": copy.deepcopy(record),
-            "format_keys": list(getattr(record, "FORMAT", []) or []),
-            "calls": {},
-        }
+    # Build merged header
+    try:
+        merged_header = union_headers(preprocessed, sample_order=sample_order)
+    except MergeConflictError:
+        raise
+    except Exception as exc:
+        handle_critical_error(f"Failed to merge VCF headers: {exc}", exc_cls=MergeConflictError)
+
+    # Apply custom metadata
+    try:
+        header = apply_metadata_to_header(
+            merged_header,
+            sample_header_line=sample_header_line,
+            simple_header_lines=simple_header_lines,
+            verbose=verbose,
+        )
+    except Exception as exc:
+        handle_critical_error(f"Failed to apply metadata to header: {exc}", exc_cls=MergeConflictError)
+
+    final_sample_order = list(sample_order) if sample_order else list(getattr(header.samples, "names", []))
+
+    # Collect records keyed by variant
+    def _alt_tuple(rec: vcfpy.Record) -> tuple[str, ...]:
+        return tuple(getattr(a, "value", str(a)) for a in (rec.ALT or []))
+
+    def _rec_key(rec: vcfpy.Record) -> tuple[str, int, str, tuple[str, ...]]:
+        return (rec.CHROM, rec.POS, rec.REF, _alt_tuple(rec))
+
+    record_store: Dict[tuple, dict] = {}
 
     try:
-        for file_path in preprocessed:
-            try:
-                reader = vcfpy.Reader.from_path(file_path)
-            except Exception as exc:
-                handle_critical_error(f"Failed to read VCF file {file_path}: {exc}")
+        for path in preprocessed:
+            with vcfpy.Reader.from_path(path) as reader:
+                for rec in reader:
+                    key = _rec_key(rec)
+                    container = record_store.get(key)
+                    if container is None:
+                        container = {
+                            "CHROM": rec.CHROM,
+                            "POS": rec.POS,
+                            "ID": copy.deepcopy(rec.ID),
+                            "REF": rec.REF,
+                            "ALT": copy.deepcopy(rec.ALT),
+                            "QUAL": rec.QUAL,
+                            "FILTER": copy.deepcopy(rec.FILTER),
+                            "INFO": copy.deepcopy(rec.INFO),
+                            "format_keys": list(rec.FORMAT or []),
+                            "calls": {},
+                        }
+                        record_store[key] = container
+                    else:
+                        fmt = container["format_keys"]
+                        for fk in rec.FORMAT or []:
+                            if fk not in fmt:
+                                fmt.append(fk)
 
-            header = reader.header
+                    calls_map: Dict[str, dict] = container["calls"]
+                    for call in rec.calls or []:
+                        sname = getattr(call, "sample", None) or getattr(call, "name", None)
+                        if sname:
+                            calls_map[sname] = copy.deepcopy(call.data or {})
+    except Exception as exc:
+        handle_critical_error(f"Failed while aggregating records: {exc}", exc_cls=MergeConflictError)
 
-            if merged_header is None:
-                merged_header = copy.deepcopy(header)
-                for line in getattr(merged_header, "lines", []):
-                    if isinstance(line, vcfpy.header.InfoHeaderLine) and line.id:
-                        info_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine) and line.id:
-                        format_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FilterHeaderLine) and line.id:
-                        filter_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.ContigHeaderLine) and line.id:
-                        contig_ids.add(line.id)
-                discovered_samples.extend(getattr(header.samples, "names", []))
-            else:
-                for line in getattr(header, "lines", []):
-                    try:
-                        cloned = copy.deepcopy(line)
-                    except Exception:
-                        cloned = line
-                    if isinstance(line, vcfpy.header.InfoHeaderLine) and line.id:
-                        if line.id not in info_ids:
-                            merged_header.add_line(cloned)
-                            info_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine) and line.id:
-                        if line.id not in format_ids:
-                            merged_header.add_line(cloned)
-                            format_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.FilterHeaderLine) and line.id:
-                        if line.id not in filter_ids:
-                            merged_header.add_line(cloned)
-                            filter_ids.add(line.id)
-                    elif isinstance(line, vcfpy.header.ContigHeaderLine) and line.id:
-                        if line.id not in contig_ids:
-                            merged_header.add_line(cloned)
-                            contig_ids.add(line.id)
+    # Write merged VCF, bgzip, tabix
+    try:
+        def _order_format(fmt_keys: List[str]) -> List[str]:
+            if "GT" in fmt_keys and fmt_keys[0] != "GT":
+                fmt_keys = [k for k in fmt_keys if k != "GT"]
+                fmt_keys.insert(0, "GT")
+            seen, ordered = set(), []
+            for k in fmt_keys:
+                if k not in seen:
+                    seen.add(k)
+                    ordered.append(k)
+            return ordered
 
-                for sample_name in getattr(header.samples, "names", []):
-                    if sample_name not in discovered_samples:
-                        discovered_samples.append(sample_name)
+        # sort by header contig order then position
+        contig_order: Dict[str, int] = {}
+        try:
+            from vcfpy import header as vcfhdr
+            idx = 0
+            for line in getattr(header, "lines", []):
+                if isinstance(line, vcfhdr.ContigHeaderLine) and line.id:
+                    contig_order[line.id] = idx
+                    idx += 1
+        except Exception:
+            contig_order = {}
 
-            for record in reader:
-                key = _record_key(record)
-                container = record_store.get(key)
-                if container is None:
-                    container = _initialise_store(record)
-                    record_store[key] = container
-                else:
-                    format_keys = container["format_keys"]
-                    for fmt_key in getattr(record, "FORMAT", []) or []:
-                        if fmt_key not in format_keys:
-                            format_keys.append(fmt_key)
+        def _sort_key(k: tuple[str, int, str, tuple[str, ...]]):
+            chrom, pos, _, _ = k
+            return (contig_order.get(chrom, 10**9), chrom, pos)
 
-                call_mapping: Dict[str, dict] = container["calls"]
-                for call in getattr(record, "calls", []):
-                    sample_name = getattr(call, "sample", getattr(call, "name", None))
-                    if sample_name is None:
-                        continue
-                    call_mapping[sample_name] = copy.deepcopy(getattr(call, "data", {}))
+        with vcfpy.Writer.from_path(base_vcf, header=header) as writer:
+            for key in sorted(record_store.keys(), key=_sort_key):
+                cont = record_store[key]
+                fmt_keys = _order_format(list(cont["format_keys"]))
 
-            reader.close()
+                calls_out: List[vcfpy.Call] = []
+                for s in final_sample_order:
+                    data = cont["calls"].get(s, {})
+                    filled = OrderedDict()
+                    for fk in fmt_keys:
+                        filled[fk] = data.get(fk, "./." if fk == "GT" else ".")
+                    calls_out.append(vcfpy.Call(sample=s, data=filled))
+
+                out_rec = vcfpy.Record(
+                    CHROM=cont["CHROM"],
+                    POS=cont["POS"],
+                    ID=cont["ID"],
+                    REF=cont["REF"],
+                    ALT=cont["ALT"],
+                    QUAL=cont["QUAL"],
+                    FILTER=cont["FILTER"],
+                    INFO=cont["INFO"],
+                    FORMAT=fmt_keys,
+                    calls=calls_out,
+                )
+                writer.write_record(out_rec)
+
+        pysam.tabix_compress(base_vcf, gz_vcf, force=True)
+        pysam.tabix_index(gz_vcf, preset="vcf", force=True)
+        try:
+            os.remove(base_vcf)
+        except OSError:
+            pass
+    except Exception as exc:
+        handle_critical_error(f"Failed to write merged VCF: {exc}", exc_cls=MergeConflictError)
     finally:
         for tmp in temp_files:
             try:
@@ -612,13 +697,20 @@ def merge_vcfs(
             except OSError:
                 pass
 
-    if merged_header is None:
-        handle_critical_error("Failed to construct a merged VCF header from the provided files.")
+    log_message(f"Merged VCF written and indexed: {gz_vcf}", verbose)
+    return gz_vcf
 
-    final_sample_order = list(sample_order) if sample_order is not None else discovered_samples
-    if hasattr(merged_header, "samples") and hasattr(merged_header.samples, "names"):
-        merged_header.samples.names = list(final_sample_order)
 
+    # Merge headers from all files to create a combined header
+    try:
+        merged_header = union_headers(preprocessed, sample_order=sample_order)
+    except MergeConflictError:
+        # Pass through known header merge conflicts as MergeConflictError
+        raise
+    except Exception as exc:
+        handle_critical_error(f"Failed to merge VCF headers: {exc}", exc_cls=MergeConflictError)
+
+    # Apply additional metadata lines (if provided) to the merged header
     try:
         header = apply_metadata_to_header(
             merged_header,
@@ -627,52 +719,56 @@ def merge_vcfs(
             verbose=verbose,
         )
     except SystemExit:
+        # allow SystemExit to propagate (if handle_critical_error called sys.exit)
         raise
     except Exception as exc:
         handle_critical_error(f"Failed to apply metadata to merged VCF header: {exc}")
 
-    # contig ranks for ordering
+    # Determine final contig order and ensure header contigs preserve this order
     contigs: List[str] = []
     if getattr(header, "contigs", None):
         contigs = list(header.contigs.keys())
     if not contigs:
+        # If header.contigs is empty, gather contig names from any Contig header lines (if present)
         for ln in getattr(header, "lines", []):
             if isinstance(ln, vcfpy.header.ContigHeaderLine):
                 contigs.append(ln.id)
     contig_ranks = {name: i for i, name in enumerate(contigs)}
+    _ensure_info_header_lines(header)  # ensure AC/AN/AF are defined in INFO headers
 
-    _ensure_info_header_lines(header)
-
-    # Ensure header.formats includes all format definitions from inputs
+    # Ensure header.formats dict is populated with all FORMAT definitions (vcfpy quirk)
     if hasattr(header, "formats") and header.formats is not None:
-        for line in getattr(header, "lines", []):
-            if isinstance(line, vcfpy.header.FormatHeaderLine):
-                header.formats[line.id] = line
+        for ln in getattr(header, "lines", []):
+            if isinstance(ln, vcfpy.header.FormatHeaderLine):
+                header.formats[ln.id] = ln
 
-    # Prepare final sample list
-    sample_names: List[str] = list(final_sample_order)
+    # Initialize sample list from merged header; include all samples from all files
+    sample_names: List[str] = list(getattr(header.samples, "names", []) or [])
 
-    # Open readers
-    readers, iters = [], []
+    # Open each VCF file with vcfpy Reader and prepare for k-way merge
+    readers: List[vcfpy.Reader] = []
+    iters: List[Iterator] = []
     for path in preprocessed:
         try:
-            r = vcfpy.Reader.from_path(path)
+            reader = vcfpy.Reader.from_path(path)
         except Exception as exc:
             handle_critical_error(f"Failed to open VCF for merging ({path}): {exc}")
-        readers.append(r)
-        iters.append(iter(r))
-        # Grow union of samples if any not yet present
-        file_samps = list(getattr(r.header.samples, "names", []) or [])
-        for n in file_samps:
-            if n not in sample_names:
-                sample_names.append(n)
+        readers.append(reader)
+        iters.append(iter(reader))
+        # Add any new sample names found in this file to the master sample list
+        file_samples = list(getattr(reader.header.samples, "names", []) or [])
+        for name in file_samples:
+            if name not in sample_names:
+                sample_names.append(name)
+    # Update the merged header's sample names to include all discovered samples (or maintain given order)
     if hasattr(header, "samples") and hasattr(header.samples, "names"):
         header.samples.names = list(sample_names)
 
-    # Writer
+    # Create output VCF writer with the merged header
     try:
         writer = vcfpy.Writer.from_path(base_vcf, header)
     except Exception as exc:
+        # Clean up readers before aborting
         for r in readers:
             try:
                 r.close()
@@ -680,68 +776,75 @@ def merge_vcfs(
                 pass
         handle_critical_error(f"Failed to open writer for merged VCF: {exc}", exc_cls=MergeConflictError)
 
-    def _advance(i: int):
+    def _advance(reader_index: int) -> Optional[vcfpy.Record]:
+        """Fetch the next record from reader at index, or return None if exhausted."""
         try:
-            rec = next(iters[i])
+            rec = next(iters[reader_index])
         except StopIteration:
             return None
         _sort_record_alts(rec)
         return rec
 
-    log_message("Performing heap-based k-way merge of VCF shards...", verbose)
-    heap: List[Tuple[Tuple[int, int, str, Tuple[str, ...]], int, int, "vcfpy.Record"]] = []
-    counter = itertools.count()
+    # Heap-based k-way merge: each heap entry is (sort_key, counter, source_index, record)
+    log_message(
+        "Performing heap-based k-way merge of VCF shards...",
+        verbose,
+        level=logging.DEBUG,
+    )
+    heap: List[Tuple[Tuple[int, int, str, Tuple[str, ...]], int, int, vcfpy.Record]] = []
+    counter = itertools.count()  # unique counter to avoid comparison of records in heap
+    # Initialize heap with the first record from each reader (if available)
     for i in range(len(iters)):
         rec = _advance(i)
-        if rec is None:
-            continue
-        heapq.heappush(heap, (_record_sort_key(rec, contig_ranks), next(counter), i, rec))
+        if rec is not None:
+            heapq.heappush(heap, (_record_sort_key(rec, contig_ranks), next(counter), i, rec))
 
+    # Merge loop
     try:
         while heap:
             key, _, src_idx, rec = heapq.heappop(heap)
-            colliding: List[Tuple["vcfpy.Record", int]] = [(rec, src_idx)]
-
+            # Collect all records with the same sort key (colliding variants)
+            colliding_records: List[Tuple[vcfpy.Record, int]] = [(rec, src_idx)]
+            # Also gather any other entries from heap that have identical key
             while heap and heap[0][0] == key:
-                _, _, j, r2 = heapq.heappop(heap)
-                colliding.append((r2, j))
-
-            pending: List[Tuple["vcfpy.Record", int]] = []
-            i = 0
-            while i < len(colliding):
-                cur, ridx = colliding[i]
-                nxt = _advance(ridx)
+                _, _, j, rec2 = heapq.heappop(heap)
+                colliding_records.append((rec2, j))
+            # For each source that contributed a colliding record, advance it to find if more colliding records follow
+            pending: List[Tuple[vcfpy.Record, int]] = []
+            cur_index = 0
+            while cur_index < len(colliding_records):
+                _, source_idx = colliding_records[cur_index]
+                nxt = _advance(source_idx)
+                # If the next record from this source is still the same variant (same sort key), merge it as well
                 while nxt is not None and _record_sort_key(nxt, contig_ranks) == key:
-                    colliding.append((nxt, ridx))
-                    nxt = _advance(ridx)
+                    colliding_records.append((nxt, source_idx))
+                    nxt = _advance(source_idx)
                 if nxt is not None:
-                    pending.append((nxt, ridx))
-                i += 1
-
-            merged = _merge_colliding_records(colliding, header, sample_names)
-            _recompute_ac_an_af(merged)
-            writer.write_record(merged)
-
-            for nxt, ridx in pending:
-                heapq.heappush(
-                    heap,
-                    (_record_sort_key(nxt, contig_ranks), next(counter), ridx, nxt),
-                )
+                    pending.append((nxt, source_idx))
+                cur_index += 1
+            # Merge all colliding records into one and write to output
+            merged_rec = _merge_colliding_records(colliding_records, header, sample_names)
+            _recompute_ac_an_af(merged_rec)
+            writer.write_record(merged_rec)
+            # Push any pending next records (that were not colliding) onto the heap
+            for nxt_rec, ridx in pending:
+                heapq.heappush(heap, (_record_sort_key(nxt_rec, contig_ranks), next(counter), ridx, nxt_rec))
     finally:
+        # Close writer and all readers, remove any temporary files
         writer.close()
         for r in readers:
             try:
                 r.close()
             except Exception:
                 pass
-        for t in temp_files:
+        for tmp in temp_files:
             try:
-                if os.path.exists(t):
-                    os.remove(t)
+                if os.path.exists(tmp):
+                    os.remove(tmp)
             except OSError:
                 pass
 
-    # In-memory filtering (QUAL>30, AN>50, FILTER PASS)
+    # Apply in-place variant filtering on the merged VCF file (QUAL/AN thresholds, FILTER values)
     _filter_vcf_records(
         base_vcf,
         qual_threshold=qual_threshold,
@@ -750,7 +853,7 @@ def merge_vcfs(
         verbose=verbose,
     )
 
-    # Anonymize: drop FORMAT + samples
+    # Anonymize the VCF: drop all sample genotype data and FORMAT definitions
     try:
         rdr = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
@@ -761,159 +864,182 @@ def merge_vcfs(
         w = vcfpy.Writer.from_path(anon_tmp, rdr.header)
     except Exception as exc:
         rdr.close()
-        handle_critical_error(f"Failed to open anonymized writer: {exc}")
+        handle_critical_error(f"Failed to open anonymized VCF writer: {exc}")
     try:
         for rec in rdr:
-            rec.FORMAT = []
-            rec.calls = []
+            rec.FORMAT = []    # no format fields
+            rec.calls = []     # no sample calls
             w.write_record(rec)
     finally:
         rdr.close()
         w.close()
+    # Replace original merged VCF with the anonymized version
     shutil.move(anon_tmp, base_vcf)
 
     # BGZF compress + Tabix index using pysam
-    log_message("Compressing and indexing the final VCF...", verbose)
+    log_message(
+        "Compressing and indexing the final VCF...",
+        verbose,
+        level=logging.INFO,
+    )
     try:
         pysam.tabix_compress(base_vcf, gz_vcf, force=True)
         pysam.tabix_index(gz_vcf, preset="vcf", force=True)
-        os.remove(base_vcf)
+        os.remove(base_vcf)  # remove uncompressed VCF after successful compression
     except Exception as exc:
         handle_critical_error(
             f"Failed to compress/index final VCF: {exc}",
             exc_cls=MergeConflictError,
         )
-    log_message(f"Merged VCF created and indexed successfully: {gz_vcf}", verbose)
+    log_message(
+        f"Merged VCF created and indexed successfully: {gz_vcf}",
+        verbose,
+        level=logging.INFO,
+    )
     return gz_vcf
 
-
 def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[str]] = None):
-    """Return a merged header with combined metadata from *valid_files*."""
+    """Merge the headers of all VCF files in `valid_files` into a combined header."""
+    import os, copy
+    from collections import OrderedDict
+
     combined_header = None
-    info_lines: "OrderedDict[str, vcfpy.header.InfoHeaderLine]" = OrderedDict()
-    filter_lines: "OrderedDict[str, vcfpy.header.FilterHeaderLine]" = OrderedDict()
-    contig_lines: "OrderedDict[str, vcfpy.header.ContigHeaderLine]" = OrderedDict()
-    format_lines: "OrderedDict[str, vcfpy.header.FormatHeaderLine]" = OrderedDict()
-    computed_sample_order: List[str] = []
+
+    info_lines: OrderedDict[str, vcfpy.header.InfoHeaderLine] = OrderedDict()
+    filter_lines: OrderedDict[str, vcfpy.header.FilterHeaderLine] = OrderedDict()
+    contig_lines: OrderedDict[str, vcfpy.header.ContigHeaderLine] = OrderedDict()
+    format_lines: OrderedDict[str, vcfpy.header.FormatHeaderLine] = OrderedDict()
+
+    computed_sample_order: list[str] = []
     merged_sample_metadata = None
 
-    def _line_mapping(line) -> "OrderedDict[str, str]":
-        mapping = getattr(line, "mapping", None)
-        return OrderedDict(mapping) if isinstance(mapping, dict) else OrderedDict()
+    def _line_mapping(line) -> OrderedDict[str, str]:
+        m = getattr(line, "mapping", None)
+        return OrderedDict(m) if isinstance(m, dict) else OrderedDict()
 
     for file_path in valid_files:
-        pre = preprocess_vcf(file_path)
-        reader = None
+        pre = preprocess_vcf(file_path)  # idempotent normalization
         try:
-            reader = vcfpy.Reader.from_path(pre)
-            header = reader.header
+            with vcfpy.Reader.from_path(pre) as reader:
+                hdr = reader.header
 
-            if combined_header is None:
-                combined_header = header.copy()
-                if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
-                    computed_sample_order = list(combined_header.samples.names)
-                for line in combined_header.lines:
+                if combined_header is None:
+                    combined_header = copy.deepcopy(hdr)
+                    if getattr(combined_header, "samples", None) and getattr(combined_header.samples, "names", None):
+                        computed_sample_order = list(combined_header.samples.names)
+                    for line in list(combined_header.lines):
+                        if isinstance(line, vcfpy.header.InfoHeaderLine):
+                            info_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                            filter_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                            contig_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                            format_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                            m = _line_mapping(line)
+                            if m.get("ID"):
+                                merged_sample_metadata = OrderedDict(m)
+                    continue
+
+                # Merge samples
+                if getattr(hdr, "samples", None) and getattr(hdr.samples, "names", None):
+                    for s in hdr.samples.names:
+                        if s not in computed_sample_order:
+                            computed_sample_order.append(s)
+
+                # Merge header lines with conflict checks
+                for line in hdr.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
-                        info_lines[line.id] = copy.deepcopy(line)
+                        existing = info_lines.get(line.id)
+                        if existing is None:
+                            info_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                            for field in ("Number", "Type", "Description"):
+                                if exist_map.get(field) != new_map.get(field):
+                                    handle_critical_error(
+                                        "INFO header definitions conflict across shards. "
+                                        f"Field '{field}' for INFO '{line.id}' differs: "
+                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
+                                        exc_cls=MergeConflictError,
+                                    )
+
                     elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                        filter_lines[line.id] = copy.deepcopy(line)
+                        existing = filter_lines.get(line.id)
+                        if existing is None:
+                            filter_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                            if exist_map.get("Description") != new_map.get("Description"):
+                                handle_critical_error(
+                                    "FILTER header definitions conflict across shards. "
+                                    f"Description for FILTER '{line.id}' differs: "
+                                    f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
+                                    exc_cls=MergeConflictError,
+                                )
+
                     elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                        contig_lines[line.id] = copy.deepcopy(line)
+                        existing = contig_lines.get(line.id)
+                        if existing is None:
+                            contig_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            if _line_mapping(existing) != _line_mapping(line):
+                                handle_critical_error(
+                                    "Contig header definitions conflict across shards. "
+                                    f"Contig '{line.id}' differs between shards (conflict in {file_path}).",
+                                    exc_cls=MergeConflictError,
+                                )
+
                     elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        format_lines[line.id] = copy.deepcopy(line)
+                        existing = format_lines.get(line.id)
+                        if existing is None:
+                            format_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                            for field in ("Number", "Type", "Description"):
+                                if exist_map.get(field) != new_map.get(field):
+                                    handle_critical_error(
+                                        "FORMAT header definitions conflict across shards. "
+                                        f"Field '{field}' for FORMAT '{line.id}' differs: "
+                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
+                                        exc_cls=MergeConflictError,
+                                    )
+
                     elif isinstance(line, vcfpy.header.SampleHeaderLine):
                         m = _line_mapping(line)
-                        if m.get("ID"):
+                        sid = m.get("ID")
+                        if not sid:
+                            continue
+                        if merged_sample_metadata is None:
                             merged_sample_metadata = OrderedDict(m)
-                continue
+                        else:
+                            for k, v in m.items():
+                                if k not in merged_sample_metadata or not merged_sample_metadata[k]:
+                                    merged_sample_metadata[k] = v
 
-            if hasattr(header, "samples") and hasattr(header.samples, "names"):
-                for s in header.samples.names:
-                    if s not in computed_sample_order:
-                        computed_sample_order.append(s)
-
-            for line in header.lines:
-                if isinstance(line, vcfpy.header.InfoHeaderLine):
-                    exist = info_lines.get(line.id)
-                    if exist is None:
-                        info_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                        continue
-                    em, nm = _line_mapping(exist), _line_mapping(line)
-                    for k in ("Number", "Type", "Description"):
-                        if em.get(k) != nm.get(k):
-                            handle_critical_error(
-                                "INFO header definitions conflict across shards. "
-                                f"Field '{k}' for INFO '{line.id}' differs: {em.get(k)!r} vs {nm.get(k)!r} "
-                                f"(in {file_path})."
-                            )
-                elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                    exist = filter_lines.get(line.id)
-                    if exist is None:
-                        filter_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                        continue
-                    em, nm = _line_mapping(exist), _line_mapping(line)
-                    if em.get("Description") != nm.get("Description"):
-                        handle_critical_error(
-                            "FILTER header definitions conflict across shards. "
-                            f"Description for FILTER '{line.id}' differs: {em.get('Description')!r} vs {nm.get('Description')!r} "
-                            f"(in {file_path})."
-                        )
-                elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                    exist = contig_lines.get(line.id)
-                    if exist is None:
-                        contig_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                        continue
-                    if _line_mapping(exist) != _line_mapping(line):
-                        handle_critical_error(
-                            "Contig header definitions conflict across shards. "
-                            f"Contig '{line.id}' differs between shards (conflict in {file_path})."
-                        )
-                elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                    exist = format_lines.get(line.id)
-                    if exist is None:
-                        format_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                        continue
-                    em, nm = _line_mapping(exist), _line_mapping(line)
-                    for k in ("Number", "Type", "Description"):
-                        if em.get(k) != nm.get(k):
-                            handle_critical_error(
-                                "FORMAT header definitions conflict across shards. "
-                                f"Field '{k}' for FORMAT '{line.id}' differs: {em.get(k)!r} vs {nm.get(k)!r} "
-                                f"(in {file_path})."
-                            )
-                elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                    m = _line_mapping(line)
-                    sid = m.get("ID")
-                    if not sid:
-                        continue
-                    if merged_sample_metadata is None:
-                        merged_sample_metadata = OrderedDict(m)
-                        continue
-                    for k, v in m.items():
-                        if k not in merged_sample_metadata or not merged_sample_metadata[k]:
-                            merged_sample_metadata[k] = v
         except Exception as exc:
             handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}", exc_cls=MergeConflictError)
         finally:
-            if reader is not None:
-                try:
-                    reader.close()
-                except Exception:
-                    pass
             if pre != file_path and os.path.exists(pre):
-                os.remove(pre)
+                try:
+                    os.remove(pre)
+                except OSError:
+                    pass
 
     if combined_header is None:
         handle_critical_error("Unable to construct a merged VCF header.", exc_cls=MergeConflictError)
 
+    # Apply final sample order
     target_samples = sample_order if sample_order is not None else computed_sample_order
-    if target_samples and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+    if target_samples and getattr(combined_header, "samples", None) and getattr(combined_header.samples, "names", None):
         combined_header.samples.names = list(target_samples)
 
+    # Merge SAMPLE metadata to a single line
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)
         parsed = _parse_sample_metadata_line(serialized)
@@ -921,12 +1047,12 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
         combined_header.lines = [ln for ln in combined_header.lines if getattr(ln, "key", None) != "SAMPLE"]
         combined_header.add_line(sample_line)
 
+    # Preserve contig order from first occurrences
     contig_order = list(contig_lines.keys())
     if contig_order:
         _apply_contig_order(combined_header, contig_order)
 
     return combined_header
-
 
 __all__ = [
     "preprocess_vcf",

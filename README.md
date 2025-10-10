@@ -24,3 +24,12 @@ After loading the data you can sign in with either demo account and visit the pr
 - Install dependencies with `pip install -r requirements.txt`.
 - Run checks with `python manage.py check` and execute the test suite using `python manage.py test`.
 - Static files are served from the `static/` directory; new assets should be collected with `python manage.py collectstatic` in production environments.
+
+## Merging VCF files
+
+The production CLI for the MetaGap VCF merging workflow lives in
+`MetaGap.MetagapUserCode.merge_vcf.cli:main`. Invoke it either directly
+(`python -m MetaGap.MetagapUserCode.merge_vcf.cli`) or via the
+compatibility shim that ships with the package (`python -m merge_vcf`).
+Both routes execute the same tested workflow that powers
+`MetagapUserCode.test_merge_vcf`.

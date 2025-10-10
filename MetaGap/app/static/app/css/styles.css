@@ -350,6 +350,68 @@ main.flex-grow-1 {
         color: #f4f7fb;
 }
 
+/* Accordion */
+.accordion-item {
+        background-color: var(--app-surface-bg);
+        border: 1px solid var(--app-surface-border);
+        color: var(--app-body-color);
+        border-radius: 1rem;
+        overflow: hidden;
+        transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+}
+
+.accordion-button {
+        background-color: transparent;
+        color: inherit;
+        font-weight: 600;
+        padding-top: 0.85rem;
+        padding-bottom: 0.85rem;
+        transition: background-color 0.3s ease, color 0.2s ease;
+}
+
+.accordion-button:focus {
+        box-shadow: 0 0 0 0.2rem rgba(31, 111, 235, 0.25);
+}
+
+.accordion-button:not(.collapsed) {
+        background-color: rgba(31, 111, 235, 0.08);
+        color: var(--app-body-color);
+        box-shadow: inset 0 -1px 0 rgba(12, 31, 58, 0.1);
+}
+
+.accordion-button::after {
+        filter: grayscale(1);
+}
+
+.accordion-body {
+        background-color: transparent;
+        color: inherit;
+}
+
+[data-bs-theme='dark'] .accordion-item {
+        background-color: rgba(9, 20, 40, 0.92);
+        border-color: rgba(122, 169, 255, 0.25);
+}
+
+[data-bs-theme='dark'] .accordion-button {
+        color: var(--app-body-color);
+        background-color: rgba(9, 20, 40, 0.92);
+}
+
+[data-bs-theme='dark'] .accordion-button:not(.collapsed) {
+        background-color: rgba(31, 111, 235, 0.18);
+        color: var(--app-body-color);
+        box-shadow: inset 0 -1px 0 rgba(122, 169, 255, 0.25);
+}
+
+[data-bs-theme='dark'] .accordion-button::after {
+        filter: invert(0.85);
+}
+
+[data-bs-theme='dark'] .accordion-body {
+        background-color: rgba(9, 20, 40, 0.88);
+}
+
 /* Breadcrumbs */
 .app-breadcrumbs {
         margin-top: var(--header-margin-offset);

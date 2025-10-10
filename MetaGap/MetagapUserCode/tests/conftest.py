@@ -80,7 +80,7 @@ def cli_module(monkeypatch):
     return _load_cli_module(base_dir, monkeypatch=monkeypatch)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def merge_script_module(request, monkeypatch) -> ModuleType:
     """
     Return either the user's standalone script module or the CLI module.

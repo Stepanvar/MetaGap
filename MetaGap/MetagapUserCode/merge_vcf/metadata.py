@@ -10,13 +10,10 @@ import re
 from collections import OrderedDict
 from typing import List, Optional, Tuple
 
-from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
-from .logging_utils import handle_critical_error, log_message
+import logging
 import subprocess
-from collections import OrderedDict
-from typing import List, Optional, Tuple
 
-from . import VCFPY_AVAILABLE, vcfpy
+from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
 from .logging_utils import (
     MergeConflictError,
     ValidationError,

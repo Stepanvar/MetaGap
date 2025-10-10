@@ -83,3 +83,58 @@ def test_load_metadata_lines_rejects_invalid_line(metadata_module, tmp_path):
         metadata_module.load_metadata_lines(str(metadata_path))
 
     assert "'##key=value'" in str(excinfo.value)
+
+
+def test_load_metadata_lines_splits_concatenated_entries(metadata_module, tmp_path):
+    metadata_path = tmp_path / "metadata.txt"
+    metadata_path.write_text("##study=Example  ##phase=Final##study=Example\n")
+
+    lines = metadata_module.load_metadata_lines(str(metadata_path))
+
+    assert lines == ["##study=Example", "##phase=Final"]
+
+
+def test_append_metadata_deduplicates_split_lines(metadata_module, tmp_path, monkeypatch):
+    monkeypatch.setattr(metadata_module, "PYSAM_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(metadata_module, "VCFPY_AVAILABLE", True, raising=False)
+
+    class _StubReader:
+        def __init__(self, path):
+            self.path = path
+            self.header = types.SimpleNamespace(lines=[])
+
+        def __iter__(self):
+            return iter([])
+
+        def close(self):
+            pass
+
+    class _ReaderFactory:
+        @classmethod
+        def from_path(cls, path):
+            return _StubReader(path)
+
+    monkeypatch.setattr(metadata_module.vcfpy, "Reader", _ReaderFactory, raising=False)
+
+    merged_vcf = tmp_path / "merged.vcf"
+    merged_vcf.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "##source=Original",
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
+            ]
+        )
+    )
+
+    final_vcf = metadata_module.append_metadata_to_merged_vcf(
+        str(merged_vcf),
+        header_metadata_lines=["##source=Original##phase=One", "  ##phase=One  ", "##phase=Two"],
+    )
+
+    contents = Path(final_vcf).read_text().splitlines()
+    header_lines = [line for line in contents if line.startswith("##")]
+
+    assert header_lines.count("##source=Original") == 1
+    assert header_lines.count("##phase=One") == 1
+    assert header_lines.count("##phase=Two") == 1

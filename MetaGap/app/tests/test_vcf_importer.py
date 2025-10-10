@@ -399,6 +399,37 @@ class VCFImporterTests(TestCase):
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Falling back to a text parser", importer.warnings[0])
 
+    def test_standard_gzip_file_is_inflated_for_pysam(self) -> None:
+        path = self.temp_dir / "standard-compression.vcf.gz"
+        path.write_bytes(gzip.compress(self.VCF_CONTENT.encode("utf-8")))
+
+        temp_paths: list[Path] = []
+
+        original_inflate = VCFImporter._inflate_gzip_to_temp
+        test_case = self
+
+        def tracking_inflate(importer_self: VCFImporter, source_path: str) -> str:
+            temp_path = Path(original_inflate(importer_self, source_path))
+            temp_paths.append(temp_path)
+            test_case.assertTrue(temp_path.exists())
+            return str(temp_path)
+
+        importer = VCFImporter(self.user)
+        with mock.patch.object(VCFImporter, "_inflate_gzip_to_temp", tracking_inflate):
+            sample_group = importer.import_file(str(path))
+
+        self.assertEqual(len(temp_paths), 1)
+        self.assertFalse(temp_paths[0].exists())
+        self.assertEqual(importer.warnings, [])
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertEqual(allele.chrom, "1")
+        self.assertEqual(allele.pos, 1234)
+        self.assertEqual(allele.variant_id, "rsTest")
+        self.assertAlmostEqual(float(allele.info.af), 0.5)
+        self.assertEqual(allele.format.genotype, "0/1")
+        self.assertEqual(allele.format.additional["sample_id"], "Sample001")
+
     @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("gzip fallback"))
     def test_text_fallback_supports_gzip_encoded_vcf(
         self, mocked_variant_file: mock.Mock

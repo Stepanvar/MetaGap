@@ -19,6 +19,12 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - dependency missing
     merge_pkg.vcfpy = None
     merge_pkg.VCFPY_AVAILABLE = False
+try:
+    merge_pkg.pysam = importlib.import_module("pysam")
+    merge_pkg.PYSAM_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - dependency missing
+    merge_pkg.pysam = None
+    merge_pkg.PYSAM_AVAILABLE = False
 sys.modules.setdefault("merge_vcf", merge_pkg)
 
 logging_spec = importlib.util.spec_from_file_location(
@@ -37,6 +43,7 @@ merging_stub.preprocess_vcf = _stub_preprocess_vcf
 sys.modules.setdefault("merge_vcf.merging", merging_stub)
 
 validation_module = importlib.import_module("merge_vcf.validation")
+metadata_module = importlib.import_module("merge_vcf.metadata")
 
 
 def _parse_info_field(info_field):
@@ -115,11 +122,21 @@ def test_validate_merged_vcf_reports_missing_required_info_field(tmp_path):
     assert any("missing required INFO fields: NS" in message for message in messages)
 
 
-def test_recalculate_cohort_info_tags_populates_ac_an_af(tmp_path):
-    module = validation_module
+@pytest.mark.parametrize("use_vcfpy", [True, False])
+def test_recalculate_cohort_info_tags_populates_ac_an_af(
+    tmp_path, monkeypatch, use_vcfpy
+):
+    module = metadata_module
 
     if not hasattr(module, "recalculate_cohort_info_tags"):
-        pytest.skip("recalculate_cohort_info_tags is not available in the validation module")
+        pytest.skip("recalculate_cohort_info_tags is not available in the metadata module")
+
+    original_flag = getattr(module, "VCFPY_AVAILABLE", False)
+    if use_vcfpy:
+        if not original_flag:
+            pytest.skip("vcfpy dependency is required to exercise the vcfpy code path")
+    else:
+        monkeypatch.setattr(module, "VCFPY_AVAILABLE", False)
 
     vcf_content = """##fileformat=VCFv4.2
 ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes">

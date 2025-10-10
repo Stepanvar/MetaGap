@@ -86,7 +86,7 @@ class VCFImporter:
                     metadata, file_path, organization_profile
                 )
                 parse_vcf_text_fallback(
-                    file_path, sample_group, self.database_writer
+                    file_path, sample_group, self.database_writer, warnings=self.warnings,
                 )
             except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
                 if sample_group is not None:

@@ -19,26 +19,11 @@ from ..models import (
     SampleGroup,
 )
 from ..views import ImportDataView
-from .sample_group_test_mixins import SampleGroupTestDataMixin
+from .sample_group_test_mixins import SampleGroupViewMatrixMixin
 
 
-class SampleGroupExportViewTests(SampleGroupTestDataMixin, TestCase):
+class SampleGroupExportViewTests(SampleGroupViewMatrixMixin, TestCase):
     """Validate CSV exports for sample groups and their access controls."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        User = get_user_model()
-        self.owner = User.objects.create_user(
-            username="export_owner",
-            password="export-pass",
-            email="export-owner@example.com",
-        )
-        self.other_user = User.objects.create_user(
-            username="export_other",
-            password="export-pass",
-            email="export-other@example.com",
-        )
-        self.sample_group, self.allele = self.create_sample_group_with_variant(self.owner)
 
     def export_url(self) -> str:
         for name in (

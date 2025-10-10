@@ -26,8 +26,10 @@ SAMPLE_BODY_TRIMMED = "1\t100\t.\tA\tG\t.\tPASS\tAC=1;AN=2;AF=0.5\n"
 SAMPLE_VCF = SAMPLE_HEADER + SAMPLE_BODY_WITH_FORMAT
 
 
-def _configure_fake_bcftools(monkeypatch, module, header_checks):
+def _configure_fake_bcftools(monkeypatch, module, header_checks, call_log=None):
     def fake_run(cmd, check=True, stdout=None, stdin=None, **kwargs):
+        if call_log is not None:
+            call_log.append(list(cmd))
         if cmd[:2] == ["bcftools", "+fill-tags"]:
             output_path = Path(cmd[cmd.index("-o") + 1])
             output_path.write_text(SAMPLE_VCF)
@@ -53,6 +55,24 @@ def _configure_fake_bcftools(monkeypatch, module, header_checks):
             if stdout is None:
                 raise AssertionError("cut command requires stdout to be provided")
             stdout.write(SAMPLE_BODY_TRIMMED)
+            return None
+
+        if cmd and cmd[0] == "bgzip":
+            if len(cmd) < 2:
+                raise AssertionError("bgzip command missing target path")
+            target = Path(cmd[-1])
+            compressed = target.with_name(target.name + ".gz")
+            data = target.read_bytes()
+            with gzip.open(compressed, "wb") as handle:
+                handle.write(data)
+            return None
+
+        if cmd and cmd[0] == "tabix":
+            if "-f" not in cmd:
+                raise AssertionError("tabix command missing -f flag")
+            target = Path(cmd[-1])
+            index_path = target.with_suffix(target.suffix + ".tbi")
+            index_path.write_text("index")
             return None
 
         raise AssertionError(f"Unexpected command: {cmd}")
@@ -104,6 +124,28 @@ def test_append_metadata_runs_header_validation_for_plain_vcf(monkeypatch, tmp_p
     assert final_vcf.endswith(".vcf")
     assert Path(final_vcf) == header_checks[0]
     assert "##fileformat=VCFv4.2" in Path(final_vcf).read_text()
+
+
+def test_append_metadata_triggers_bgzip_and_tabix(monkeypatch, tmp_path):
+    module = load_user_module()
+    header_checks = []
+    call_log = []
+    _configure_fake_bcftools(monkeypatch, module, header_checks, call_log=call_log)
+
+    merged_vcf = tmp_path / "merged.vcf.gz"
+    merged_vcf.write_text("placeholder")
+
+    final_vcf = module.append_metadata_to_merged_vcf(str(merged_vcf))
+
+    assert any(cmd[0] == "bgzip" for cmd in call_log)
+    assert any(cmd[0] == "tabix" for cmd in call_log)
+
+    final_path = Path(final_vcf)
+    assert final_path.exists()
+    assert final_path.with_suffix(final_path.suffix + ".tbi").exists()
+
+    plain_path = Path(str(final_vcf)[:-3])
+    assert not plain_path.exists()
 
 
 def test_validate_header_failure_raises(monkeypatch):

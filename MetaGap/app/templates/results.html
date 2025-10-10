@@ -330,6 +330,7 @@
     <p class="text-muted small" id="column-filter-help">Use the column filters below to narrow results. Clear a filter by removing its text or selecting "All" in dropdowns.</p>
 
     <div class="table-responsive">
+        {# Render the full dataset so DataTables can provide client-side pagination/filtering. #}
         {% render_table table %}
     </div>
 </div>

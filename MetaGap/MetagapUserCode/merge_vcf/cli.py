@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import datetime
+import glob
+import logging
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,6 +22,7 @@ from .logging_utils import (
     configure_logging,
     handle_critical_error,
     log_message,
+    LOG_FILE,
 )
 from .metadata import append_metadata_to_merged_vcf, load_metadata_lines
 from .merging import merge_vcfs
@@ -145,6 +151,64 @@ def main():
     args = parse_arguments()
     verbose = args.verbose
 
+    try:
+        input_dir = os.path.abspath(args.input_dir)
+        if not os.path.isdir(input_dir):
+            handle_critical_error(
+                f"Input directory does not exist: {input_dir}",
+                exc_cls=ValidationError,
+            )
+
+        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
+        log_path = os.path.join(output_dir, LOG_FILE)
+        configure_logging(
+            log_level=logging.DEBUG if verbose else logging.INFO,
+            log_file=log_path,
+            enable_file_logging=True,
+        )
+
+        metadata_header_lines = load_metadata_lines(args.metadata_file, verbose)
+
+        log_message(
+            "Script Execution Log - "
+            + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            verbose,
+        )
+
+        log_message("Input directory: " + input_dir, verbose)
+
+        log_message("Output directory: " + output_dir, verbose)
+
+        (
+            detected_file,
+            detected_fileformat,
+            detected_reference,
+        ) = find_first_vcf_with_header(input_dir, verbose)
+        ref_genome = detected_reference
+        vcf_version = normalize_vcf_version(detected_fileformat)
+
+        if not ref_genome:
+            handle_critical_error(
+                "Reference genome build must be auto-detectable from input files.",
+                exc_cls=ValidationError,
+            )
+        if not vcf_version:
+            handle_critical_error(
+                "VCF version must be auto-detectable from input files.",
+                exc_cls=ValidationError,
+            )
+
+        if detected_file:
+            log_message(
+                f"Auto-detected metadata from {detected_file} -> reference={detected_reference or 'unknown'}, "
+                f"version={detected_fileformat or 'unknown'}",
+                verbose,
+            )
+
+        log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
     log_directory = os.path.abspath(args.output_dir) if args.output_dir else os.getcwd()
     log_path = os.path.join(log_directory, LOG_FILE)
     configure_logging(verbose=verbose, log_file=log_path)

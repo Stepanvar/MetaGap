@@ -74,6 +74,14 @@ def parse_arguments():
         help="Add an arbitrary metadata header line (##key=value). The '##' prefix is optional.",
     )
     parser.add_argument(
+        "--metadata-template",
+        dest="metadata_template_path",
+        help=(
+            "Path to a file containing metadata header lines to merge into the output VCF. "
+            "Lines from the template are combined with any --header-metadata / --sample-metadata overrides."
+        ),
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",

@@ -1,13 +1,7 @@
-"""Command-line entry point for the merge_vcf package."""
+"""Executable module entry point for ``merge_vcf``."""
 
-from MetaGap.MetagapUserCode.merge_vcf.cli import main as _workflow_main
-
-
-def main() -> None:
-    """Execute the merge_vcf command-line interface."""
-
-    _workflow_main()
+from .main import main
 
 
-if __name__ == "__main__":  # pragma: no cover - entry point
+if __name__ == "__main__":  # pragma: no cover - module execution helper
     main()

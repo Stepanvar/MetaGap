@@ -146,7 +146,9 @@ class HomePageView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["form"] = SearchForm()
+        form = SearchForm(self.request.GET or None)
+        context["form"] = form
+        context["advanced_fields"] = [form[name] for name in form.advanced_field_names]
         return context
 
 

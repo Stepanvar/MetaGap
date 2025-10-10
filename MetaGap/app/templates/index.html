@@ -21,9 +21,52 @@
                     <h2 class="h5 mb-3">Search the catalogue</h2>
                     <p class="text-muted">Query by variant ID, genomic coordinates, or metadata keywords to surface relevant cohorts instantly.</p>
                     {% url 'search_results' as search_action %}
-                    {% with form_title="" form_method="get" form_action=search_action submit_button_label="Search" form_class="needs-validation" %}
-                        {% include 'partials/form.html' %}
-                    {% endwith %}
+                    <form method="get" action="{{ search_action }}" class="needs-validation" novalidate>
+                        {% for hidden_field in form.hidden_fields %}
+                            {{ hidden_field }}
+                        {% endfor %}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger" role="alert">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.query.id_for_label }}">{{ form.query.label }}</label>
+                            {{ form.query }}
+                            {% for error in form.query.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="row g-3">
+                            {% for field in advanced_fields %}
+                                <div class="col-sm-6 col-lg-4">
+                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <div class="form-text">{{ field.help_text }}</div>
+                                    {% endif %}
+                                    {% for error in field.errors %}
+                                        <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+                            <div class="col-sm-6 col-lg-4">
+                                <div class="form-check mt-2">
+                                    {{ form.pass_only }}
+                                    <label class="form-check-label" for="{{ form.pass_only.id_for_label }}">{{ form.pass_only.label }}</label>
+                                    {% for error in form.pass_only.errors %}
+                                        <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between flex-wrap gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary">Search</button>
+                            <a class="btn btn-link" href="{% url 'search_results' %}">View full catalogue</a>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

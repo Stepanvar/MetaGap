@@ -33,11 +33,22 @@ def _write_vcf(path, sample_line):
     path.write_text(content)
 
 
+def _write_vcf_with_samples(path, samples):
+    sample_columns = "\t".join(samples)
+    sample_calls = "\t".join("0/1" for _ in samples)
+    content = """##fileformat=VCFv4.2
+##reference=GRCh38
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_columns}
+1\t1000\trs1\tA\tC\t.\tPASS\t.\tGT\t{sample_calls}
+""".format(sample_columns=sample_columns, sample_calls=sample_calls)
+    path.write_text(content)
+
+
 def test_union_headers_merges_sample_metadata(tmp_path):
     module = load_user_module()
 
     sample_one = (
-        '##SAMPLE=<ID=S1,Description="Primary sample",Meta="{\\"foo\\": \\"bar,baz\\"}">'
+        '##SAMPLE=<ID=S1,Description="Primary sample",Meta="{\\"foo\\": \\"bar,baz\\"}">' 
     )
     sample_two = '##SAMPLE=<ID=S1,Extra=42>'
 
@@ -58,3 +69,17 @@ def test_union_headers_merges_sample_metadata(tmp_path):
     assert mapping["Description"] == "Primary sample"
     assert mapping["Meta"] == '{"foo": "bar,baz"}'
     assert mapping["Extra"] == "42"
+
+
+def test_union_headers_preserves_sample_order(tmp_path):
+    module = load_user_module()
+
+    vcf_one = tmp_path / "one.vcf"
+    vcf_two = tmp_path / "two.vcf"
+
+    _write_vcf_with_samples(vcf_one, ["Alpha", "Beta"])
+    _write_vcf_with_samples(vcf_two, ["Beta", "Gamma", "Alpha"])
+
+    header = module.union_headers([str(vcf_one), str(vcf_two)])
+
+    assert header.samples.names == ["Alpha", "Beta", "Gamma"]

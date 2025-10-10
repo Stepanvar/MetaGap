@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pysam
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.utils.encoding import force_str
 
 from ..models import Format, Info, OrganizationProfile, SampleGroup
+from .import_exceptions import (
+    ImporterConfigurationError,
+    ImporterError,
+    ImporterValidationError,
+)
 from .vcf_database import VCFDatabaseWriter
 from .vcf_file_utils import extract_metadata_text_fallback, parse_vcf_text_fallback
 from .vcf_metadata import VCFMetadataParser
@@ -32,42 +38,52 @@ class VCFImporter:
         try:
             organization_profile = self.user.organization_profile
         except AttributeError as exc:  # pragma: no cover - defensive fallback
-            raise ValidationError(
+            raise ImporterConfigurationError(
                 "Please complete your organization profile before importing data."
             ) from exc
         except (OrganizationProfile.DoesNotExist, ObjectDoesNotExist) as exc:
-            raise ValidationError(
+            raise ImporterConfigurationError(
                 "Please complete your organization profile before importing data."
             ) from exc
 
         if organization_profile is None:
-            raise ValidationError(
+            raise ImporterConfigurationError(
                 "Please complete your organization profile before importing data."
             )
 
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None
         try:
-            with pysam.VariantFile(file_path) as vcf_in:
-                metadata = self.extract_sample_group_metadata(vcf_in)
+            try:
+                with pysam.VariantFile(file_path) as vcf_in:
+                    metadata = self.extract_sample_group_metadata(vcf_in)
+                    sample_group = self._create_sample_group(
+                        metadata, file_path, organization_profile
+                    )
+                    self._populate_sample_group_from_pysam(vcf_in, sample_group)
+            except (OSError, ValueError) as exc:
+                warning = (
+                    f"Could not parse VCF metadata with pysam: {exc}. "
+                    "Falling back to a text parser."
+                )
+                logger.warning("%s", warning)
+                self.warnings.append(warning)
+                if sample_group is not None:
+                    sample_group.delete()
+                metadata = self._extract_metadata_text_fallback(file_path)
                 sample_group = self._create_sample_group(
                     metadata, file_path, organization_profile
                 )
-                self._populate_sample_group_from_pysam(vcf_in, sample_group)
-        except (OSError, ValueError) as exc:
-            warning = (
-                f"Could not parse VCF metadata with pysam: {exc}. "
-                "Falling back to a text parser."
-            )
-            logger.warning("%s", warning)
-            self.warnings.append(warning)
-            if sample_group is not None:
-                sample_group.delete()
-            metadata = self._extract_metadata_text_fallback(file_path)
-            sample_group = self._create_sample_group(
-                metadata, file_path, organization_profile
-            )
-            parse_vcf_text_fallback(file_path, sample_group, self.database_writer)
+                parse_vcf_text_fallback(file_path, sample_group, self.database_writer)
+        except ImporterError:
+            raise
+        except ValidationError as exc:
+            raise ImporterValidationError(
+                self._render_validation_error(exc)
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
+            raise ImporterValidationError(message) from exc
 
         assert sample_group is not None
         return sample_group
@@ -115,6 +131,34 @@ class VCFImporter:
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         return extract_metadata_text_fallback(file_path)
+
+    @staticmethod
+    def _render_validation_error(exc: ValidationError) -> str:
+        messages: list[str] = []
+        if hasattr(exc, "message_dict"):
+            for field, field_errors in exc.message_dict.items():
+                for message in VCFImporter._iterate_messages(field_errors):
+                    if field:
+                        messages.append(f"{field}: {message}")
+                    else:
+                        messages.append(message)
+        elif hasattr(exc, "messages"):
+            for message in exc.messages:
+                messages.append(force_str(message))
+        else:
+            messages.append(force_str(exc))
+
+        if not messages:
+            messages.append("The uploaded file is not valid.")
+        return "; ".join(messages)
+
+    @staticmethod
+    def _iterate_messages(messages: Iterable[Any]) -> Iterable[str]:
+        for message in messages:
+            if isinstance(message, (list, tuple)):
+                yield from VCFImporter._iterate_messages(message)
+            else:
+                yield force_str(message)
 
     def _extract_section_data(
         self, metadata: Dict[str, Any], section: str, model_cls: Any

@@ -1578,12 +1578,31 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 metadata_key = f"{section}_{field_name}"
                 metadata[metadata_key] = value
 
+        custom_keys: list[str] = []
         for raw_key, value in leftovers.items():
-            if raw_key:
-                metadata[f"{section}_{raw_key}"] = value
-                logger.warning(
-                    "Unhandled metadata key '%s' in section '%s'", raw_key, section
-                )
+            if not raw_key:
+                continue
+
+            normalized_custom_key = self._normalize_metadata_key(raw_key)
+            if not normalized_custom_key:
+                continue
+
+            metadata_key = f"{section}_{normalized_custom_key}"
+            suffix = 2
+            while metadata_key in metadata:
+                metadata_key = f"{section}_{normalized_custom_key}_{suffix}"
+                suffix += 1
+
+            metadata[metadata_key] = value
+            custom_keys.append(str(raw_key))
+
+        if custom_keys:
+            joined_keys = ", ".join(sorted(custom_keys))
+            logger.info(
+                "Preserved custom metadata keys (%s) for section '%s'.",
+                joined_keys,
+                section,
+            )
 
     def _create_info_instance(self, info: Any) -> Optional[Info]:
         info_dict = dict(info)

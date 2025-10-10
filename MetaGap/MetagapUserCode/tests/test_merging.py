@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import time
 import sys
 from types import SimpleNamespace
 
@@ -17,7 +18,10 @@ from MetagapUserCode.tests.test_append_metadata_cli_smoke import (
     SAMPLE_BODY_TRIMMED,
     _configure_fake_bcftools,
 )
-from MetagapUserCode.tests.test_large_merge_workflow import _FakeVcfpyModule, _VCF_STORAGE
+from MetagapUserCode.tests.test_large_merge_workflow import (
+    _FakeVcfpyModule,
+    _VCF_STORAGE,
+)
 
 
 class _CallData(dict):
@@ -408,3 +412,64 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
     data_lines = [line for line in contents.splitlines() if line and not line.startswith("#")]
     assert data_lines == [SAMPLE_BODY_TRIMMED.strip()]
     assert all(len(line.split("\t")) == 8 for line in data_lines)
+
+
+def test_merge_vcfs_handles_many_shards_with_cleanup(tmp_path):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+
+    def _write_shard(path: Path, sample_name: str, genotype: str) -> None:
+        ac_value = "2" if genotype == "1/1" else "1" if genotype == "0/1" else "0"
+        info_field = f"AC={ac_value};AN=60;AF=0.05"
+        lines = [
+            "##fileformat=VCFv4.2",
+            "##reference=GRCh38",
+            '##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes">',
+            '##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles">',
+            '##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency">',
+            '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+            f"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_name}",
+            f"1\t100\t.\tA\tG\t60\tPASS\t{info_field}\tGT\t{genotype}",
+        ]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    shard_paths = []
+    for index in range(55):
+        genotype = "0/1" if index % 3 else "0/0"
+        shard_path = shard_dir / f"sample_{index:02d}.vcf"
+        _write_shard(shard_path, f"Sample{index:02d}", genotype)
+        shard_paths.append(str(shard_path))
+
+    try:
+        import psutil  # type: ignore
+
+        process = psutil.Process()
+        start_mem = process.memory_info().rss
+    except Exception:  # pragma: no cover - psutil optional dependency
+        psutil = None  # type: ignore
+        process = None
+        start_mem = None
+
+    start_time = time.monotonic()
+    merged_path = merging.merge_vcfs(shard_paths, str(output_dir), verbose=True)
+    duration = time.monotonic() - start_time
+
+    assert duration < 20, "merge_vcfs should finish promptly for small shards"
+
+    if process is not None and start_mem is not None:
+        end_mem = process.memory_info().rss
+        # Ensure the merge did not balloon RSS usage dramatically.
+        assert end_mem - start_mem < 128 * 1024 * 1024
+
+    merged_file = Path(merged_path)
+    assert merged_file.exists()
+    assert merged_file.parent == output_dir
+
+    index_file = Path(str(merged_file) + ".tbi")
+    assert index_file.exists()
+
+    remaining = {entry.name for entry in output_dir.iterdir()}
+    assert remaining == {merged_file.name, index_file.name}

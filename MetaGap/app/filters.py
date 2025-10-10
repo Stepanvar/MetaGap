@@ -1,15 +1,22 @@
 # filters.py
+
+from __future__ import annotations
+
+from typing import Any, Optional
+
 from django import forms
 import django_filters
 from django.db.models import (
     CharField,
     F,
     FloatField,
+    IntegerField,
     Q,
     Value,
 )
 from django.db.models.functions import Cast, NullIf
 from django.db.models.fields.json import KeyTextTransform
+from django.db.models.query import QuerySet
 
 from .models import AlleleFrequency, SampleGroup
 
@@ -155,9 +162,16 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
 
     class Meta:
         model = AlleleFrequency
-        fields = []
+        fields: list[str] = []
 
-    def universal_search(self, queryset, name, value):
+    def universal_search(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[str],
+    ) -> QuerySet[AlleleFrequency]:
+        """Return ``queryset`` filtered by the user-provided ``value`` across key fields."""
+
         if value:
             value = value.strip()
             filters_q = Q(chrom__icontains=value) | Q(variant_id__icontains=value)
@@ -166,7 +180,14 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
             return queryset.filter(filters_q)
         return queryset
 
-    def filter_pass_status(self, queryset, name, value):
+    def filter_pass_status(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[bool],
+    ) -> QuerySet[AlleleFrequency]:
+        """Limit ``queryset`` to records whose VCF filter flag matches ``value``."""
+
         if value is None:
             return queryset
 
@@ -174,7 +195,14 @@ class AlleleFrequencyFilter(django_filters.FilterSet):
             return queryset.filter(filter__iexact="PASS")
         return queryset.exclude(filter__iexact="PASS")
 
-    def filter_info_numeric(self, queryset, name, value):
+    def filter_info_numeric(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[float],
+    ) -> QuerySet[AlleleFrequency]:
+        """Apply numeric bounds derived from ``name`` to the annotated ``queryset``."""
+
         if value is None:
             return queryset
 
@@ -289,16 +317,23 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
 
     class Meta:
         model = AlleleFrequency
-        fields = []
+        fields: list[str] = []
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._apply_bootstrap_widgets()
 
     # ------------------------------------------------------------------
     # Filter helpers
     # ------------------------------------------------------------------
-    def filter_query(self, queryset, name, value):
+    def filter_query(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[str],
+    ) -> QuerySet[AlleleFrequency]:
+        """Return ``queryset`` entries where ``value`` matches key variant fields."""
+
         if not value:
             return queryset
 
@@ -321,13 +356,27 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
 
         return queryset.filter(search_filter)
 
-    def filter_pass_only(self, queryset, name, value):
+    def filter_pass_only(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[object],
+    ) -> QuerySet[AlleleFrequency]:
+        """Restrict ``queryset`` to PASS-filtered records when ``value`` is truthy."""
+
         truthy_values = {True, "True", "true", "1", 1, "on", "ON", "On"}
         if value in truthy_values:
             return queryset.filter(filter__iexact="PASS")
         return queryset
 
-    def filter_info_float(self, queryset, name, value):
+    def filter_info_float(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[float | int | str],
+    ) -> QuerySet[AlleleFrequency]:
+        """Annotate ``queryset`` with float casts to compare against ``value``."""
+
         if value in (None, ""):
             return queryset
 
@@ -338,7 +387,14 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
             **{annotation: Cast(F(field_name), FloatField())}
         ).filter(**{f"{annotation}__gte": value})
 
-    def filter_info_int(self, queryset, name, value):
+    def filter_info_int(
+        self,
+        queryset: QuerySet[AlleleFrequency],
+        name: str,
+        value: Optional[float | int | str],
+    ) -> QuerySet[AlleleFrequency]:
+        """Annotate ``queryset`` with integer casts to compare against ``value``."""
+
         if value in (None, ""):
             return queryset
 
@@ -380,9 +436,16 @@ class SampleGroupFilter(django_filters.FilterSet):
 
     class Meta:
         model = SampleGroup
-        fields = []
+        fields: list[str] = []
 
-    def universal_search(self, queryset, name, value):
+    def universal_search(
+        self,
+        queryset: QuerySet[SampleGroup],
+        name: str,
+        value: Optional[str],
+    ) -> QuerySet[SampleGroup]:
+        """Return ``queryset`` entries where ``value`` matches sample group metadata."""
+
         if not value:
             return queryset
 

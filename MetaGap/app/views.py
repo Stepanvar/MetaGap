@@ -1,9 +1,14 @@
 """Application views."""
 
+from __future__ import annotations
+
 import csv
+import json
 import logging
 import os
-from typing import Any, Dict, Iterable, Optional, Tuple
+import re
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, Iterable, Optional, Tuple, cast
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
@@ -11,7 +16,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.storage import default_storage
 from django.db import models as django_models
-from django.http import Http404, HttpResponse
+from django.db.models.query import QuerySet
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from django.utils.text import slugify
@@ -74,7 +80,7 @@ class SampleGroupTableView(ListView):
     paginate_by = 10
     ordering = ("name",)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[SampleGroup]:
         # Optimize query by selecting related metadata and prefetching variants
         queryset = (
             super()
@@ -98,8 +104,8 @@ class SampleGroupTableView(ListView):
         )
         return queryset.order_by("name", "pk")
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> Dict[str, Any]:
+        context = cast(Dict[str, Any], super().get_context_data(**kwargs))
         table_class = create_dynamic_table(
             SampleGroup, table_name="SampleGroupTable", include_related=True
         )
@@ -119,7 +125,9 @@ class SearchResultsView(SingleTableMixin, FilterView):
     # Dynamically create a table class prioritising variant descriptors first.
     table_class = build_allele_frequency_table()
 
-    def get_queryset(self):
+    filterset: Optional[AlleleFrequencySearchFilter] = None
+
+    def get_queryset(self) -> QuerySet[AlleleFrequency]:
         base_queryset = (
             AlleleFrequency.objects.select_related(
                 "info",
@@ -148,10 +156,10 @@ class SearchResultsView(SingleTableMixin, FilterView):
         )
         return self.filterset.qs.order_by(*self.ordering).distinct()
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault("filter", getattr(self, "filterset", None))
-        if hasattr(self, "filterset"):
+    def get_context_data(self, **kwargs: Any) -> Dict[str, Any]:
+        context = cast(Dict[str, Any], super().get_context_data(**kwargs))
+        context.setdefault("filter", self.filterset)
+        if self.filterset is not None:
             context["filter_form"] = self.filterset.form
         return context
 
@@ -161,8 +169,8 @@ class HomePageView(TemplateView):
 
     template_name = "index.html"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> Dict[str, Any]:
+        context = cast(Dict[str, Any], super().get_context_data(**kwargs))
         context["form"] = SearchForm()
         return context
 
@@ -172,8 +180,8 @@ class ProfileView(LoginRequiredMixin, OrganizationSampleGroupMixin, TemplateView
 
     template_name = "profile.html"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> Dict[str, Any]:
+        context = cast(Dict[str, Any], super().get_context_data(**kwargs))
         organization_profile = self.get_organization_profile()
         sample_groups = self.get_owned_sample_groups().order_by("name")
 
@@ -215,7 +223,7 @@ def _serialize_info(info: Optional[Info]) -> str:
 
 
 @login_required
-def export_sample_group_variants(request, pk: int) -> HttpResponse:
+def export_sample_group_variants(request: HttpRequest, pk: int) -> HttpResponse:
     """Export allele frequency data for a user's sample group."""
 
     sample_group = get_object_or_404(
@@ -253,7 +261,7 @@ def export_sample_group_variants(request, pk: int) -> HttpResponse:
         if field.name not in {"id", "additional"}
     ]
 
-    additional_info_keys = set()
+    additional_info_keys: set[str] = set()
     for allele in allele_frequencies:
         info = allele.info
         if info and isinstance(info.additional, dict):
@@ -314,8 +322,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     template_name = "dashboard.html"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> Dict[str, Any]:
+        context = cast(Dict[str, Any], super().get_context_data(**kwargs))
         organization_profile = getattr(self.request.user, "organization_profile", None)
 
         dataset_queryset = (
@@ -351,12 +359,12 @@ class EditProfileView(LoginRequiredMixin, FormView):
     template_name = "edit_profile.html"
     success_url = reverse_lazy("profile")
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
+    def get_form_kwargs(self) -> Dict[str, Any]:
+        kwargs = cast(Dict[str, Any], super().get_form_kwargs())
         kwargs["instance"] = self.request.user
         return kwargs
 
-    def form_valid(self, form):
+    def form_valid(self, form: EditProfileForm) -> HttpResponse:
         form.save()
         messages.success(self.request, "Your profile has been updated.")
         return super().form_valid(form)
@@ -367,15 +375,15 @@ class DeleteAccountView(LoginRequiredMixin, FormView):
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("home")
 
-    def form_valid(self, form):
+    def form_valid(self, form: DeleteAccountForm) -> HttpResponse:
         user = self.request.user
         logout(self.request)
         user.delete()
         messages.success(self.request, "Your account has been deleted.")
         return super().form_valid(form)
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> Dict[str, Any]:
+        context = cast(Dict[str, Any], super().get_context_data(**kwargs))
         context.setdefault(
             "form_extra_actions",
             [

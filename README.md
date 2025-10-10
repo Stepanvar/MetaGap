@@ -23,6 +23,7 @@ After loading the data you can sign in with either demo account and visit the pr
 
 - Install dependencies with `pip install -r requirements.txt`.
 - Run checks with `python manage.py check` and execute the test suite using `python manage.py test`.
+- Enforce type coverage with `mypy --config-file mypy.ini`.
 - Static files are served from the `static/` directory; new assets should be collected with `python manage.py collectstatic` in production environments.
 
 ## Merging VCF files

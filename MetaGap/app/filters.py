@@ -380,6 +380,7 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
                 widget.attrs["class"] = self._merge_css_classes(
                     existing, "form-check-input"
                 )
+                widget.attrs.setdefault("value", "True")
             else:
                 existing = widget.attrs.get("class", "")
                 widget.attrs["class"] = self._merge_css_classes(

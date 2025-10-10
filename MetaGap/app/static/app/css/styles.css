@@ -44,6 +44,12 @@
         --app-breadcrumb-bg: rgba(8, 20, 40, 0.88);
         --app-breadcrumb-border: rgba(122, 169, 255, 0.18);
         --app-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(236, 243, 255, 0.7)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        --mdb-list-group-bg: var(--app-surface-bg);
+        --mdb-list-group-border-color: var(--app-surface-border);
+        --mdb-list-group-color: var(--app-body-color);
+        --mdb-list-group-hover-bg: rgba(13, 28, 54, 0.94);
+        --mdb-list-group-hover-border-color: rgba(122, 169, 255, 0.28);
+        --mdb-list-group-hover-color: var(--app-body-color);
 }
 
 /* Global layout */
@@ -188,6 +194,39 @@ main.flex-grow-1 {
 .app-navbar .btn-link.nav-link:hover,
 .app-navbar .btn-link.nav-link:focus {
         color: #ffffff;
+}
+
+/* List groups */
+[data-bs-theme='dark'] .list-group-item {
+        background-color: var(--mdb-list-group-bg);
+        color: var(--mdb-list-group-color);
+        border-color: var(--mdb-list-group-border-color);
+}
+
+[data-bs-theme='dark'] .list-group-item:hover,
+[data-bs-theme='dark'] .list-group-item:focus,
+[data-bs-theme='dark'] .list-group-item-action:hover,
+[data-bs-theme='dark'] .list-group-item-action:focus {
+        background-color: var(--mdb-list-group-hover-bg);
+        color: var(--mdb-list-group-hover-color);
+        border-color: var(--mdb-list-group-hover-border-color);
+}
+
+[data-bs-theme='dark'] .list-group-item:active,
+[data-bs-theme='dark'] .list-group-item-action:active {
+        background-color: var(--mdb-list-group-hover-bg);
+        color: var(--mdb-list-group-hover-color);
+        border-color: var(--mdb-list-group-hover-border-color);
+}
+
+[data-bs-theme='dark'] .list-group-flush > .list-group-item {
+        background-color: var(--mdb-list-group-bg);
+        border-color: var(--mdb-list-group-border-color);
+}
+
+[data-bs-theme='dark'] .list-group-flush > .list-group-item:hover,
+[data-bs-theme='dark'] .list-group-flush > .list-group-item:focus {
+        border-color: var(--mdb-list-group-hover-border-color);
 }
 
 /* Card headers */

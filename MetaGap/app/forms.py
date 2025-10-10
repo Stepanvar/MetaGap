@@ -4,6 +4,8 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html, format_html_join
 
+from django.conf import settings
+
 from .models import (
     BioinfoAlignment,
     BioinfoPostProc,
@@ -162,6 +164,14 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
     class Meta:
         model = User
         fields = ("username", "email", "password1", "password2")
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            raise ValidationError("Please provide an email address so we can contact you.")
+        if User.objects.filter(email__iexact=email).exists():
+            raise ValidationError("An account with this email address already exists.")
+        return email
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -342,6 +352,32 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             return stripped or None
         return value
 
+    def clean_total_samples(self):
+        total_samples = self.cleaned_data.get("total_samples")
+        if total_samples is None:
+            return total_samples
+        if total_samples <= 0:
+            raise ValidationError("Total samples must be a positive integer.")
+        return total_samples
+
+    def clean_contact_phone(self):
+        phone = self.cleaned_data.get("contact_phone")
+        if not phone:
+            return phone
+
+        cleaned = phone.strip()
+        if not cleaned:
+            return None
+
+        allowed_chars = set("0123456789+-.() extEXT ")
+        if any(char not in allowed_chars for char in cleaned):
+            raise ValidationError(
+                "Use digits and common separators (spaces, dashes, parentheses) for the phone number."
+            )
+        if sum(char.isdigit() for char in cleaned) < 6:
+            raise ValidationError("Enter a phone number with at least six digits.")
+        return cleaned
+
     CREATABLE_METADATA_FIELDS = {
         "reference_genome_build": (ReferenceGenomeBuild, "build_name"),
         "genome_complexity": (GenomeComplexity, "size"),
@@ -404,11 +440,69 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         return [seen.setdefault(val, val) for val in values if val and val not in seen]
 
 class ImportDataForm(BootstrapFormMixin, forms.Form):
+    """Validate uploads for the variant import workflow."""
+
+    DEFAULT_MAX_SIZE_MB = 50
+    SUPPORTED_EXTENSIONS = {".vcf", ".vcf.gz", ".vcf.bgz", ".bcf"}
+    SUPPORTED_CONTENT_TYPES = {
+        "text/plain",
+        "text/vcf",
+        "application/octet-stream",
+        "application/gzip",
+        "application/x-gzip",
+        "application/bcf",
+    }
+
     data_file = forms.FileField(
         required=True,
-        widget=forms.ClearableFileInput(attrs={'class': 'form-control'}),
-        help_text='Upload a VCF file.'
+        widget=forms.ClearableFileInput(attrs={"class": "form-control"}),
+        help_text=(
+            "Upload a VCF (.vcf, .vcf.gz) or BCF file containing the variants you want to ingest."
+        ),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        widget = self.fields["data_file"].widget
+        widget.attrs.setdefault("accept", ",".join(sorted(self.SUPPORTED_EXTENSIONS)))
+
+        configured_limit = getattr(settings, "METAGAP_MAX_UPLOAD_SIZE_MB", None)
+        self.max_upload_size_mb = configured_limit or self.DEFAULT_MAX_SIZE_MB
+        self.max_upload_size_bytes = int(self.max_upload_size_mb * 1024 * 1024)
+        help_text = (
+            "Files up to %(limit)s&nbsp;MB are accepted. Ensure the header includes metadata"
+            " sections for your sample group." % {"limit": self.max_upload_size_mb}
+        )
+        self.fields["data_file"].help_text = format_html("{}<br>{}", self.fields["data_file"].help_text, help_text)
+
+    def clean_data_file(self):
+        uploaded = self.cleaned_data.get("data_file")
+        if not uploaded:
+            raise ValidationError("Select a VCF or BCF file to import.")
+
+        name = uploaded.name or ""
+        normalized_name = name.lower()
+        is_supported = any(normalized_name.endswith(ext) for ext in self.SUPPORTED_EXTENSIONS)
+        if not is_supported:
+            raise ValidationError(
+                "Unsupported file type. Please upload a file ending in %s." % ", ".join(sorted(self.SUPPORTED_EXTENSIONS))
+            )
+
+        file_size = getattr(uploaded, "size", None)
+        if file_size is None:
+            file_size = uploaded.file.size if hasattr(uploaded, "file") else None
+        if file_size is not None and file_size > self.max_upload_size_bytes:
+            raise ValidationError(
+                f"Files larger than {self.max_upload_size_mb} MB cannot be imported."
+            )
+
+        content_type = getattr(uploaded, "content_type", "")
+        if content_type and content_type not in self.SUPPORTED_CONTENT_TYPES:
+            raise ValidationError(
+                "The uploaded file does not look like a VCF/BCF file. Please check the format and try again."
+            )
+
+        return uploaded
 
 class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserChangeForm):
     password = None  # Exclude password field
@@ -437,6 +531,17 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
         organization_profile = getattr(self.instance, "organization_profile", None)
         if organization_profile:
             self.fields["organization_name"].initial = organization_profile.organization_name
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            raise ValidationError("Please provide a valid email address.")
+        queryset = User.objects.filter(email__iexact=email)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise ValidationError("Another user is already using this email address.")
+        return email
 
     def save(self, commit=True):
         user = super().save(commit=False)

@@ -1,24 +1,25 @@
-"""Unit tests for the ImportDataView helper methods."""
+"""Unit tests for the ``VCFImporter`` helper methods."""
 
 import os
 import tempfile
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase
+from django.test import TestCase
 
 from app.models import Format, GenomeComplexity, Info, SampleGroup
-from app.views import ImportDataView
+from app.services.vcf_importer import VCFImporter
 
 
 class ImportHelpersTests(TestCase):
-    """Validate mapping logic in ImportDataView helper methods."""
+    """Validate mapping logic in the importer helper methods."""
 
     def setUp(self):
-        self.factory = RequestFactory()
-        self.request = self.factory.get("/import/")
-        self.view = ImportDataView()
-        self.view.request = self.request
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            "import-helper", password="test-pass"
+        )
+        self.importer = VCFImporter(self.user)
 
     def test_create_info_instance_uses_field_map(self):
         """Mapped INFO keys populate model fields and extras go to additional."""
@@ -32,7 +33,7 @@ class ImportHelpersTests(TestCase):
             "Custom": "value",
         }
 
-        info_instance = self.view._create_info_instance(info_payload)
+        info_instance = self.importer._create_info_instance(info_payload)
 
         self.assertIsNotNone(info_instance)
         self.assertEqual(Info.objects.count(), 1)
@@ -48,7 +49,7 @@ class ImportHelpersTests(TestCase):
 
         info_payload = {"AF": ".", "DP": ".", "QD": ".", "FS": "."}
 
-        info_instance = self.view._create_info_instance(info_payload)
+        info_instance = self.importer._create_info_instance(info_payload)
 
         self.assertIsNotNone(info_instance)
         self.assertEqual(Info.objects.count(), 1)
@@ -65,7 +66,7 @@ class ImportHelpersTests(TestCase):
         sample_data = MockSampleData({"GT": (0, 1), "GQ": 99, "Extra": ["foo", "bar"]})
         samples = {"SAMPLE1": sample_data}
 
-        format_instance, sample_name = self.view._create_format_instance(samples)
+        format_instance, sample_name = self.importer._create_format_instance(samples)
 
         self.assertEqual(sample_name, "SAMPLE1")
         self.assertIsNotNone(format_instance)
@@ -90,7 +91,7 @@ class ImportHelpersTests(TestCase):
             handle.write("##SAMPLE=<ID=Ignored,Name=ShouldNotAppear>\n")
 
         try:
-            metadata = self.view._extract_metadata_text_fallback(handle.name)
+            metadata = self.importer._extract_metadata_text_fallback(handle.name)
         finally:
             os.remove(handle.name)
 
@@ -112,7 +113,7 @@ class ImportHelpersTests(TestCase):
             "unrelated": "ignore",
         }
 
-        section_data, consumed, additional = self.view._extract_section_data(
+        section_data, consumed, additional = self.importer._extract_section_data(
             metadata, "genome_complexity", GenomeComplexity
         )
 
@@ -126,7 +127,7 @@ class ImportHelpersTests(TestCase):
 
         metadata = {"genome_complexity": "3.1Gb", "other": "value"}
 
-        section_data, consumed, additional = self.view._extract_section_data(
+        section_data, consumed, additional = self.importer._extract_section_data(
             metadata, "genome_complexity", GenomeComplexity
         )
 
@@ -160,7 +161,7 @@ class ImportHelpersTests(TestCase):
         )
         mock_vcf = SimpleNamespace(header=SimpleNamespace(records=[mock_record]))
 
-        metadata = self.view.extract_sample_group_metadata(mock_vcf)
+        metadata = self.importer.extract_sample_group_metadata(mock_vcf)
 
         self.assertIn("source_lab", metadata)
         self.assertIn("contact_email", metadata)
@@ -173,7 +174,7 @@ class ImportHelpersTests(TestCase):
         user = user_model.objects.create_user("importer", password="test-pass")
         profile = user.organization_profile
 
-        sample_group = self.view._create_sample_group(
+        sample_group = self.importer._create_sample_group(
             metadata, "mock_file.vcf", profile
         )
 

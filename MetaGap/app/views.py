@@ -42,6 +42,7 @@ from .forms import (
 )
 from .mixins import OrganizationSampleGroupMixin
 from .models import AlleleFrequency, Info, SampleGroup
+from .services.import_exceptions import ImporterError, ImporterValidationError
 from .services.vcf_importer import VCFImporter
 from .tables import build_allele_frequency_table, create_dynamic_table
 
@@ -658,6 +659,12 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         importer = VCFImporter(self.request.user)
         try:
             created_group = importer.import_file(full_path)
+        except ImporterValidationError as exc:
+            self._handle_importer_error(form, exc)
+            return self.form_invalid(form)
+        except ImporterError as exc:
+            self._handle_importer_error(form, exc)
+            return self.form_invalid(form)
         except ValidationError as exc:
             form.add_error("data_file", exc)
             messages.error(
@@ -682,7 +689,14 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             )
             return self.form_invalid(form)
         finally:
-            default_storage.delete(temp_path)
+            try:
+                default_storage.delete(temp_path)
+            except Exception:  # pragma: no cover - defensive cleanup
+                logger.warning(
+                    "Failed to delete temporary upload %s during import cleanup.",
+                    temp_path,
+                    exc_info=True,
+                )
 
         messages.success(
             self.request,
@@ -692,3 +706,16 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             messages.warning(self.request, warning)
 
         return super().form_valid(form)
+
+    def _handle_importer_error(
+        self,
+        form: ImportDataForm,
+        exc: ImporterError,
+    ) -> None:
+        message = getattr(exc, "user_message", str(exc)).strip()
+        if not message:
+            message = "An error occurred while importing the provided file."
+        form.add_error("data_file", message)
+        for warning in getattr(exc, "warnings", []) or []:
+            messages.warning(self.request, warning)
+        messages.error(self.request, message)

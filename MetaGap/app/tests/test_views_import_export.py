@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import io
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -120,19 +120,55 @@ class ImportDataViewTests(TestCase):
             email="vcf@example.com",
             password="import-pass",
         )
+        self.client.force_login(self.user)
 
-    def test_import_creates_sample_group_and_variant(self) -> None:
-        self.client.login(username="vcf_user", password="import-pass")
-
-        upload = SimpleUploadedFile(
+    def build_upload(self, content: str | None = None) -> SimpleUploadedFile:
+        return SimpleUploadedFile(
             "import.vcf",
-            self.VCF_CONTENT.encode("utf-8"),
+            (content or self.VCF_CONTENT).encode("utf-8"),
             content_type="text/vcf",
         )
 
-        response = self.client.post(reverse("import_data"), {"data_file": upload})
+    def test_import_creates_sample_group_and_variant(self) -> None:
+        def create_sample_group(_: str) -> SampleGroup:
+            sample_group = SampleGroup.objects.create(
+                name="GroupA", created_by=self.user.organization_profile
+            )
+            info = Info.objects.create(
+                af="0.5", additional={"clnsig": "Pathogenic"}
+            )
+            fmt = Format.objects.create(
+                genotype="0/1",
+                payload={
+                    "fields": {"gq": "99"},
+                    "additional": {"sample_id": "Sample001"},
+                },
+            )
+            AlleleFrequency.objects.create(
+                sample_group=sample_group,
+                chrom="1",
+                pos=1234,
+                variant_id="rsTest",
+                ref="A",
+                alt="T",
+                info=info,
+                format=fmt,
+            )
+            return sample_group
+
+        with patch("app.views.VCFImporter") as importer_cls:
+            importer_instance = importer_cls.return_value
+            importer_instance.import_file.side_effect = create_sample_group
+            importer_instance.warnings = []
+
+            response = self.client.post(
+                reverse("import_data"), {"data_file": self.build_upload()}
+            )
 
         self.assertRedirects(response, reverse("profile"))
+        importer_cls.assert_called_once_with(self.user)
+        importer_instance.import_file.assert_called_once()
+
         sample_group = SampleGroup.objects.get(name="GroupA")
         self.assertEqual(sample_group.allele_frequencies.count(), 1)
         allele = sample_group.allele_frequencies.get()
@@ -145,7 +181,51 @@ class ImportDataViewTests(TestCase):
         self.assertEqual(allele.format.fields["gq"], "99")
         self.assertEqual(allele.format.additional["sample_id"], "Sample001")
 
-        self.assertGreaterEqual(AlleleFrequency.objects.count(), 1)
+        self.assertEqual(AlleleFrequency.objects.count(), 1)
+
+    def test_success_flow_uses_service_and_displays_messages(self) -> None:
+        """Successful uploads call the importer and surface warnings."""
+
+        importer_instance = Mock()
+        importer_instance.import_file.return_value = Mock(name="SampleGroupMock")
+        importer_instance.import_file.return_value.name = "Imported Group"
+        importer_instance.warnings = ["Fallback message"]
+
+        with patch("app.views.VCFImporter", return_value=importer_instance) as importer_cls:
+            response = self.client.post(
+                reverse("import_data"), {"data_file": self.build_upload("##fileformat=VCFv4.2\n")}
+            )
+
+        self.assertRedirects(response, reverse("profile"))
+        importer_cls.assert_called_once_with(self.user)
+        importer_instance.import_file.assert_called_once()
+
+        messages = [message.message for message in response.wsgi_request._messages]
+        self.assertIn("Imported Imported Group successfully.", messages)
+        self.assertIn("Fallback message", messages)
+
+    def test_error_flow_surfaces_exception_message(self) -> None:
+        """Errors from the importer are shown to the user."""
+
+        importer_instance = Mock()
+        importer_instance.import_file.side_effect = ValueError("boom")
+        importer_instance.warnings = []
+
+        with patch("app.views.VCFImporter", return_value=importer_instance):
+            response = self.client.post(
+                reverse("import_data"), {"data_file": self.build_upload("##fileformat=VCFv4.2\n")}
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "import_data.html")
+        importer_instance.import_file.assert_called_once()
+
+        messages = [message.message for message in response.wsgi_request._messages]
+        self.assertIn(
+            "Something went wrong while processing the upload. Check the error above for details.",
+            messages,
+        )
+        self.assertIn("data_file", response.context["form"].errors)
 
 
 class ImportDataPageTests(TestCase):

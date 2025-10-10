@@ -7,7 +7,6 @@ import copy
 import glob
 import gzip
 import os
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
@@ -387,15 +386,15 @@ def validate_vcf(
     return True
 
 
-def _extract_header_definitions(header, key: str) -> "OrderedDict[str, dict]":
-    """Return an OrderedDict mapping header line IDs to their metadata."""
+def _extract_header_definitions(header, key: str) -> dict[str, dict]:
+    """Return an ordered mapping from header line IDs to their metadata."""
 
     try:
         header_lines = list(header.get_lines(key))
     except Exception:
         header_lines = []
 
-    definitions = OrderedDict()
+    definitions: dict[str, dict] = {}
     for line in header_lines:
         line_id = getattr(line, "id", None)
         if line_id is None and hasattr(line, "mapping"):
@@ -423,10 +422,10 @@ def validate_all_vcfs(
         level=logging.DEBUG,
     )
     reference_samples: List[str] = []
-    reference_contigs: "OrderedDict[str, dict]" | None = None
-    reference_info_defs: "OrderedDict[str, dict]" | None = None
-    reference_filter_defs: "OrderedDict[str, dict]" | None = None
-    reference_format_defs: "OrderedDict[str, dict]" | None = None
+    reference_contigs: dict[str, dict] | None = None
+    reference_info_defs: dict[str, dict] | None = None
+    reference_filter_defs: dict[str, dict] | None = None
+    reference_format_defs: dict[str, dict] | None = None
     reference_info_sources: dict[str, str] | None = None
     reference_format_sources: dict[str, str] | None = None
     prepared_inputs = discover_and_prepare_inputs(
@@ -539,7 +538,7 @@ def validate_all_vcfs(
                             exc_cls=ValidationError,
                         )
                     if reference_contigs is None:
-                        reference_contigs = OrderedDict()
+                        reference_contigs = {}
                     for contig_id, mapping in current_contigs.items():
                         existing = reference_contigs.get(contig_id)
                         if existing is None:
@@ -553,7 +552,7 @@ def validate_all_vcfs(
                             )
 
                     if reference_filter_defs is None:
-                        reference_filter_defs = OrderedDict()
+                        reference_filter_defs = {}
                     for filter_id, mapping in current_filter_defs.items():
                         existing = reference_filter_defs.get(filter_id)
                         if existing is None:
@@ -568,7 +567,7 @@ def validate_all_vcfs(
                             )
 
                     if reference_info_defs is None:
-                        reference_info_defs = OrderedDict()
+                        reference_info_defs = {}
                     if reference_info_sources is None:
                         reference_info_sources = {}
                     info_conflicts: list[tuple[str, str, str | None, str | None, str, str | None, str | None]] = []
@@ -602,7 +601,7 @@ def validate_all_vcfs(
                             )
 
                     if reference_format_defs is None:
-                        reference_format_defs = OrderedDict()
+                        reference_format_defs = {}
                     if reference_format_sources is None:
                         reference_format_sources = {}
                     format_conflicts: list[tuple[str, str, str | None, str | None, str, str | None, str | None]] = []
@@ -1005,7 +1004,7 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
                 exc_cls=ValidationError,
             )
 
-    defined_info_ids = OrderedDict()
+    defined_info_ids: dict[str, object] = {}
     try:
         info_ids_iterable = list(header.info_ids)
     except Exception:

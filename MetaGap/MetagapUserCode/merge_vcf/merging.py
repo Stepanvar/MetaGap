@@ -9,8 +9,7 @@ import gzip
 import os
 import re
 import shutil
-from collections import OrderedDict
-from typing import Callable, List, Optional, Sequence, Tuple, Iterable
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 import pysam  # BGZF + Tabix
 import concurrent.futures
@@ -66,7 +65,7 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
     ]
     if not contig_lines:
         return
-    contig_lookup: OrderedDict[str, object] = OrderedDict()
+    contig_lookup: dict[str, object] = {}
     for line in contig_lines:
         identifier = getattr(line, "id", None)
         if identifier is None:
@@ -94,7 +93,7 @@ def _apply_contig_order(header, contig_order: Sequence[str]) -> None:
     # Also reorder header.contigs attribute if present
     contigs_attr = getattr(header, "contigs", None)
     if contigs_attr:
-        reordered = OrderedDict()
+        reordered: dict[str, object] = {}
         for name in ordered_ids:
             if name in contigs_attr:
                 reordered[name] = contigs_attr[name]
@@ -163,7 +162,7 @@ def _merge_colliding_records(
                 merged_filters.append(f)
     base.FILTER = merged_filters
     # Unified ALT allele list across all records (ensure consistent indexing for genotypes)
-    alt_objects: OrderedDict[str, object] = OrderedDict()
+    alt_objects: dict[str, object] = {}
     for record, _ in grouped_records:
         for alt in (record.ALT or []):
             val = _alt_value(alt)
@@ -301,12 +300,33 @@ def _create_missing_call_factory(format_keys: Sequence[str], header) -> Callable
 def _ensure_info_header_lines(header) -> None:
     """Ensure that standard AC/AN/AF INFO header definitions are present in the VCF header."""
     info_defs = (
-        ("AC", OrderedDict((("ID", "AC"), ("Number", "A"), ("Type", "Integer"),
-                             ("Description", "Alternate allele count in genotypes, for each ALT allele")))),
-        ("AN", OrderedDict((("ID", "AN"), ("Number", "1"), ("Type", "Integer"),
-                             ("Description", "Total number of alleles in called genotypes")))),
-        ("AF", OrderedDict((("ID", "AF"), ("Number", "A"), ("Type", "Float"),
-                             ("Description", "Allele frequency, for each ALT allele")))),
+        (
+            "AC",
+            {
+                "ID": "AC",
+                "Number": "A",
+                "Type": "Integer",
+                "Description": "Alternate allele count in genotypes, for each ALT allele",
+            },
+        ),
+        (
+            "AN",
+            {
+                "ID": "AN",
+                "Number": "1",
+                "Type": "Integer",
+                "Description": "Total number of alleles in called genotypes",
+            },
+        ),
+        (
+            "AF",
+            {
+                "ID": "AF",
+                "Number": "A",
+                "Type": "Float",
+                "Description": "Allele frequency, for each ALT allele",
+            },
+        ),
     )
     for key, mapping in info_defs:
         try:
@@ -386,7 +406,7 @@ def _remove_format_and_sample_definitions(header) -> None:
         try:
             header.formats.clear()
         except AttributeError:
-            header.formats = OrderedDict()
+            header.formats = {}
     # Remove all sample names from header
     if hasattr(header, "samples") and hasattr(header.samples, "names"):
         header.samples.names = []
@@ -521,7 +541,6 @@ def merge_vcfs(
 ) -> str:
     """Merge multiple VCF files into one .vcf.gz and index it."""
     import os, copy, datetime, concurrent.futures
-    from collections import OrderedDict
     import vcfpy, pysam
 
     os.makedirs(output_dir, exist_ok=True)
@@ -589,7 +608,7 @@ def merge_vcfs(
     def _rec_key(rec: vcfpy.Record) -> tuple[str, int, str, tuple[str, ...]]:
         return (rec.CHROM, rec.POS, rec.REF, _alt_tuple(rec))
 
-    record_store: Dict[tuple, dict] = {}
+    record_store: dict[tuple, dict] = {}
 
     try:
         for path in preprocessed:
@@ -617,7 +636,7 @@ def merge_vcfs(
                             if fk not in fmt:
                                 fmt.append(fk)
 
-                    calls_map: Dict[str, dict] = container["calls"]
+                    calls_map: dict[str, dict] = container["calls"]
                     for call in rec.calls or []:
                         sname = getattr(call, "sample", None) or getattr(call, "name", None)
                         if sname:
@@ -639,7 +658,7 @@ def merge_vcfs(
             return ordered
 
         # sort by header contig order then position
-        contig_order: Dict[str, int] = {}
+        contig_order: dict[str, int] = {}
         try:
             from vcfpy import header as vcfhdr
             idx = 0
@@ -662,7 +681,7 @@ def merge_vcfs(
                 calls_out: List[vcfpy.Call] = []
                 for s in final_sample_order:
                     data = cont["calls"].get(s, {})
-                    filled = OrderedDict()
+                    filled: dict[str, object] = {}
                     for fk in fmt_keys:
                         filled[fk] = data.get(fk, "./." if fk == "GT" else ".")
                     calls_out.append(vcfpy.Call(sample=s, data=filled))
@@ -858,10 +877,15 @@ def merge_vcfs(
         rdr = vcfpy.Reader.from_path(base_vcf)
     except Exception as exc:
         handle_critical_error(f"Failed to reopen VCF for anonymization: {exc}")
-    _remove_format_and_sample_definitions(rdr.header)
+
+    try:
+        anonymized_header = rdr.header.copy()
+    except Exception:
+        anonymized_header = copy.deepcopy(rdr.header)
+    _remove_format_and_sample_definitions(anonymized_header)
     anon_tmp = base_vcf + ".anon"
     try:
-        w = vcfpy.Writer.from_path(anon_tmp, rdr.header)
+        w = vcfpy.Writer.from_path(anon_tmp, anonymized_header)
     except Exception as exc:
         rdr.close()
         handle_critical_error(f"Failed to open anonymized VCF writer: {exc}")
@@ -900,35 +924,72 @@ def merge_vcfs(
 
 def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[str]] = None):
     """Merge the headers of all VCF files in `valid_files` into a combined header."""
+    import os, copy
+    from collections import OrderedDict
+
     combined_header = None
     # Dictionaries to keep track of seen header lines by ID
-    info_lines: OrderedDict[str, vcfpy.header.InfoHeaderLine] = OrderedDict()
-    filter_lines: OrderedDict[str, vcfpy.header.FilterHeaderLine] = OrderedDict()
-    contig_lines: OrderedDict[str, vcfpy.header.ContigHeaderLine] = OrderedDict()
-    format_lines: OrderedDict[str, vcfpy.header.FormatHeaderLine] = OrderedDict()
+    info_lines: dict[str, vcfpy.header.InfoHeaderLine] = {}
+    filter_lines: dict[str, vcfpy.header.FilterHeaderLine] = {}
+    contig_lines: dict[str, vcfpy.header.ContigHeaderLine] = {}
+    format_lines: dict[str, vcfpy.header.FormatHeaderLine] = {}
     computed_sample_order: List[str] = []
     merged_sample_metadata = None
 
-    def _line_mapping(line) -> OrderedDict[str, str]:
-        """Helper to get an OrderedDict of a header line's mapping (ID, Number, Type, etc)."""
+    def _line_mapping(line) -> dict[str, str]:
+        """Helper to get an ordered mapping of a header line's metadata (ID, Number, Type, etc)."""
         mapping = getattr(line, "mapping", None)
-        return OrderedDict(mapping) if isinstance(mapping, dict) else OrderedDict()
+        return dict(mapping) if isinstance(mapping, dict) else {}
 
     for file_path in valid_files:
-        pre = preprocess_vcf(file_path)  # ensure file is normalized (idempotent if already done)
-        reader = None
+        pre = preprocess_vcf(file_path)  # idempotent normalization
         try:
-            reader = vcfpy.Reader.from_path(pre)
-            hdr = reader.header
-            if combined_header is None:
-                # Initialize combined_header as a copy of the first file's header
-                combined_header = hdr.copy()
-                # Initialize sample order and header line dictionaries from first header
-                if hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
-                    computed_sample_order = list(combined_header.samples.names)
-                for line in combined_header.lines:
+            with vcfpy.Reader.from_path(pre) as reader:
+                hdr = reader.header
+
+                if combined_header is None:
+                    combined_header = copy.deepcopy(hdr)
+                    if getattr(combined_header, "samples", None) and getattr(combined_header.samples, "names", None):
+                        computed_sample_order = list(combined_header.samples.names)
+                    for line in list(combined_header.lines):
+                        if isinstance(line, vcfpy.header.InfoHeaderLine):
+                            info_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                            filter_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                            contig_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                            format_lines[line.id] = copy.deepcopy(line)
+                        elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                            m = _line_mapping(line)
+                            if m.get("ID"):
+                                merged_sample_metadata = OrderedDict(m)
+                    continue
+
+                # Merge samples
+                if getattr(hdr, "samples", None) and getattr(hdr.samples, "names", None):
+                    for s in hdr.samples.names:
+                        if s not in computed_sample_order:
+                            computed_sample_order.append(s)
+
+                # Merge header lines with conflict checks
+                for line in hdr.lines:
                     if isinstance(line, vcfpy.header.InfoHeaderLine):
-                        info_lines[line.id] = copy.deepcopy(line)
+                        existing = info_lines.get(line.id)
+                        if existing is None:
+                            info_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                            for field in ("Number", "Type", "Description"):
+                                if exist_map.get(field) != new_map.get(field):
+                                    handle_critical_error(
+                                        "INFO header definitions conflict across shards. "
+                                        f"Field '{field}' for INFO '{line.id}' differs: "
+                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
+                                        exc_cls=MergeConflictError,
+                                    )
+
                     elif isinstance(line, vcfpy.header.FilterHeaderLine):
                         filter_lines[line.id] = copy.deepcopy(line)
                     elif isinstance(line, vcfpy.header.ContigHeaderLine):
@@ -939,7 +1000,7 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         # Keep sample metadata line for merging
                         mapping = _line_mapping(line)
                         if mapping.get("ID"):
-                            merged_sample_metadata = OrderedDict(mapping)
+                            merged_sample_metadata = dict(mapping)
                 continue  # move to next file
             # For subsequent files, merge header lines:
             if hasattr(hdr, "samples") and hasattr(hdr.samples, "names"):
@@ -958,96 +1019,83 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         for field in ("Number", "Type", "Description"):
                             if exist_map.get(field) != new_map.get(field):
                                 handle_critical_error(
-                                    "INFO header definitions conflict across shards. "
-                                    f"Field '{field}' for INFO '{line.id}' differs: "
-                                    f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
+                                    "FILTER header definitions conflict across shards. "
+                                    f"Description for FILTER '{line.id}' differs: "
+                                    f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
                                     exc_cls=MergeConflictError,
                                 )
-                elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                    existing = filter_lines.get(line.id)
-                    if existing is None:
-                        filter_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                    else:
-                        # Ensure no conflicting descriptions for same FILTER ID
-                        exist_map, new_map = _line_mapping(existing), _line_mapping(line)
-                        if exist_map.get("Description") != new_map.get("Description"):
-                            handle_critical_error(
-                                "FILTER header definitions conflict across shards. "
-                                f"Description for FILTER '{line.id}' differs: "
-                                f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
-                                exc_cls=MergeConflictError,
-                            )
-                elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                    existing = contig_lines.get(line.id)
-                    if existing is None:
-                        contig_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                    else:
-                        # Ensure no conflicting contig definitions for same ID
-                        if _line_mapping(existing) != _line_mapping(line):
-                            handle_critical_error(
-                                "Contig header definitions conflict across shards. "
-                                f"Contig '{line.id}' differs between shards (conflict in {file_path}).",
-                                exc_cls=MergeConflictError,
-                            )
-                elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                    existing = format_lines.get(line.id)
-                    if existing is None:
-                        format_lines[line.id] = copy.deepcopy(line)
-                        combined_header.add_line(copy.deepcopy(line))
-                    else:
-                        # Ensure no conflicting definitions for same FORMAT ID
-                        exist_map, new_map = _line_mapping(existing), _line_mapping(line)
-                        for field in ("Number", "Type", "Description"):
-                            if exist_map.get(field) != new_map.get(field):
+
+                    elif isinstance(line, vcfpy.header.ContigHeaderLine):
+                        existing = contig_lines.get(line.id)
+                        if existing is None:
+                            contig_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            if _line_mapping(existing) != _line_mapping(line):
                                 handle_critical_error(
-                                    "FORMAT header definitions conflict across shards. "
-                                    f"Field '{field}' for FORMAT '{line.id}' differs: "
-                                    f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
+                                    "Contig header definitions conflict across shards. "
+                                    f"Contig '{line.id}' differs between shards (conflict in {file_path}).",
                                     exc_cls=MergeConflictError,
                                 )
-                elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                    # Merge sample-level metadata (e.g., SAMPLE lines)
-                    mapping = _line_mapping(line)
-                    sid = mapping.get("ID")
-                    if not sid:
-                        continue
-                    if merged_sample_metadata is None:
-                        merged_sample_metadata = OrderedDict(mapping)
-                    else:
-                        for k, v in mapping.items():
-                            if k not in merged_sample_metadata or not merged_sample_metadata[k]:
-                                merged_sample_metadata[k] = v
+
+                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
+                        existing = format_lines.get(line.id)
+                        if existing is None:
+                            format_lines[line.id] = copy.deepcopy(line)
+                            combined_header.add_line(copy.deepcopy(line))
+                        else:
+                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                            for field in ("Number", "Type", "Description"):
+                                if exist_map.get(field) != new_map.get(field):
+                                    handle_critical_error(
+                                        "FORMAT header definitions conflict across shards. "
+                                        f"Field '{field}' for FORMAT '{line.id}' differs: "
+                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
+                                        exc_cls=MergeConflictError,
+                                    )
+
+                    elif isinstance(line, vcfpy.header.SampleHeaderLine):
+                        m = _line_mapping(line)
+                        sid = m.get("ID")
+                        if not sid:
+                            continue
+                        if merged_sample_metadata is None:
+                            merged_sample_metadata = OrderedDict(m)
+                        else:
+                            for k, v in m.items():
+                                if k not in merged_sample_metadata or not merged_sample_metadata[k]:
+                                    merged_sample_metadata[k] = v
+
         except Exception as exc:
             handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}", exc_cls=MergeConflictError)
         finally:
-            if reader is not None:
-                try:
-                    reader.close()
-                except Exception:
-                    pass
-            # Remove temp file if one was created for normalization
             if pre != file_path and os.path.exists(pre):
-                os.remove(pre)
+                try:
+                    os.remove(pre)
+                except OSError:
+                    pass
+
     if combined_header is None:
         handle_critical_error("Unable to construct a merged VCF header.", exc_cls=MergeConflictError)
-    # Determine final sample ordering for the combined header
+
+    # Apply final sample order
     target_samples = sample_order if sample_order is not None else computed_sample_order
-    if target_samples and hasattr(combined_header, "samples") and hasattr(combined_header.samples, "names"):
+    if target_samples and getattr(combined_header, "samples", None) and getattr(combined_header.samples, "names", None):
         combined_header.samples.names = list(target_samples)
-    # If sample metadata was merged, add a single combined SAMPLE header line
+
+    # Merge SAMPLE metadata to a single line
     if merged_sample_metadata:
         serialized = build_sample_metadata_line(merged_sample_metadata)
         parsed = _parse_sample_metadata_line(serialized)
         sample_line = vcfpy.header.SampleHeaderLine.from_mapping(parsed)
-        # Remove any existing SAMPLE lines and replace with the merged one
         combined_header.lines = [ln for ln in combined_header.lines if getattr(ln, "key", None) != "SAMPLE"]
         combined_header.add_line(sample_line)
-    # Ensure contig order is applied to combined header
+
+    # Preserve contig order from first occurrences
     contig_order = list(contig_lines.keys())
     if contig_order:
         _apply_contig_order(combined_header, contig_order)
+
     return combined_header
 
 __all__ = [

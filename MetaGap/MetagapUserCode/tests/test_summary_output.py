@@ -1,6 +1,5 @@
 import sys
 import types
-from collections import OrderedDict
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -189,9 +188,10 @@ def test_parse_metadata_arguments_merges_template(tmp_path, merge_script_module)
 
     assert sample_header_line is not None
     assert serialized_sample_line and serialized_sample_line.startswith("##SAMPLE=<")
-    assert sample_mapping == OrderedDict(
-        [("ID", "TEMPLATE123"), ("Description", "Template Provided")]
-    )
+    assert list(sample_mapping.items()) == [
+        ("ID", "TEMPLATE123"),
+        ("Description", "Template Provided"),
+    ]
 
     assert "##reference=GRCh38" in sanitized_header_lines
     assert "##contact=ResearchLab" in sanitized_header_lines

@@ -83,9 +83,9 @@ class VCFImporter:
                     self._render_validation_error(exc)
               ) from exc
             except (TypeError, ValueError) as exc:
-              message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
-              raise ImporterValidationError(message) from exc
-                    self._populate_sample_group_from_pysam(vcf_in, sample_group)
+                message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
+                raise ImporterValidationError(message) from exc
+                self._populate_sample_group_from_pysam(vcf_in, sample_group)
             except (OSError, ValueError) as exc:
                 warning = (
                     f"Could not parse VCF metadata with pysam: {exc}. "

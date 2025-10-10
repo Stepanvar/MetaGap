@@ -42,6 +42,7 @@
 
 <main id="main-content" role="main" class="flex-grow-1 py-5">
         <div class="container">
+                {% include "partials/alerts.html" %}
                 {% block main_container %}
                 <div class="app-surface">
                         {% block content %}{% endblock %}

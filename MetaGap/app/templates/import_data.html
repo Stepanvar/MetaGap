@@ -8,27 +8,182 @@
 
 {% block content %}
 <div class="container mt-5">
-        {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' extra_actions=form_extra_actions|default:'' %}
+        <div class="row g-4">
+                <div class="col-lg-7">
+                        <div class="card shadow-sm h-100">
+                                <div class="card-body p-4">
+                                        <h1 class="h3 mb-3">Import a variant dataset</h1>
+                                        <p class="text-muted mb-3">
+                                                Upload a VCF/BCF file ({{ allowed_extensions_display }}) up to {{ max_upload_size_label }}.
+                                                Follow the steps below to ensure metadata is captured correctly.
+                                        </p>
+                                        <ol class="list-group list-group-numbered mb-4">
+                                                <li class="list-group-item">
+                                                        <strong>Prepare your metadata.</strong>
+                                                        Ensure your VCF headers use the recognised section names shown on this page (e.g. {% for entry in metadata_section_aliases|slice:':1' %}{% for alias in entry.aliases|slice:':2' %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endfor %}...).
+                                                        Refer to the detailed field mapping in the "Supported metadata keys" panel.
+                                                </li>
+                                                <li class="list-group-item">
+                                                        <strong>Choose a dataset label.</strong>
+                                                        The importer derives a name from the VCF metadata or filename; use the "Dataset name override" field if you want to provide your own friendly title.
+                                                </li>
+                                                <li class="list-group-item">
+                                                        <strong>Upload and review feedback.</strong>
+                                                        After submission you'll see confirmation messages along with any warnings about ignored metadata or parsing fallbacks below and on your profile page.
+                                                </li>
+                                        </ol>
 
-        <hr class="my-4">
-        <h3>Imported Sample Groups</h3>
-        {% if sample_groups %}
-        <ul class="list-group mb-0">
-                {% for group in sample_groups %}
-                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="me-2">
-                                <strong>{{ group.name }}</strong>
+                                        {% if import_feedback %}
+                                        <div class="alert alert-info" role="status">
+                                                <div class="d-flex flex-column gap-2">
+                                                        <div class="d-flex justify-content-between flex-wrap gap-2">
+                                                                <span class="fw-semibold">Last upload summary</span>
+                                                                <span class="text-muted small">{{ import_feedback.completed_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+                                                        </div>
+                                                        <dl class="row gy-2 small mb-0">
+                                                                {% if import_feedback.file_name %}
+                                                                <dt class="col-sm-4">File</dt>
+                                                                <dd class="col-sm-8">{{ import_feedback.file_name }}</dd>
+                                                                {% endif %}
+                                                                {% if import_feedback.group_name %}
+                                                                <dt class="col-sm-4">Dataset</dt>
+                                                                <dd class="col-sm-8">{{ import_feedback.group_name }}</dd>
+                                                                {% endif %}
+                                                                {% if import_feedback.errors %}
+                                                                <dt class="col-sm-4 text-danger">Errors</dt>
+                                                                <dd class="col-sm-8 text-danger">
+                                                                        <ul class="mb-0 ps-3">
+                                                                                {% for error in import_feedback.errors %}
+                                                                                <li>{{ error }}</li>
+                                                                                {% endfor %}
+                                                                        </ul>
+                                                                </dd>
+                                                                {% endif %}
+                                                                {% if import_feedback.warnings %}
+                                                                <dt class="col-sm-4">Warnings</dt>
+                                                                <dd class="col-sm-8">
+                                                                        <ul class="mb-0 ps-3">
+                                                                                {% for warning in import_feedback.warnings %}
+                                                                                <li>{{ warning }}</li>
+                                                                                {% endfor %}
+                                                                        </ul>
+                                                                </dd>
+                                                                {% endif %}
+                                                        </dl>
+                                                        {% if import_feedback.structured_warnings %}
+                                                        <div class="border-top pt-2">
+                                                                <h2 class="h6">Detailed feedback</h2>
+                                                                {% for section in import_feedback.structured_warnings %}
+                                                                <div class="mb-2">
+                                                                        <div class="fw-semibold small">{{ section.label }}</div>
+                                                                        {% if section.type == 'mapping' %}
+                                                                        <ul class="mb-0 ps-3 small">
+                                                                                {% for key, values in section.entries.items %}
+                                                                                <li>
+                                                                                        <span class="fw-semibold">{{ key }}:</span>
+                                                                                        {% for value in values %}<code class="me-1">{{ value }}</code>{% endfor %}
+                                                                                </li>
+                                                                                {% endfor %}
+                                                                        </ul>
+                                                                        {% else %}
+                                                                        <ul class="mb-0 ps-3 small">
+                                                                                {% for value in section.entries %}
+                                                                                <li>{{ value }}</li>
+                                                                                {% endfor %}
+                                                                        </ul>
+                                                                        {% endif %}
+                                                                </div>
+                                                                {% endfor %}
+                                                        </div>
+                                                        {% endif %}
+                                                </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% include 'partials/form.html' with form=form form_enctype='multipart/form-data' submit_button_label='Start import' extra_actions=form_extra_actions|default:'' wrapper_class='mt-4' %}
+                                </div>
                         </div>
-                        <div class="btn-group btn-group-sm" role="group">
-                                <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
-                                <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
-                                <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
+                </div>
+                <div class="col-lg-5">
+                        <div class="d-flex flex-column gap-4 h-100">
+                                <div class="card shadow-sm">
+                                        <div class="card-body p-4">
+                                                <h2 class="h5 mb-2">Supported metadata keys</h2>
+                                                <p class="text-muted small mb-3">
+                                                        The importer maps metadata sections and field aliases to database columns. Use the lists below when preparing <code>##META</code> lines in your VCF headers.
+                                                </p>
+                                                <div class="mb-3">
+                                                        <h3 class="h6">Recognised section headers</h3>
+                                                        <ul class="list-unstyled small mb-0">
+                                                                {% for entry in metadata_section_aliases %}
+                                                                <li class="mb-1">
+                                                                        <span class="fw-semibold">{{ entry.section }}</span>:
+                                                                        {% for alias in entry.aliases %}
+                                                                        <code class="me-1">{{ alias }}</code>
+                                                                        {% endfor %}
+                                                                </li>
+                                                                {% endfor %}
+                                                        </ul>
+                                                </div>
+                                                <div class="metadata-sections">
+                                                        {% for section in metadata_reference %}
+                                                        <details class="mb-2 border rounded">
+                                                                <summary class="px-3 py-2 fw-semibold">{{ section.label }}</summary>
+                                                                <div class="px-3 pb-3 pt-2">
+                                                                        <ul class="list-unstyled small mb-0">
+                                                                                {% for field in section.fields %}
+                                                                                <li class="mb-1">
+                                                                                        <code>{{ field.field_key }}</code>
+                                                                                        {% if field.aliases %}
+                                                                                        <span class="text-muted">Aliases:
+                                                                                                {% for alias in field.aliases %}
+                                                                                                <code class="me-1">{{ alias }}</code>
+                                                                                                {% endfor %}
+                                                                                        </span>
+                                                                                        {% endif %}
+                                                                                </li>
+                                                                                {% endfor %}
+                                                                        </ul>
+                                                                </div>
+                                                        </details>
+                                                        {% endfor %}
+                                                </div>
+                                        </div>
+                                </div>
+                                <div class="card shadow-sm flex-grow-1">
+                                        <div class="card-body p-4 d-flex flex-column">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h2 class="h5 mb-0">Existing datasets</h2>
+                                                        <span class="badge bg-primary">{{ sample_group_count }}</span>
+                                                </div>
+                                                <p class="text-muted small">
+                                                        Imported datasets appear here and on your profile immediately after upload. Use the shortcuts below to review or refine them.
+                                                </p>
+                                                {% if sample_groups %}
+                                                <ul class="list-group list-group-flush mt-2">
+                                                        {% for group in sample_groups %}
+                                                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                                <div class="me-2">
+                                                                        <strong>{{ group.name }}</strong>
+                                                                </div>
+                                                                <div class="btn-group btn-group-sm" role="group">
+                                                                        <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
+                                                                        <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                                                                        <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
+                                                                </div>
+                                                        </li>
+                                                        {% endfor %}
+                                                </ul>
+                                                {% else %}
+                                                <div class="alert alert-secondary mt-2" role="status">
+                                                        You're ready to import your first dataset.
+                                                </div>
+                                                {% endif %}
+                                                <div class="mt-3 small text-muted">Importing another file will add a new dataset; you can manage them from the links above.</div>
+                                        </div>
+                                </div>
                         </div>
-                </li>
-                {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-muted">You haven't imported any datasets yet.</p>
-        {% endif %}
+                </div>
+        </div>
 </div>
 {% endblock %}

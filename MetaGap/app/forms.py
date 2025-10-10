@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -404,11 +405,113 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         return [seen.setdefault(val, val) for val in values if val and val not in seen]
 
 class ImportDataForm(BootstrapFormMixin, forms.Form):
+    """Form used to upload VCF/BCF archives and capture import preferences."""
+
+    DEFAULT_MAX_FILE_SIZE_MB = 50
+    ALLOWED_EXTENSIONS: tuple[str, ...] = (".vcf", ".vcf.gz", ".bcf", ".bcf.gz")
+
     data_file = forms.FileField(
         required=True,
-        widget=forms.ClearableFileInput(attrs={'class': 'form-control'}),
-        help_text='Upload a VCF file.'
+        label="Variant call file",
+        widget=forms.ClearableFileInput(
+            attrs={
+                "class": "form-control",
+                "accept": ",".join(ALLOWED_EXTENSIONS),
+            }
+        ),
     )
+    sample_group_name_override = forms.CharField(
+        required=False,
+        label="Dataset name override",
+        help_text=(
+            "Provide an optional name to assign to the imported sample group "
+            "instead of deriving it from VCF metadata or the filename."
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["data_file"].help_text = self._build_data_file_help_text()
+
+    @classmethod
+    def max_upload_size_mb(cls) -> float:
+        """Return the maximum file size (in MB) allowed for imports."""
+
+        configured = getattr(settings, "IMPORT_MAX_FILE_SIZE_MB", cls.DEFAULT_MAX_FILE_SIZE_MB)
+        try:
+            value = float(configured)
+        except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+            value = float(cls.DEFAULT_MAX_FILE_SIZE_MB)
+        return max(value, 1.0)
+
+    @classmethod
+    def max_upload_size_bytes(cls) -> int:
+        """Return the maximum upload size in bytes for validation purposes."""
+
+        return int(cls.max_upload_size_mb() * 1024 * 1024)
+
+    @classmethod
+    def max_upload_size_label(cls) -> str:
+        """Return a human-readable string describing the size limit."""
+
+        return cls._format_size_label(cls.max_upload_size_mb())
+
+    @classmethod
+    def allowed_extensions_display(cls) -> str:
+        """Human friendly string of supported extensions."""
+
+        return ", ".join(sorted(cls.ALLOWED_EXTENSIONS))
+
+    @classmethod
+    def _build_data_file_help_text(cls) -> str:
+        size_label = cls.max_upload_size_label()
+        return (
+            "Accepted file types: {extensions}. Maximum size: {size}. "
+            "Both plain-text and bgzip-compressed VCF files are supported."
+        ).format(extensions=cls.allowed_extensions_display(), size=size_label)
+
+    @staticmethod
+    def _format_size_label(size_mb: float) -> str:
+        if size_mb.is_integer():
+            return f"{int(size_mb)} MB"
+        if size_mb >= 1:
+            return f"{size_mb:.1f} MB"
+        size_kb = int(size_mb * 1024)
+        return f"{size_kb} KB"
+
+    @staticmethod
+    def _format_size_from_bytes(size_bytes: int) -> str:
+        size_mb = size_bytes / (1024 * 1024)
+        return ImportDataForm._format_size_label(size_mb)
+
+    def clean_data_file(self):
+        data_file = self.cleaned_data.get("data_file")
+        if not data_file:
+            return data_file
+
+        filename = data_file.name.lower()
+        if not any(filename.endswith(ext) for ext in self.ALLOWED_EXTENSIONS):
+            raise ValidationError(
+                "Unsupported file type. Please upload a VCF/BCF file (" +
+                self.allowed_extensions_display() + ")."
+            )
+
+        if hasattr(data_file, "size") and data_file.size > self.max_upload_size_bytes():
+            raise ValidationError(
+                (
+                    "The uploaded file is {size} which exceeds the maximum allowed size of "
+                    "{limit}."
+                ).format(
+                    size=self._format_size_from_bytes(data_file.size),
+                    limit=self.max_upload_size_label(),
+                )
+            )
+
+        return data_file
+
+    def clean_sample_group_name_override(self):
+        value = self.cleaned_data.get("sample_group_name_override", "")
+        return value.strip()
 
 class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserChangeForm):
     password = None  # Exclude password field

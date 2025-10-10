@@ -1,5 +1,6 @@
 """Application views."""
 
+from datetime import datetime
 import csv
 import logging
 import os
@@ -14,6 +15,7 @@ from django.db import models as django_models
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.generic import (
     CreateView,
@@ -652,11 +654,47 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     template_name = "import_data.html"
     form_class = ImportDataForm
     success_url = reverse_lazy("profile")
+    SESSION_RESULT_KEY = "import_data_result"
+
+    SECTION_LABEL_OVERRIDES = {
+        "sample_group": "Sample group",
+        "reference_genome_build": "Reference genome build",
+        "genome_complexity": "Genome complexity",
+        "sample_origin": "Sample origin",
+        "material_type": "Material type",
+        "library_construction": "Library construction",
+        "illumina_seq": "Illumina sequencing",
+        "ont_seq": "Oxford Nanopore sequencing",
+        "pacbio_seq": "PacBio sequencing",
+        "iontorrent_seq": "Ion Torrent sequencing",
+        "bioinfo_alignment": "Bioinformatics alignment",
+        "bioinfo_variant_calling": "Variant calling",
+        "bioinfo_post_proc": "Bioinformatics post-processing",
+        "input_quality": "Input quality",
+        "platform_independent": "Platform-independent metadata",
+    }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         sample_groups = self.get_owned_sample_groups().order_by("name")
         context.setdefault("sample_groups", sample_groups)
+        context["sample_group_count"] = sample_groups.count()
+        context["allowed_extensions"] = ImportDataForm.ALLOWED_EXTENSIONS
+        context["allowed_extensions_display"] = ImportDataForm.allowed_extensions_display()
+        context["max_upload_size_label"] = ImportDataForm.max_upload_size_label()
+        context["metadata_reference"] = self._build_metadata_reference()
+        context["metadata_section_aliases"] = self._build_metadata_section_aliases()
+
+        feedback = self.request.session.pop(self.SESSION_RESULT_KEY, None)
+        if feedback:
+            completed_at = feedback.get("completed_at")
+            if isinstance(completed_at, str):
+                try:
+                    feedback["completed_at"] = datetime.fromisoformat(completed_at)
+                except ValueError:  # pragma: no cover - defensive parse guard
+                    pass
+            context["import_feedback"] = feedback
+            self.request.session.modified = True
         return context
 
     METADATA_SECTION_MAP = {
@@ -890,17 +928,134 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             created_group = importer.import_file(full_path)
         except Exception as exc:  # pragma: no cover - defensive feedback channel
             messages.error(self.request, f"An error occurred: {exc}")
+            self._store_import_result(
+                file_name=data_file.name,
+                errors=[str(exc)],
+                warnings=list(importer.warnings),
+                structured_warnings=self._build_structured_warnings(importer),
+            )
         else:
+            override_name = form.cleaned_data.get("sample_group_name_override")
+            if override_name:
+                created_group.name = override_name
+                created_group.save(update_fields=["name"])
+
+            display_name = created_group.name
             messages.success(
                 self.request,
-                f"Imported {created_group.name} successfully.",
+                f"Imported {display_name} successfully.",
             )
             for warning in importer.warnings:
                 messages.warning(self.request, warning)
+            self._store_import_result(
+                file_name=data_file.name,
+                group_name=display_name,
+                warnings=list(importer.warnings),
+                structured_warnings=self._build_structured_warnings(importer),
+            )
         finally:
             default_storage.delete(temp_path)
 
         return super().form_valid(form)
+
+    def _store_import_result(self, **payload: Any) -> None:
+        """Persist the most recent import outcome to the session."""
+
+        if not payload:
+            return
+
+        payload.setdefault("warnings", [])
+        payload.setdefault("structured_warnings", [])
+        payload.setdefault("errors", [])
+        payload.setdefault("file_name", "")
+        payload["completed_at"] = timezone.now().isoformat()
+        self.request.session[self.SESSION_RESULT_KEY] = payload
+        self.request.session.modified = True
+
+    def _section_label(self, section_key: str) -> str:
+        return self.SECTION_LABEL_OVERRIDES.get(
+            section_key, section_key.replace("_", " ").title()
+        )
+
+    def _build_metadata_reference(self) -> list[dict[str, Any]]:
+        """Return canonical fields and aliases for template documentation."""
+
+        reference: list[dict[str, Any]] = []
+        for section_key, field_aliases in self.METADATA_FIELD_ALIASES.items():
+            fields: list[dict[str, Any]] = []
+            for field_name, aliases in sorted(field_aliases.items()):
+                fields.append(
+                    {
+                        "field_key": field_name,
+                        "field_label": field_name.replace("_", " "),
+                        "aliases": sorted(set(aliases)),
+                    }
+                )
+            reference.append(
+                {
+                    "key": section_key,
+                    "label": self._section_label(section_key),
+                    "fields": fields,
+                }
+            )
+        reference.sort(key=lambda section: section["label"].lower())
+        return reference
+
+    def _build_metadata_section_aliases(self) -> list[dict[str, Any]]:
+        section_aliases: dict[str, set[str]] = {}
+        for alias, canonical in self.METADATA_SECTION_MAP.items():
+            section_aliases.setdefault(canonical, set()).add(alias)
+
+        aliases_summary: list[dict[str, Any]] = []
+        for section_key, aliases in section_aliases.items():
+            aliases_summary.append(
+                {
+                    "section_key": section_key,
+                    "section": self._section_label(section_key),
+                    "aliases": sorted(aliases),
+                }
+            )
+
+        aliases_summary.sort(key=lambda item: item["section"].lower())
+        return aliases_summary
+
+    def _build_structured_warnings(self, importer: Any) -> list[dict[str, Any]]:
+        sections: list[dict[str, Any]] = []
+
+        potential_attributes = {
+            "unsupported_metadata_keys": ("Unsupported metadata headers", "list"),
+            "ignored_metadata_keys": ("Ignored metadata entries", "list"),
+            "warning_details": ("Additional details", "mapping"),
+        }
+
+        for attr_name, (label, section_type) in potential_attributes.items():
+            value = getattr(importer, attr_name, None)
+            if not value:
+                continue
+            if section_type == "mapping" and isinstance(value, dict):
+                normalized = {
+                    str(key): list(sorted(set(map(str, val)))) if isinstance(val, (set, list, tuple)) else [str(val)]
+                    for key, val in value.items()
+                }
+                sections.append(
+                    {
+                        "label": label,
+                        "entries": normalized,
+                        "type": "mapping",
+                    }
+                )
+            else:
+                iterable = value if isinstance(value, (set, list, tuple)) else [value]
+                entries = list(sorted(set(map(str, iterable))))
+                sections.append(
+                    {
+                        "label": label,
+                        "entries": entries,
+                        "type": "list",
+                    }
+                )
+
+        return sections
 
     def parse_vcf_file(self, file_path: str) -> SampleGroup:
         organization_profile = getattr(self.request.user, "organization_profile", None)

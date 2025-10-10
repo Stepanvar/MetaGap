@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import copy
 import gzip
+import io
 import os
 import re
+import shutil
+import tempfile
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import logging
 import subprocess
@@ -558,7 +561,10 @@ def _validate_anonymized_vcf_header(final_vcf_path: str, ensure_for_uncompressed
     opener = gzip.open if final_vcf_path.endswith(".gz") else open
     try:
         with opener(final_vcf_path, "rt", encoding="utf-8") as stream:
-            reader = vcfpy.Reader.from_stream(stream)
+            try:
+                reader = vcfpy.Reader.from_stream(stream)
+            except NotImplementedError:
+                reader = vcfpy.Reader.from_path(final_vcf_path)
             # Force header consumption
             _ = reader.header
             reader.close()
@@ -673,13 +679,21 @@ def append_metadata_to_merged_vcf(
             cleaned = token.strip()
             if not cleaned or cleaned == ".":
                 continue
-    def _cleanup_temp_files():
-        for path in [joint_temp, filtered_temp]:
             try:
                 allele_indices.append(int(cleaned))
             except ValueError:
                 continue
         return allele_indices
+
+    def _cleanup_temp_files():
+        for path in [joint_temp, filtered_temp]:
+            if not path:
+                continue
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
 
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
@@ -740,6 +754,158 @@ def append_metadata_to_merged_vcf(
             ]
         )
 
+    def _serialize_fields_without_vcfpy(
+        fields: List[str], *, enforce_filters: bool = True
+    ) -> Optional[str]:
+        if len(fields) < 8:
+            return None
+
+        alt_tokens = [allele for allele in fields[4].split(",") if allele]
+        alt_counts = [0] * len(alt_tokens)
+        allele_number = 0
+
+        if len(fields) >= 10:
+            format_keys = fields[8].split(":") if fields[8] else []
+            try:
+                gt_index = format_keys.index("GT")
+            except ValueError:
+                gt_index = None
+
+            if gt_index is not None:
+                for sample_entry in fields[9:]:
+                    parts = sample_entry.split(":")
+                    if gt_index >= len(parts):
+                        continue
+                    genotype = parts[gt_index]
+                    if not genotype:
+                        continue
+                    tokens = genotype.replace("|", "/").split("/")
+                    for token in tokens:
+                        token = token.strip()
+                        if not token or token == ".":
+                            continue
+                        try:
+                            allele_index = int(token)
+                        except ValueError:
+                            continue
+                        if allele_index < 0:
+                            continue
+                        allele_number += 1
+                        if allele_index == 0:
+                            continue
+                        normalized_index = allele_index - 1
+                        if 0 <= normalized_index < len(alt_counts):
+                            alt_counts[normalized_index] += 1
+
+        info_field = fields[7]
+        info_map = {}
+        order = []
+        for entry in info_field.split(";"):
+            if not entry:
+                continue
+            if "=" in entry:
+                key, value = entry.split("=", 1)
+            else:
+                key, value = entry, ""
+            if key not in info_map:
+                order.append(key)
+            info_map[key] = value
+
+        info_map["AN"] = str(allele_number)
+        if alt_counts:
+            info_map["AC"] = ",".join(str(count) for count in alt_counts)
+            if allele_number > 0:
+                info_map["AF"] = ",".join(
+                    f"{count / allele_number:.6g}" for count in alt_counts
+                )
+            else:
+                info_map["AF"] = ",".join("0" for _ in alt_counts)
+        else:
+            info_map["AC"] = "."
+            info_map["AF"] = "."
+
+        for key in ("AC", "AN", "AF"):
+            if key not in order:
+                order.append(key)
+
+        new_entries = []
+        for key in order:
+            value = info_map.get(key, "")
+            if value == "":
+                new_entries.append(f"{key}=")
+            else:
+                new_entries.append(f"{key}={value}")
+        fields[7] = ";".join(new_entries)
+
+        qual_value = _normalize_quality(fields[5])
+        if enforce_filters:
+            if qual_value is None or qual_value <= 30:
+                return None
+            if allele_number <= 50:
+                return None
+        elif qual_value is None:
+            qual_value = None
+
+        raw_filter = fields[6]
+        if raw_filter in (None, "", ".", "PASS"):
+            filter_text = "PASS"
+        else:
+            filter_text = _normalize_filter(raw_filter.split(";"))
+        if enforce_filters and filter_text != "PASS":
+            return None
+
+        chrom = fields[0] or "."
+        pos = fields[1] or "."
+        record_id = fields[2] or "."
+        ref = fields[3] or "."
+        alt_field = fields[4] or "."
+        qual_field = _format_scalar(qual_value) if qual_value is not None else "."
+
+        return "\t".join(
+            [
+                chrom,
+                pos,
+                record_id,
+                ref,
+                alt_field,
+                qual_field,
+                filter_text,
+                fields[7],
+            ]
+        )
+
+    def _iter_serialized_records_without_vcfpy(path: str):
+        with _open_vcf(path) as handle:
+            for raw_line in handle:
+                if not raw_line or raw_line.startswith("#"):
+                    continue
+                line = raw_line.rstrip("\n")
+                if not line:
+                    continue
+                serialized = _serialize_fields_without_vcfpy(line.split("\t"))
+                if serialized:
+                    yield serialized
+
+    def _iter_serialized_records_from_cut() -> Iterable[str]:
+        try:
+            buffer = io.StringIO()
+            subprocess.run(
+                ["cut", "-f1-8"],
+                check=True,
+                stdout=buffer,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return []
+
+        contents = buffer.getvalue()
+        lines = []
+        for raw_line in contents.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lines.append(line)
+        return lines
+
     log_message(
         "Recalculating AC, AN, AF tags across the merged cohort...",
         verbose,
@@ -765,6 +931,8 @@ def append_metadata_to_merged_vcf(
     final_header_lines: List[str] = []
     if fileformat_line is not None:
         final_header_lines.append(fileformat_line)
+    else:
+        final_header_lines.append("##fileformat=VCFv4.2")
     final_header_lines.extend(remaining_header_lines)
     existing_header_lines = set(final_header_lines)
 
@@ -802,30 +970,78 @@ def append_metadata_to_merged_vcf(
 
     final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
 
-    body_lines: List[str] = []
-    with _open_vcf(merged_vcf) as stream:
-        reader = vcfpy.Reader.from_stream(stream)
-        for record in reader:
-            allele_number = _recalculate_info_fields(record)
-            if not _record_passes_filters(record, allele_number):
-                continue
-            body_lines.append(_serialize_record(record))
-        reader.close()
-
     if not final_plain_vcf:
         base, ext = os.path.splitext(merged_vcf)
         if not ext:
             ext = ".vcf"
         final_plain_vcf = f"{base}.anonymized{ext}"
 
+    reader = None
+    temp_output_path: Optional[str] = None
     try:
-        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
+        output_dir = os.path.dirname(os.path.abspath(final_plain_vcf)) or None
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", delete=False, dir=output_dir, suffix=".tmp"
+        ) as output_handle:
+            temp_output_path = output_handle.name
             for line in final_header_lines:
                 output_handle.write(line + "\n")
-            for line in body_lines:
-                output_handle.write(line + "\n")
+            stream_handle = None
+            stream_used = False
+            manual_iterator = None
+            try:
+                stream = _open_vcf(merged_vcf)
+                stream_handle = stream
+                try:
+                    reader = vcfpy.Reader.from_stream(stream)
+                    stream_used = True
+                except NotImplementedError:
+                    stream.close()
+                    stream_handle = None
+                    try:
+                        reader = vcfpy.Reader.from_path(merged_vcf)
+                    except Exception:
+                        reader = None
+                        cut_lines = _iter_serialized_records_from_cut()
+                        if cut_lines:
+                            manual_iterator = cut_lines
+                        else:
+                            manual_iterator = _iter_serialized_records_without_vcfpy(
+                                merged_vcf
+                            )
+                    stream_used = False
+            except Exception:
+                if stream_handle is not None:
+                    try:
+                        stream_handle.close()
+                    except Exception:
+                        pass
+                raise
+            if manual_iterator is not None:
+                for serialized_line in manual_iterator:
+                    output_handle.write(serialized_line + "\n")
+            else:
+                try:
+                    for record in reader:
+                        allele_number = _recalculate_info_fields(record)
+                        if not _record_passes_filters(record, allele_number):
+                            continue
+                        output_handle.write(_serialize_record(record) + "\n")
+                finally:
+                    if stream_handle is not None and stream_used:
+                        try:
+                            stream_handle.close()
+                        except Exception:
+                            pass
+                        stream_handle = None
+        shutil.move(temp_output_path, final_plain_vcf)
         final_vcf = final_plain_vcf
     except Exception as exc:
+        if temp_output_path and os.path.exists(temp_output_path):
+            try:
+                os.remove(temp_output_path)
+            except Exception:
+                pass
         if final_plain_vcf and os.path.exists(final_plain_vcf):
             try:
                 os.remove(final_plain_vcf)
@@ -836,10 +1052,11 @@ def append_metadata_to_merged_vcf(
             exc_cls=MergeConflictError,
         )
     finally:
-        try:
-            reader.close()
-        except Exception:
-            pass
+        if reader is not None:
+            try:
+                reader.close()
+            except Exception:
+                pass
 
     if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
         if pysam is None:
@@ -970,132 +1187,179 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
 
 def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
     opener = gzip.open if vcf_path.endswith(".gz") else open
+    writer_opener = opener
+
     try:
-        with opener(vcf_path, "rt", encoding="utf-8") as handle:
-            lines = [line.rstrip("\n") for line in handle]
+        input_handle = opener(vcf_path, "rt", encoding="utf-8")
     except OSError as exc:
         handle_critical_error(
             f"Failed to open {vcf_path}: {exc}",
             exc_cls=MergeConflictError,
         )
+        return
 
-    header_lines = []
-    records = []
-    column_header = None
-    for line in lines:
-        if line.startswith("##"):
-            header_lines.append(line)
-            continue
-        if line.startswith("#CHROM"):
-            column_header = line
-            header_lines.append(line)
-            continue
-        if not line:
-            continue
-        records.append(line)
-
-    if column_header is None:
-        handle_critical_error(
-            f"Failed to parse {vcf_path}: Missing #CHROM header line.",
-            exc_cls=MergeConflictError,
-        )
-
-    updated_records = []
-    for record_line in records:
-        fields = record_line.split("\t")
-        if len(fields) < 8:
-            updated_records.append(record_line)
-            continue
-
-        alt_alleles = [allele for allele in fields[4].split(",") if allele]
-        alt_counts = [0] * len(alt_alleles)
-        allele_number = 0
-
-        if len(fields) >= 10:
-            format_keys = fields[8].split(":") if fields[8] else []
-            try:
-                gt_index = format_keys.index("GT")
-            except ValueError:
-                gt_index = None
-
-            if gt_index is not None:
-                for sample_entry in fields[9:]:
-                    parts = sample_entry.split(":")
-                    if gt_index >= len(parts):
-                        continue
-                    genotype = parts[gt_index]
-                    if not genotype:
-                        continue
-                    tokens = genotype.replace("|", "/").split("/")
-                    for token in tokens:
-                        token = token.strip()
-                        if not token or token == ".":
-                            continue
-                        try:
-                            allele_index = int(token)
-                        except ValueError:
-                            continue
-                        if allele_index < 0:
-                            continue
-                        allele_number += 1
-                        if allele_index == 0:
-                            continue
-                        normalized_index = allele_index - 1
-                        if 0 <= normalized_index < len(alt_counts):
-                            alt_counts[normalized_index] += 1
-
-        info_field = fields[7]
-        info_map = {}
-        order = []
-        for entry in info_field.split(";"):
-            if not entry:
-                continue
-            if "=" in entry:
-                key, value = entry.split("=", 1)
-            else:
-                key, value = entry, ""
-            if key not in info_map:
-                order.append(key)
-            info_map[key] = value
-
-        info_map["AN"] = str(allele_number)
-        if alt_counts:
-            info_map["AC"] = ",".join(str(count) for count in alt_counts)
-            if allele_number > 0:
-                info_map["AF"] = ",".join(
-                    f"{count / allele_number:.6g}" for count in alt_counts
-                )
-            else:
-                info_map["AF"] = ",".join("0" for _ in alt_counts)
-        else:
-            info_map["AC"] = "."
-            info_map["AF"] = "."
-
-        for key in ("AC", "AN", "AF"):
-            if key not in order:
-                order.append(key)
-
-        new_entries = []
-        for key in order:
-            value = info_map.get(key, "")
-            if value == "":
-                new_entries.append(f"{key}=")
-            else:
-                new_entries.append(f"{key}={value}")
-        fields[7] = ";".join(new_entries)
-        updated_records.append("\t".join(fields))
-
+    temp_path: Optional[str] = None
     try:
-        with opener(vcf_path, "wt", encoding="utf-8") as handle:
-            for line in header_lines:
-                handle.write(line + "\n")
-            for line in updated_records:
-                handle.write(line + "\n")
-    except OSError as exc:
-        handle_critical_error(
-            f"Failed to rewrite {vcf_path}: {exc}",
-            exc_cls=MergeConflictError,
-        )
+        temp_dir = os.path.dirname(os.path.abspath(vcf_path)) or None
+        try:
+            temp_file = tempfile.NamedTemporaryFile(
+                delete=False, dir=temp_dir, suffix=".tmp"
+            )
+        except OSError as exc:
+            try:
+                input_handle.close()
+            except Exception:
+                pass
+            handle_critical_error(
+                f"Failed to create temporary file for {vcf_path}: {exc}",
+                exc_cls=MergeConflictError,
+            )
+            return
+        temp_path = temp_file.name
+        temp_file.close()
+
+        column_header_found = False
+        try:
+            with input_handle, writer_opener(temp_path, "wt", encoding="utf-8") as output_handle:
+                for raw_line in input_handle:
+                    line = raw_line.rstrip("\n")
+                    if line.startswith("##"):
+                        output_handle.write(line + "\n")
+                        continue
+                    if line.startswith("#CHROM"):
+                        column_header_found = True
+                        output_handle.write(line + "\n")
+                        continue
+                    if not line:
+                        continue
+
+                    fields = line.split("\t")
+                    if len(fields) < 8:
+                        output_handle.write(line + "\n")
+                        continue
+
+                    alt_alleles = [allele for allele in fields[4].split(",") if allele]
+                    alt_counts = [0] * len(alt_alleles)
+                    allele_number = 0
+
+                    if len(fields) >= 10:
+                        format_keys = fields[8].split(":") if fields[8] else []
+                        try:
+                            gt_index = format_keys.index("GT")
+                        except ValueError:
+                            gt_index = None
+
+                        if gt_index is not None:
+                            for sample_entry in fields[9:]:
+                                parts = sample_entry.split(":")
+                                if gt_index >= len(parts):
+                                    continue
+                                genotype = parts[gt_index]
+                                if not genotype:
+                                    continue
+                                tokens = genotype.replace("|", "/").split("/")
+                                for token in tokens:
+                                    token = token.strip()
+                                    if not token or token == ".":
+                                        continue
+                                    try:
+                                        allele_index = int(token)
+                                    except ValueError:
+                                        continue
+                                    if allele_index < 0:
+                                        continue
+                                    allele_number += 1
+                                    if allele_index == 0:
+                                        continue
+                                    normalized_index = allele_index - 1
+                                    if 0 <= normalized_index < len(alt_counts):
+                                        alt_counts[normalized_index] += 1
+
+                    info_field = fields[7]
+                    info_map = {}
+                    order = []
+                    for entry in info_field.split(";"):
+                        if not entry:
+                            continue
+                        if "=" in entry:
+                            key, value = entry.split("=", 1)
+                        else:
+                            key, value = entry, ""
+                        if key not in info_map:
+                            order.append(key)
+                        info_map[key] = value
+
+                    info_map["AN"] = str(allele_number)
+                    if alt_counts:
+                        info_map["AC"] = ",".join(str(count) for count in alt_counts)
+                        if allele_number > 0:
+                            info_map["AF"] = ",".join(
+                                f"{count / allele_number:.6g}" for count in alt_counts
+                            )
+                        else:
+                            info_map["AF"] = ",".join("0" for _ in alt_counts)
+                    else:
+                        info_map["AC"] = "."
+                        info_map["AF"] = "."
+
+                    for key in ("AC", "AN", "AF"):
+                        if key not in order:
+                            order.append(key)
+
+                    new_entries = []
+                    for key in order:
+                        value = info_map.get(key, "")
+                        if value == "":
+                            new_entries.append(f"{key}=")
+                        else:
+                            new_entries.append(f"{key}={value}")
+                    fields[7] = ";".join(new_entries)
+                    output_handle.write("\t".join(fields) + "\n")
+        except OSError as exc:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            handle_critical_error(
+                f"Failed to rewrite {vcf_path}: {exc}",
+                exc_cls=MergeConflictError,
+            )
+            return
+
+        if not column_header_found:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            handle_critical_error(
+                f"Failed to parse {vcf_path}: Missing #CHROM header line.",
+                exc_cls=MergeConflictError,
+            )
+            return
+
+        try:
+            shutil.move(temp_path, vcf_path)
+        except OSError as exc:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            handle_critical_error(
+                f"Failed to rewrite {vcf_path}: {exc}",
+                exc_cls=MergeConflictError,
+            )
+            return
+        finally:
+            temp_path = None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 
 __all__ = [

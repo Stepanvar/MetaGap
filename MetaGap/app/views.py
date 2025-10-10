@@ -1,14 +1,9 @@
 """Application views."""
 
 import csv
-import json
 import logging
 import os
-import re
-from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
-
-import pysam
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
@@ -61,7 +56,10 @@ from .models import (
     SampleGroup,
     SampleOrigin,
 )
+from .tables import build_allele_frequency_table, create_dynamic_table
+from .services.vcf_importer import VCFImporter
 from .tables import create_dynamic_table
+from .mixins import OrganizationSampleGroupMixin
 
 
 logger = logging.getLogger(__name__)
@@ -118,25 +116,7 @@ class SearchResultsView(SingleTableMixin, FilterView):
     ordering = ("chrom", "pos", "ref", "alt", "pk")
 
     # Dynamically create a table class prioritising variant descriptors first.
-    table_class = create_dynamic_table(
-        AlleleFrequency,
-        table_name="AlleleFrequencyTable",
-        include_related=True,
-        priority_fields=(
-            "chrom",
-            "pos",
-            "ref",
-            "alt",
-            "qual",
-            "filter",
-            "info__af",
-            "info__ac",
-            "info__an",
-            "info__dp",
-            "info__mq",
-        ),
-        exclude_fields=("info__additional", "format__payload"),
-    )
+    table_class = build_allele_frequency_table()
 
     def get_queryset(self):
         base_queryset = (
@@ -186,22 +166,15 @@ class HomePageView(TemplateView):
         return context
 
 
-class ProfileView(LoginRequiredMixin, TemplateView):
+class ProfileView(LoginRequiredMixin, OrganizationSampleGroupMixin, TemplateView):
     """Display the user's organisation profile and related import tools."""
 
     template_name = "profile.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        user = self.request.user
-        organization_profile = getattr(user, "organization_profile", None)
-
-        if organization_profile is None:
-            sample_groups = SampleGroup.objects.none()
-        else:
-            sample_groups = SampleGroup.objects.filter(
-                created_by=organization_profile
-            ).order_by("name")
+        organization_profile = self.get_organization_profile()
+        sample_groups = self.get_owned_sample_groups().order_by("name")
 
         context.update(
             {
@@ -429,7 +402,9 @@ class AboutView(TemplateView):
     template_name = "about.html"
 
 
-class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
+class SampleGroupUpdateView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, UpdateView
+):
     """Allow organisation members to edit their sample group metadata."""
 
     model = SampleGroup
@@ -440,10 +415,7 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         """Restrict editing to groups owned by the user's organisation."""
 
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            return SampleGroup.objects.none()
-        return SampleGroup.objects.filter(created_by=organization_profile)
+        return self.get_owned_sample_groups()
 
     def get_form_kwargs(self) -> Dict[str, Any]:
         kwargs = super().get_form_kwargs()
@@ -470,7 +442,9 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
+class SampleGroupDeleteView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, DeleteView
+):
     """Provide a confirmation flow for removing imported sample groups."""
 
     model = SampleGroup
@@ -478,10 +452,7 @@ class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy("profile")
 
     def get_queryset(self):
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            return SampleGroup.objects.none()
-        return SampleGroup.objects.filter(created_by=organization_profile)
+        return self.get_owned_sample_groups()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -499,7 +470,9 @@ class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
         return response
 
 
-class SampleGroupDetailView(LoginRequiredMixin, DetailView):
+class SampleGroupDetailView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, DetailView
+):
     """Display an individual sample group's metadata and variant catalogue."""
 
     model = SampleGroup
@@ -509,12 +482,8 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
     def get_queryset(self):
         """Limit access to groups owned by the requesting organisation."""
 
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            return SampleGroup.objects.none()
-
         return (
-            SampleGroup.objects.filter(created_by=organization_profile)
+            self.get_owned_sample_groups()
             .select_related(
                 "created_by",
                 "created_by__user",
@@ -551,31 +520,11 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
             "sample_group__id",
             *[f"sample_group__{name}" for name in sample_group_field_names],
             "info__id",
-            "info__additional",
             "format__id",
-            "format__payload",
         ]
-        priority_columns = [
-            "chrom",
-            "pos",
-            "ref",
-            "alt",
-            "qual",
-            "filter",
-            "info__af",
-            "info__ac",
-            "info__an",
-            "info__dp",
-            "info__mq",
-            "variant_id",
-            "format__genotype",
-        ]
-        table_class = create_dynamic_table(
-            AlleleFrequency,
-            table_name="AlleleFrequencyTable",
-            include_related=True,
-            priority_fields=priority_columns,
-            exclude_fields=exclude_columns,
+        table_class = build_allele_frequency_table(
+            priority_extra=("variant_id", "format__genotype"),
+            exclude_extra=exclude_columns,
         )
         allele_qs = self.object.allele_frequencies.all()
         table = table_class(allele_qs)
@@ -696,7 +645,7 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ImportDataView(LoginRequiredMixin, FormView):
+class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView):
     """Handle ingestion of VCF uploads into the relational schema."""
 
     template_name = "import_data.html"
@@ -705,249 +654,27 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            sample_groups = SampleGroup.objects.none()
-        else:
-            sample_groups = SampleGroup.objects.filter(
-                created_by=organization_profile
-            ).order_by("name")
+        sample_groups = self.get_owned_sample_groups().order_by("name")
         context.setdefault("sample_groups", sample_groups)
         return context
-
-    METADATA_SECTION_MAP = {
-        "SAMPLE_GROUP": "sample_group",
-        "SAMPLEGROUP": "sample_group",
-        "GROUP": "sample_group",
-        "SAMPLE": "sample_group",
-        "REFERENCE_GENOME_BUILD": "reference_genome_build",
-        "REFERENCE_GENOME": "reference_genome_build",
-        "REFERENCE": "reference_genome_build",
-        "GENOME_COMPLEXITY": "genome_complexity",
-        "SAMPLE_ORIGIN": "sample_origin",
-        "ORIGIN": "sample_origin",
-        "MATERIAL_TYPE": "material_type",
-        "LIBRARY_CONSTRUCTION": "library_construction",
-        "LIBRARY_PREP": "library_construction",
-        "ILLUMINA_SEQ": "illumina_seq",
-        "ONT_SEQ": "ont_seq",
-        "PACBIO_SEQ": "pacbio_seq",
-        "IONTORRENT_SEQ": "iontorrent_seq",
-        "ION_TORRENT_SEQ": "iontorrent_seq",
-        "BIOINFO_ALIGNMENT": "bioinfo_alignment",
-        "ALIGNMENT": "bioinfo_alignment",
-        "BIOINFO_VARIANT_CALLING": "bioinfo_variant_calling",
-        "VARIANT_CALLING": "bioinfo_variant_calling",
-        "BIOINFO_POSTPROC": "bioinfo_post_proc",
-        "BIOINFO_POST_PROC": "bioinfo_post_proc",
-        "BIOINFO_POST_PROCESSING": "bioinfo_post_proc",
-        "INPUT_QUALITY": "input_quality",
-        "PLATFORM_INDEPENDENT": "platform_independent",
-        "PLATFORM-INDEPENDENT": "platform_independent",
-        "PLATFORMINDEPENDENT": "platform_independent",
-    }
-
-    METADATA_MODEL_MAP = {
-        "reference_genome_build": ReferenceGenomeBuild,
-        "genome_complexity": GenomeComplexity,
-        "sample_origin": SampleOrigin,
-        "material_type": MaterialType,
-        "library_construction": LibraryConstruction,
-        "illumina_seq": IlluminaSeq,
-        "ont_seq": OntSeq,
-        "pacbio_seq": PacBioSeq,
-        "iontorrent_seq": IonTorrentSeq,
-        "bioinfo_alignment": BioinfoAlignment,
-        "bioinfo_variant_calling": BioinfoVariantCalling,
-        "bioinfo_post_proc": BioinfoPostProc,
-        "input_quality": InputQuality,
-    }
-
-    METADATA_FIELD_ALIASES = {
-        "sample_group": {
-            "name": ["group", "group_name", "dataset", "id"],
-            "doi": ["dataset_doi", "group_doi"],
-            "source_lab": ["lab", "lab_name", "source", "center"],
-            "contact_email": ["email", "lab_email", "contact"],
-            "contact_phone": ["phone", "lab_phone"],
-            "total_samples": [
-                "samples",
-                "sample_count",
-                "n_samples",
-                "n",
-                "num_samples",
-                "number_of_samples",
-            ],
-            "inclusion_criteria": ["inclusion", "inclusioncriteria"],
-            "exclusion_criteria": ["exclusion", "exclusioncriteria"],
-            "comments": ["description", "notes"],
-        },
-        "input_quality": {
-            "a260_a280": ["a260_280", "ratio_a260_a280"],
-            "a260_a230": ["a260_230", "ratio_a260_a230"],
-            "dna_concentration": ["dna_conc", "dna_concentration_ng_ul", "concentration"],
-            "rna_concentration": ["rna_conc", "rna_concentration_ng_ul"],
-            "notes": ["note", "comment", "comments"],
-            "additional_metrics": ["metrics", "additional_metrics"],
-        },
-        "reference_genome_build": {
-            "build_name": ["name", "reference", "build"],
-            "build_version": ["version", "build_version"],
-            "additional_info": ["additional", "additional_info"],
-        },
-        "genome_complexity": {
-            "size": ["genome_size", "size_bp"],
-            "ploidy": ["ploidy_level"],
-            "gc_content": ["gc", "gc_percent"],
-        },
-        "sample_origin": {
-            "tissue": [
-                "tissue_type",
-                "sample_group_tissue",
-                "samplegroup_tissue",
-            ],
-            "collection_method": [
-                "collection",
-                "method",
-                "sample_group_collection_method",
-                "samplegroup_collection_method",
-            ],
-            "storage_conditions": [
-                "storage",
-                "storage_conditions",
-                "sample_group_storage_conditions",
-                "samplegroup_storage_conditions",
-            ],
-            "time_stored": ["time", "storage_time"],
-        },
-        "material_type": {
-            "material_type": ["type"],
-            "integrity_number": ["rin", "din", "integrity"],
-        },
-        "library_construction": {
-            "kit": ["library_kit", "kit_name"],
-            "fragmentation": ["fragmentation_method"],
-            "adapter_ligation_efficiency": ["adapter_efficiency"],
-            "pcr_cycles": ["pcr", "pcr_cycles"],
-        },
-        "illumina_seq": {
-            "instrument": ["machine", "instrument"],
-            "flow_cell": ["flowcell", "flow_cell_id"],
-            "channel_method": ["channel"],
-            "cluster_density": ["cluster"],
-            "qc_software": ["qc", "software"],
-        },
-        "ont_seq": {
-            "instrument": ["machine", "instrument"],
-            "flow_cell": ["flowcell", "flow_cell_id"],
-            "flow_cell_version": ["flowcell_version"],
-            "pore_type": ["pore"],
-            "bias_voltage": ["bias"],
-        },
-        "pacbio_seq": {
-            "instrument": ["machine", "instrument"],
-            "flow_cell": ["flowcell", "flow_cell_id"],
-            "smrt_cell_type": ["smrt_cell", "cell_type"],
-            "zmw_density": ["zmw"],
-        },
-        "iontorrent_seq": {
-            "instrument": ["machine", "instrument"],
-            "flow_cell": ["flowcell", "flow_cell_id"],
-            "chip_type": ["chip"],
-            "ph_calibration": ["ph"],
-            "flow_order": ["floworder"],
-            "ion_sphere_metrics": ["ionsphere", "sphere_metrics"],
-        },
-        "bioinfo_alignment": {
-            "tool": ["aligner", "software", "tool"],
-            "params": ["parameters", "params"],
-            "ref_genome_version": ["reference_version"],
-            "recalibration_settings": ["recalibration", "recal_settings"],
-        },
-        "bioinfo_variant_calling": {
-            "tool": ["caller", "tool"],
-            "version": ["tool_version", "version"],
-            "filtering_thresholds": ["filters", "thresholds"],
-            "duplicate_handling": ["duplicates"],
-            "mq": ["mapping_quality"],
-        },
-        "bioinfo_post_proc": {
-            "normalization": ["normalisation", "normalization_method"],
-            "harmonization": ["harmonisation", "harmonization_method"],
-        },
-    }
-
-    SECTION_PRIMARY_FIELD = {
-        "reference_genome_build": "build_name",
-        "genome_complexity": "size",
-        "sample_origin": "tissue",
-        "material_type": "material_type",
-        "library_construction": "kit",
-        "illumina_seq": "instrument",
-        "ont_seq": "instrument",
-        "pacbio_seq": "instrument",
-        "iontorrent_seq": "instrument",
-        "bioinfo_alignment": "tool",
-        "bioinfo_variant_calling": "tool",
-        "bioinfo_post_proc": "normalization",
-    }
-
-    INFO_FIELD_STRING = "string"
-    INFO_FIELD_INT = "int"
-    INFO_FIELD_FLOAT = "float"
-
-    INFO_FIELD_MAP = {
-        "aa": ("aa", INFO_FIELD_STRING),
-        "ac": ("ac", INFO_FIELD_STRING),
-        "af": ("af", INFO_FIELD_STRING),
-        "an": ("an", INFO_FIELD_STRING),
-        "bq": ("bq", INFO_FIELD_STRING),
-        "cigar": ("cigar", INFO_FIELD_STRING),
-        "db": ("db", INFO_FIELD_STRING),
-        "dp": ("dp", INFO_FIELD_STRING),
-        "end": ("end", INFO_FIELD_STRING),
-        "h2": ("h2", INFO_FIELD_STRING),
-        "h3": ("h3", INFO_FIELD_STRING),
-        "mq": ("mq", INFO_FIELD_STRING),
-        "mq0": ("mq0", INFO_FIELD_STRING),
-        "ns": ("ns", INFO_FIELD_STRING),
-        "qd": ("qd", INFO_FIELD_STRING),
-        "fs": ("fs", INFO_FIELD_STRING),
-        "sor": ("sor", INFO_FIELD_STRING),
-        "sb": ("sb", INFO_FIELD_STRING),
-    }
-
-    FORMAT_FIELD_MAP = {
-        "ad": "ad",
-        "adf": "adf",
-        "adr": "adr",
-        "dp": "dp",
-        "ec": "ec",
-        "ft": "ft",
-        "gl": "gl",
-        "gp": "gp",
-        "gq": "gq",
-        "gt": "gt",
-        "hq": "hq",
-        "mq": "mq",
-        "pl": "pl",
-        "pq": "pq",
-        "ps": "ps",
-    }
 
     def form_valid(self, form):
         data_file = form.cleaned_data["data_file"]
         temp_path = default_storage.save(f"tmp/{data_file.name}", data_file)
         full_path = os.path.join(settings.MEDIA_ROOT, temp_path)
 
+        importer = VCFImporter(self.request.user)
         try:
-            created_group = self.parse_vcf_file(full_path)
+            created_group = importer.import_file(full_path)
+        except Exception as exc:  # pragma: no cover - defensive feedback channel
+            messages.error(self.request, f"An error occurred: {exc}")
+        else:
             messages.success(
                 self.request,
                 f"Imported {created_group.name} successfully.",
             )
-        except Exception as exc:  # pragma: no cover - defensive feedback channel
-            messages.error(self.request, f"An error occurred: {exc}")
+            for warning in importer.warnings:
+                messages.warning(self.request, warning)
         finally:
             default_storage.delete(temp_path)
 

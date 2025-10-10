@@ -910,6 +910,188 @@ def test_append_metadata_cleanup_on_compression_failure(monkeypatch, tmp_path):
         calls=[SimpleNamespace(data={"GT": "0/1"})],
     )
 
+def test_append_metadata_streaming_preserves_header_order(tmp_path, monkeypatch):
+    _VCF_STORAGE.clear()
+    fake_vcfpy = _FakeVcfpyModule()
+    monkeypatch.setattr(metadata_module, "vcfpy", fake_vcfpy, raising=False)
+    monkeypatch.setattr(metadata_module, "VCFPY_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(metadata_module, "PYSAM_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(
+        metadata_module,
+        "pysam",
+        SimpleNamespace(
+            bgzip=lambda *args, **kwargs: None,
+            tabix_index=lambda *args, **kwargs: None,
+        ),
+        raising=False,
+    )
+
+    merged_vcf = tmp_path / "streaming_input.vcf"
+    merged_vcf.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.3",
+                '##INFO=<ID=ZZ,Number=1,Type=Integer,Description="Example">',
+                '##FILTER=<ID=LowQual,Description="Example filter">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE",
+                "1\t100\t.\tA\tG\t99\tPASS\tZZ=1\tGT\t0/1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    before_paths = set(tmp_path.iterdir())
+    final_vcf_path = Path(metadata_module.append_metadata_to_merged_vcf(str(merged_vcf)))
+    final_lines = final_vcf_path.read_text(encoding="utf-8").splitlines()
+
+    header_lines = [line for line in final_lines if line.startswith("##")]
+    expected_sequence = [
+        "##fileformat=VCFv4.3",
+        '##INFO=<ID=ZZ,Number=1,Type=Integer,Description="Example">',
+        '##FILTER=<ID=LowQual,Description="Example filter">',
+    ]
+    positions = [header_lines.index(line) for line in expected_sequence]
+    assert positions == sorted(positions), "Header ordering should be preserved"
+
+    new_tmp_files = [
+        path
+        for path in tmp_path.iterdir()
+        if path not in before_paths and path.suffix == ".tmp"
+    ]
+    assert not new_tmp_files, "Streaming should not leave behind temporary files"
+
+
+def test_append_metadata_streaming_cleans_temp_on_failure(tmp_path, monkeypatch):
+    _VCF_STORAGE.clear()
+    fake_vcfpy = _FakeVcfpyModule()
+    monkeypatch.setattr(metadata_module, "vcfpy", fake_vcfpy, raising=False)
+    monkeypatch.setattr(metadata_module, "VCFPY_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(metadata_module, "PYSAM_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(
+        metadata_module,
+        "pysam",
+        SimpleNamespace(
+            bgzip=lambda *args, **kwargs: None,
+            tabix_index=lambda *args, **kwargs: None,
+        ),
+        raising=False,
+    )
+
+    merged_vcf = tmp_path / "streaming_failure.vcf"
+    merged_vcf.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                '##INFO=<ID=ZZ,Number=1,Type=Integer,Description="Example">',
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE",
+                "1\t101\t.\tA\tG\t99\tPASS\tZZ=2\tGT\t0/1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    before_paths = set(tmp_path.iterdir())
+
+    def _raise_move(*args, **kwargs):
+        raise OSError("simulated failure")
+
+    monkeypatch.setattr(metadata_module.shutil, "move", _raise_move, raising=False)
+
+    with pytest.raises(metadata_module.MergeConflictError):
+        metadata_module.append_metadata_to_merged_vcf(str(merged_vcf))
+
+    leftover_tmp_files = [
+        path
+        for path in tmp_path.iterdir()
+        if path not in before_paths and path.suffix == ".tmp"
+    ]
+    assert not leftover_tmp_files, "Temporary files should be removed when streaming fails"
+
+
+def test_recalculate_cohort_info_tags_without_vcfpy_rewrites_in_place(tmp_path):
+    cohort_vcf = tmp_path / "cohort.vcf"
+    cohort_vcf.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1",
+                "1\t200\t.\tA\tG\t99\tPASS\tZZ=1\tGT\t0/1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    metadata_module._recalculate_cohort_info_tags_without_vcfpy(str(cohort_vcf))
+
+    lines = cohort_vcf.read_text(encoding="utf-8").splitlines()
+    info_line = next(line for line in lines if not line.startswith("#"))
+    fields = info_line.split("\t")
+    assert fields[7].startswith("ZZ=1"), "Existing INFO entries should be preserved"
+    assert "AC=1" in fields[7]
+    assert "AN=2" in fields[7]
+    assert "AF=0.5" in fields[7]
+    assert not any(path.suffix == ".tmp" for path in tmp_path.iterdir())
+
+
+def test_recalculate_cohort_info_tags_without_vcfpy_cleans_temp_on_failure(
+    tmp_path, monkeypatch
+):
+    cohort_vcf = tmp_path / "cohort_failure.vcf"
+    cohort_vcf.write_text(
+        "\n".join(
+            [
+                "##fileformat=VCFv4.2",
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1",
+                "1\t300\t.\tA\tG\t99\tPASS\tZZ=2\tGT\t0/1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def _raise_move(*args, **kwargs):
+        raise OSError("simulated failure")
+
+    monkeypatch.setattr(metadata_module.shutil, "move", _raise_move, raising=False)
+
+    with pytest.raises(metadata_module.MergeConflictError):
+        metadata_module._recalculate_cohort_info_tags_without_vcfpy(str(cohort_vcf))
+
+    assert not any(path.suffix == ".tmp" for path in tmp_path.iterdir())
+
+def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
+    base_columns = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
+
+    fake_vcfpy = _FakeVcfpyModule()
+    monkeypatch.setattr(merging, "vcfpy", fake_vcfpy, raising=False)
+    monkeypatch.setattr(merging, "VCFPY_AVAILABLE", True, raising=False)
+
+    class _FilterHeaderLine(_HeaderDefinition):
+        def __init__(self, mapping):
+            self.key = "FILTER"
+            self.mapping = dict(mapping)
+            self.id = self.mapping.get("ID")
+            parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
+            super().__init__(f"##FILTER=<{parts}>")
+
+        def copy(self):
+            return _FilterHeaderLine(self.mapping)
+
+    class _ContigHeaderLine(_HeaderDefinition):
+        def __init__(self, mapping):
+            self.key = "contig"
+            self.mapping = dict(mapping)
+            self.id = self.mapping.get("ID")
+            parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
+            super().__init__(f"##contig=<{parts}>")
+      def __iter__(self):
+            return iter(self._entries)
+
+        def close(self):
+            pass
     class _StubReader:
         def __init__(self, entries):
             self._entries = entries

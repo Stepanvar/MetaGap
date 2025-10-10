@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import gzip
 import os
 import re
@@ -10,6 +11,22 @@ from typing import List, Optional, Tuple
 
 from . import PYSAM_AVAILABLE, VCFPY_AVAILABLE, pysam, vcfpy
 from .logging_utils import handle_critical_error, log_message
+import subprocess
+from collections import OrderedDict
+from typing import List, Optional, Tuple
+
+from . import VCFPY_AVAILABLE, vcfpy
+from .logging_utils import (
+    MergeConflictError,
+    ValidationError,
+    handle_critical_error,
+    log_message,
+)
+
+try:  # pragma: no cover - optional dependency
+    import pysam
+except ImportError:  # pragma: no cover - exercised in environments without pysam
+    pysam = None
 
 
 STANDARD_INFO_DEFINITIONS = OrderedDict(
@@ -52,6 +69,8 @@ STANDARD_INFO_DEFINITIONS = OrderedDict(
 
 
 INFO_HEADER_PATTERN = re.compile(r"^##INFO=<ID=([^,>]+)")
+FILTER_HEADER_PATTERN = re.compile(r"^##FILTER=<ID=([^,>]+)")
+CONTIG_HEADER_PATTERN = re.compile(r"^##contig=<ID=([^,>]+)", re.IGNORECASE)
 
 
 def _format_info_definition(info_id: str, definition_mapping: OrderedDict) -> str:
@@ -310,11 +329,13 @@ def _load_metadata_template(
     normalized_path = os.path.abspath(template_path)
     if not os.path.exists(normalized_path):
         handle_critical_error(
-            f"Metadata template header file does not exist: {template_path}"
+            f"Metadata template header file does not exist: {template_path}",
+            exc_cls=ValidationError,
         )
     if not os.path.isfile(normalized_path):
         handle_critical_error(
-            f"Metadata template header path is not a file: {template_path}"
+            f"Metadata template header path is not a file: {template_path}",
+            exc_cls=ValidationError,
         )
 
     template_sample_mapping: Optional["OrderedDict[str, str]"] = None
@@ -347,7 +368,8 @@ def _load_metadata_template(
                     except ValueError as exc:
                         handle_critical_error(
                             "Invalid SAMPLE metadata line in template "
-                            f"{normalized_path} line {line_number}: {exc}"
+                            f"{normalized_path} line {line_number}: {exc}",
+                            exc_cls=ValidationError,
                         )
                     if template_sample_mapping is not None:
                         log_message(
@@ -365,7 +387,8 @@ def _load_metadata_template(
                 if not parsed:
                     handle_critical_error(
                         "Metadata template lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}"
+                        f"Problematic entry at {normalized_path} line {line_number}: {stripped}",
+                        exc_cls=ValidationError,
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -389,7 +412,8 @@ def _load_metadata_template(
                 existing_simple.add(identifier)
     except OSError as exc:
         handle_critical_error(
-            f"Unable to read metadata template header file {template_path}: {exc}"
+            f"Unable to read metadata template header file {template_path}: {exc}",
+            exc_cls=ValidationError,
         )
 
     log_message(
@@ -419,13 +443,22 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
     """Return sanitized ``##key=value`` metadata lines from ``metadata_file``."""
 
     if not metadata_file:
-        handle_critical_error("A metadata file path must be provided.")
+        handle_critical_error(
+            "A metadata file path must be provided.",
+            exc_cls=ValidationError,
+        )
 
     normalized_path = os.path.abspath(metadata_file)
     if not os.path.exists(normalized_path):
-        handle_critical_error(f"Metadata file does not exist: {metadata_file}")
+        handle_critical_error(
+            f"Metadata file does not exist: {metadata_file}",
+            exc_cls=ValidationError,
+        )
     if not os.path.isfile(normalized_path):
-        handle_critical_error(f"Metadata file path is not a file: {metadata_file}")
+        handle_critical_error(
+            f"Metadata file path is not a file: {metadata_file}",
+            exc_cls=ValidationError,
+        )
 
     sanitized_lines: List[str] = []
     seen_lines = set()
@@ -442,7 +475,8 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                 if not parsed:
                     handle_critical_error(
                         "Metadata file lines must be in '##key=value' format. "
-                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}"
+                        f"Problematic entry at {normalized_path} line {line_number}: {raw_line.strip()}",
+                        exc_cls=ValidationError,
                     )
                 key, value = parsed
                 sanitized = f"##{key}={value}"
@@ -451,7 +485,10 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
                 sanitized_lines.append(sanitized)
                 seen_lines.add(sanitized)
     except OSError as exc:
-        handle_critical_error(f"Unable to read metadata file {metadata_file}: {exc}")
+        handle_critical_error(
+            f"Unable to read metadata file {metadata_file}: {exc}",
+            exc_cls=ValidationError,
+        )
 
     log_message(
         f"Loaded {len(sanitized_lines)} metadata header line(s) from {normalized_path}",
@@ -537,6 +574,8 @@ def append_metadata_to_merged_vcf(
         )
 
     header_metadata_lines = header_metadata_lines or []
+    joint_temp = f"{merged_vcf}.joint.temp.vcf"
+    filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
 
     expects_gzip = merged_vcf.endswith(".gz")
     final_plain_vcf: Optional[str]
@@ -625,6 +664,8 @@ def append_metadata_to_merged_vcf(
             cleaned = token.strip()
             if not cleaned or cleaned == ".":
                 continue
+    def _cleanup_temp_files():
+        for path in [joint_temp, filtered_temp]:
             try:
                 allele_indices.append(int(cleaned))
             except ValueError:
@@ -781,15 +822,28 @@ def append_metadata_to_merged_vcf(
             except Exception:
                 pass
         handle_critical_error(
-            f"Failed to assemble final anonymized VCF contents: {exc}"
+            f"Failed to assemble final anonymized VCF contents: {exc}",
+            exc_cls=MergeConflictError,
         )
+    finally:
+        try:
+            reader.close()
+        except Exception:
+            pass
 
     if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
+        if pysam is None:
+            _cleanup_temp_files()
+            handle_critical_error(
+                "pysam is required to BGZF-compress and index the anonymized VCF."
+            )
+
         try:
-            pysam.tabix_compress(final_plain_vcf, final_vcf, force=True)
+            final_vcf = f"{final_plain_vcf}.gz"
+            pysam.bgzip(final_plain_vcf, final_vcf, force=True)
             pysam.tabix_index(final_vcf, preset="vcf", force=True)
-            os.remove(final_plain_vcf)
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
+            _cleanup_temp_files()
             if os.path.exists(final_plain_vcf):
                 try:
                     os.remove(final_plain_vcf)
@@ -801,7 +855,8 @@ def append_metadata_to_merged_vcf(
                 except Exception:
                     pass
             handle_critical_error(
-                f"Failed to compress or index anonymized VCF: {exc}"
+                f"Failed to compress or index anonymized VCF: {exc}",
+                exc_cls=MergeConflictError,
             )
     elif not expects_gzip:
         final_vcf = final_plain_vcf
@@ -825,7 +880,8 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
             reader = vcfpy.Reader.from_path(vcf_path)
         except Exception as exc:
             handle_critical_error(
-                f"Failed to open {vcf_path} for AC/AN/AF recalculation: {exc}"
+                f"Failed to open {vcf_path} for AC/AN/AF recalculation: {exc}",
+                exc_cls=MergeConflictError,
             )
 
         records = []
@@ -882,7 +938,10 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
         try:
             writer = vcfpy.Writer.from_path(vcf_path, header)
         except Exception as exc:
-            handle_critical_error(f"Failed to reopen {vcf_path} for writing: {exc}")
+            handle_critical_error(
+                f"Failed to reopen {vcf_path} for writing: {exc}",
+                exc_cls=MergeConflictError,
+            )
 
         try:
             for record in records:
@@ -900,7 +959,10 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
         with opener(vcf_path, "rt", encoding="utf-8") as handle:
             lines = [line.rstrip("\n") for line in handle]
     except OSError as exc:
-        handle_critical_error(f"Failed to open {vcf_path}: {exc}")
+        handle_critical_error(
+            f"Failed to open {vcf_path}: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
     header_lines = []
     records = []
@@ -919,7 +981,8 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
 
     if column_header is None:
         handle_critical_error(
-            f"Failed to parse {vcf_path}: Missing #CHROM header line."
+            f"Failed to parse {vcf_path}: Missing #CHROM header line.",
+            exc_cls=MergeConflictError,
         )
 
     updated_records = []
@@ -1014,7 +1077,10 @@ def _recalculate_cohort_info_tags_without_vcfpy(vcf_path: str) -> None:
             for line in updated_records:
                 handle.write(line + "\n")
     except OSError as exc:
-        handle_critical_error(f"Failed to rewrite {vcf_path}: {exc}")
+        handle_critical_error(
+            f"Failed to rewrite {vcf_path}: {exc}",
+            exc_cls=MergeConflictError,
+        )
 
 
 __all__ = [

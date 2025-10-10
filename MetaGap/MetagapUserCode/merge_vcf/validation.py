@@ -3,20 +3,192 @@
 from __future__ import annotations
 
 import copy
-import glob
 import gzip
 import os
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Iterable, List, Optional
+
+try:  # pragma: no cover - dependency availability checked dynamically
+    import pysam  # type: ignore
+
+    PYSAM_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised when dependency is missing
+    pysam = None  # type: ignore
+    PYSAM_AVAILABLE = False
 
 from . import VCFPY_AVAILABLE, vcfpy
 from .logging_utils import (
+    ValidationError,
     handle_critical_error,
     handle_non_critical_error,
     log_message,
     logger,
 )
 from .merging import preprocess_vcf
+
+
+@dataclass(frozen=True)
+class PreparedVCFInput:
+    """Metadata describing a discovered VCF input file."""
+
+    source_path: str
+    """The path that was originally discovered (may be ``.vcf`` or ``.vcf.gz``)."""
+
+    compressed_path: str
+    """Path to the BGZF-compressed ``.vcf.gz`` representation."""
+
+    index_path: str
+    """Path to the corresponding ``.tbi`` index file."""
+
+
+def _iter_candidate_vcfs(input_dir: str) -> List[str]:
+    """Return sorted candidate VCF paths discovered under *input_dir*."""
+
+    candidates: List[str] = []
+    for root, _, files in os.walk(input_dir):
+        for name in files:
+            lower = name.lower()
+            if lower.endswith(".vcf") or lower.endswith(".vcf.gz"):
+                candidates.append(os.path.join(root, name))
+    candidates.sort()
+    return candidates
+
+
+def _contains_non_ref_alt(record) -> bool:
+    """Return True if *record* includes a symbolic NON_REF alternate allele."""
+
+    for alt in getattr(record, "ALT", []) or []:
+        alt_value = getattr(alt, "value", None)
+        if alt_value in {"<NON_REF>", "NON_REF"}:
+            return True
+        alt_str = str(alt)
+        if alt_str in {"<NON_REF>", "SymbolicAllele('NON_REF')"}:
+            return True
+    return False
+
+
+def discover_and_prepare_inputs(
+    input_dir: str, verbose: bool = False, allow_gvcf: bool = False
+) -> List[PreparedVCFInput]:
+    """Discover VCF inputs, compress/index them, and screen for gVCF markers."""
+
+    if not os.path.isdir(input_dir):
+        handle_critical_error(f"Input directory does not exist: {input_dir}")
+
+    if not PYSAM_AVAILABLE:
+        handle_critical_error(
+            "pysam dependency is required to prepare VCF inputs. Please install pysam."
+        )
+
+    if not VCFPY_AVAILABLE:
+        handle_critical_error(
+            "vcfpy dependency is required to inspect VCF headers. Please install vcfpy."
+        )
+
+    prepared: List[PreparedVCFInput] = []
+    discovered_paths = _iter_candidate_vcfs(input_dir)
+    log_message(
+        f"Discovered {len(discovered_paths)} potential VCF input file(s) in {input_dir}",
+        verbose,
+    )
+
+    for path in discovered_paths:
+        source_path = path
+        compressed_path = path
+        created_compressed = False
+
+        if not path.lower().endswith(".vcf.gz"):
+            compressed_path = path + ".gz"
+            try:
+                pysam.tabix_compress(path, compressed_path, force=True)
+                created_compressed = True
+                log_message(f"Compressed {path} -> {compressed_path}", verbose)
+            except Exception as exc:  # pragma: no cover - defensive logging path
+                handle_non_critical_error(
+                    f"Failed to BGZF-compress {path}: {exc}. Skipping."
+                )
+                continue
+
+        index_path = compressed_path + ".tbi"
+        try:
+            pysam.tabix_index(compressed_path, preset="vcf", force=True)
+            log_message(f"Indexed {compressed_path} -> {index_path}", verbose)
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            handle_non_critical_error(
+                f"Failed to create tabix index for {compressed_path}: {exc}. Skipping."
+            )
+            if created_compressed:
+                try:
+                    if os.path.exists(compressed_path):
+                        os.remove(compressed_path)
+                except OSError:
+                    pass
+            continue
+
+        reader = None
+        skip_file = False
+        try:
+            reader = vcfpy.Reader.from_path(compressed_path)
+            if not allow_gvcf:
+                if is_gvcf_header(reader.header.lines):
+                    handle_non_critical_error(
+                        f"{source_path} appears to be a gVCF based on header metadata. "
+                        "Use --allow-gvcf to include gVCFs. Skipping."
+                    )
+                    skip_file = True
+                else:
+                    try:
+                        from itertools import islice
+
+                        for record in islice(reader, 5):
+                            if _contains_non_ref_alt(record):
+                                handle_non_critical_error(
+                                    f"{source_path} appears to be a gVCF (found <NON_REF> ALT allele). "
+                                    "Use --allow-gvcf to include gVCFs. Skipping."
+                                )
+                                skip_file = True
+                                break
+                    except Exception as exc:
+                        handle_non_critical_error(
+                            f"Failed to inspect records in {source_path}: {exc}. Skipping."
+                        )
+                        skip_file = True
+        except Exception as exc:
+            handle_non_critical_error(
+                f"Could not open {compressed_path} for validation: {exc}. Skipping."
+            )
+            skip_file = True
+        finally:
+            if reader is not None:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+
+        if skip_file:
+            if created_compressed:
+                for cleanup_path in (compressed_path, index_path):
+                    try:
+                        if cleanup_path and os.path.exists(cleanup_path):
+                            os.remove(cleanup_path)
+                    except OSError:
+                        pass
+            continue
+
+        prepared.append(
+            PreparedVCFInput(
+                source_path=source_path,
+                compressed_path=compressed_path,
+                index_path=index_path,
+            )
+        )
+
+    log_message(
+        f"Prepared {len(prepared)} VCF input file(s) for downstream validation.",
+        verbose,
+    )
+    return prepared
 
 
 def is_gvcf_header(header_lines: Iterable) -> bool:
@@ -81,7 +253,7 @@ def normalize_vcf_version(version_value: Optional[str]):
 def find_first_vcf_with_header(input_dir: str, verbose: bool = False):
     """Locate the first readable VCF file and return its header metadata."""
 
-    candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
+    candidates = _iter_candidate_vcfs(input_dir)
     for file_path in candidates:
         try:
             reader = vcfpy.Reader.from_path(file_path)
@@ -231,13 +403,26 @@ def validate_all_vcfs(
 ):
     valid_vcfs: List[str] = []
     log_message(f"Validating all VCF files in {input_dir}", verbose)
+    all_candidates = sorted(glob.glob(os.path.join(input_dir, "*.vcf")))
+    log_message(
+        f"Discovered {len(all_candidates)} VCF shard(s) prior to validation.",
+        verbose,
+    )
     reference_samples: List[str] = []
-    reference_contigs = None
-    reference_info_defs = None
-    reference_format_defs = None
-    for file_path in glob.glob(os.path.join(input_dir, "*.vcf")):
+    reference_contigs: "OrderedDict[str, dict]" | None = None
+    reference_info_defs: "OrderedDict[str, dict]" | None = None
+    reference_filter_defs: "OrderedDict[str, dict]" | None = None
+    reference_format_defs: "OrderedDict[str, dict]" | None = None
+    prepared_inputs = discover_and_prepare_inputs(
+        input_dir, verbose=verbose, allow_gvcf=allow_gvcf
+    )
+
+    for prepared in prepared_inputs:
+        file_path = prepared.source_path
+        opener = gzip.open if file_path.endswith(".gz") else open
+        mode = "rt" if opener is gzip.open else "r"
         try:
-            with open(file_path, "r", encoding="utf-8") as raw_vcf:
+            with opener(file_path, mode, encoding="utf-8") as raw_vcf:
                 header_lines = []
                 for raw_line in raw_vcf:
                     if not raw_line.startswith("#"):
@@ -269,19 +454,22 @@ def validate_all_vcfs(
                 reader = vcfpy.Reader.from_path(preprocessed_file)
             except Exception as exc:
                 handle_critical_error(
-                    f"Failed to reopen {file_path} after validation: {exc}."
+                    f"Failed to reopen {file_path} after validation: {exc}.",
+                    exc_cls=ValidationError,
                 )
             try:
                 header = reader.header
 
                 current_samples = list(header.samples.names)
                 current_contigs = _extract_header_definitions(header, "contig")
+                current_filter_defs = _extract_header_definitions(header, "FILTER")
                 current_info_defs = _extract_header_definitions(header, "INFO")
                 current_format_defs = _extract_header_definitions(header, "FORMAT")
 
                 if not reference_samples:
                     reference_samples = list(current_samples)
                     reference_contigs = current_contigs
+                    reference_filter_defs = current_filter_defs
                     reference_info_defs = current_info_defs
                     reference_format_defs = current_format_defs
                 else:
@@ -309,22 +497,83 @@ def validate_all_vcfs(
                             "Contig definitions differ between VCF shards. MetaGap assumes vertical "
                             "concatenation of shards, so headers must match across shards. "
                             f"Expected contigs: {list(reference_contigs.keys())}; found in {file_path}: "
-                            f"{list(current_contigs.keys())}."
+                            f"{list(current_contigs.keys())}.",
+                            exc_cls=ValidationError,
                         )
                     if current_info_defs != reference_info_defs:
                         handle_critical_error(
                             "INFO field definitions differ between VCF shards. MetaGap assumes "
                             "vertical concatenation of shards, so headers must match across shards. "
                             f"Expected INFO IDs: {list(reference_info_defs.keys())}; found in {file_path}: "
-                            f"{list(current_info_defs.keys())}."
+                            f"{list(current_info_defs.keys())}.",
+                            exc_cls=ValidationError,
                         )
                     if current_format_defs != reference_format_defs:
                         handle_critical_error(
                             "FORMAT field definitions differ between VCF shards. MetaGap assumes "
                             "vertical concatenation of shards, so headers must match across shards. "
                             f"Expected FORMAT IDs: {list(reference_format_defs.keys())}; found in {file_path}: "
-                            f"{list(current_format_defs.keys())}."
+                            f"{list(current_format_defs.keys())}.",
+                            exc_cls=ValidationError,
                         )
+                    if reference_contigs is None:
+                        reference_contigs = OrderedDict()
+                    for contig_id, mapping in current_contigs.items():
+                        existing = reference_contigs.get(contig_id)
+                        if existing is None:
+                            reference_contigs[contig_id] = mapping
+                            continue
+                        if existing != mapping:
+                            handle_critical_error(
+                                "Contig header definitions conflict across shards. "
+                                f"For contig '{contig_id}', previous definition was {existing!r} "
+                                f"but {file_path} defines {mapping!r}."
+                            )
+
+                    if reference_filter_defs is None:
+                        reference_filter_defs = OrderedDict()
+                    for filter_id, mapping in current_filter_defs.items():
+                        existing = reference_filter_defs.get(filter_id)
+                        if existing is None:
+                            reference_filter_defs[filter_id] = mapping
+                            continue
+                        if existing.get("Description") != mapping.get("Description"):
+                            handle_critical_error(
+                                "FILTER header definitions conflict across shards. "
+                                f"For filter '{filter_id}', previous Description was "
+                                f"{existing.get('Description')!r} but {file_path} defines "
+                                f"{mapping.get('Description')!r}."
+                            )
+
+                    if reference_info_defs is None:
+                        reference_info_defs = OrderedDict()
+                    for info_id, mapping in current_info_defs.items():
+                        existing = reference_info_defs.get(info_id)
+                        if existing is None:
+                            reference_info_defs[info_id] = mapping
+                            continue
+                        for key in ("Number", "Type", "Description"):
+                            if existing.get(key) != mapping.get(key):
+                                handle_critical_error(
+                                    "INFO header definitions conflict across shards. "
+                                    f"For INFO '{info_id}', field '{key}' differed: "
+                                    f"{existing.get(key)!r} vs {mapping.get(key)!r} in {file_path}."
+                                )
+
+                    if reference_format_defs is None:
+                        reference_format_defs = OrderedDict()
+                    for format_id, mapping in current_format_defs.items():
+                        existing = reference_format_defs.get(format_id)
+                        if existing is None:
+                            reference_format_defs[format_id] = mapping
+                            continue
+                        for key in ("Number", "Type", "Description"):
+                            if existing.get(key) != mapping.get(key):
+                                handle_critical_error(
+                                    "FORMAT header definitions conflict across shards. "
+                                    f"For FORMAT '{format_id}', field '{key}' differed: "
+                                    f"{existing.get(key)!r} vs {mapping.get(key)!r} in {file_path}."
+                                )
 
                 contig_order = {name: idx for idx, name in enumerate(current_contigs.keys())}
                 last_contig_index = None
@@ -337,7 +586,8 @@ def validate_all_vcfs(
                         if chrom not in contig_order:
                             handle_critical_error(
                                 f"Encountered unknown contig '{chrom}' in {file_path}. MetaGap assumes vertical "
-                                "concatenation of shards with consistent headers."
+                                "concatenation of shards with consistent headers.",
+                                exc_cls=ValidationError,
                             )
                         contig_index = contig_order[chrom]
                         if last_contig_index is None:
@@ -352,7 +602,8 @@ def validate_all_vcfs(
                             handle_critical_error(
                                 f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
                                 f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
-                                "so input shards must already be sorted."
+                                "so input shards must already be sorted.",
+                                exc_cls=ValidationError,
                             )
 
                         last_contig_index = contig_index
@@ -367,7 +618,8 @@ def validate_all_vcfs(
                                 handle_critical_error(
                                     f"VCF shard {file_path} is not coordinate-sorted: encountered {chrom}:{pos} after "
                                     f"{last_contig_name}:{last_position}. MetaGap assumes vertical concatenation of shards, "
-                                    "so input shards must already be sorted."
+                                    "so input shards must already be sorted.",
+                                    exc_cls=ValidationError,
                                 )
                         else:
                             last_contig_name = chrom
@@ -392,8 +644,15 @@ def validate_all_vcfs(
         else:
             log_message(f"File {file_path} failed validation and is skipped.", verbose)
     if not valid_vcfs:
-        handle_critical_error("No valid VCF files remain after validation. Aborting.")
+        handle_critical_error(
+            "No valid VCF files remain after validation. Aborting.",
+            exc_cls=ValidationError,
+        )
     log_message("Validation completed. Valid VCF files: " + ", ".join(valid_vcfs), verbose)
+    log_message(
+        f"Validation summary: {len(valid_vcfs)} of {len(all_candidates)} shard(s) passed.",
+        verbose,
+    )
     return valid_vcfs, reference_samples
 
 
@@ -480,11 +739,15 @@ def _read_vcf_without_vcfpy(file_path: str):
                 if line.strip():
                     records.append(line)
     except OSError as exc:
-        handle_critical_error(f"Could not open {file_path}: {exc}.")
+        handle_critical_error(
+            f"Could not open {file_path}: {exc}.",
+            exc_cls=ValidationError,
+        )
 
     if not column_header_seen:
         handle_critical_error(
-            f"Could not open {file_path}: Missing #CHROM header line."
+            f"Could not open {file_path}: Missing #CHROM header line.",
+            exc_cls=ValidationError,
         )
 
     return header_lines, records
@@ -498,11 +761,13 @@ def _validate_merged_vcf_without_vcfpy(merged_vcf: str, verbose: bool = False):
     normalized_headers = [line.lower() for line in header_lines]
     if not any(line.startswith("##fileformat=") for line in normalized_headers):
         handle_critical_error(
-            f"Missing required meta-information: ##fileformat in {merged_vcf} header."
+            f"Missing required meta-information: ##fileformat in {merged_vcf} header.",
+            exc_cls=ValidationError,
         )
     if not any(line.startswith("##reference=") for line in normalized_headers):
         handle_critical_error(
-            f"Missing required meta-information: ##reference in {merged_vcf} header."
+            f"Missing required meta-information: ##reference in {merged_vcf} header.",
+            exc_cls=ValidationError,
         )
 
     info_definitions = {}
@@ -573,7 +838,10 @@ def _validate_merged_vcf_without_vcfpy(merged_vcf: str, verbose: bool = False):
 def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
     log_message(f"Starting validation of merged VCF: {merged_vcf}", verbose)
     if not os.path.isfile(merged_vcf):
-        handle_critical_error(f"Merged VCF file {merged_vcf} does not exist.")
+        handle_critical_error(
+            f"Merged VCF file {merged_vcf} does not exist.",
+            exc_cls=ValidationError,
+        )
 
     if not VCFPY_AVAILABLE:
         _validate_merged_vcf_without_vcfpy(merged_vcf, verbose=verbose)
@@ -592,13 +860,20 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
                 if gz_stream is not None:
                     gz_stream.close()
                 handle_critical_error(
-                    f"Could not open {merged_vcf}: {gzip_exc}."
+                    f"Could not open {merged_vcf}: {gzip_exc}.",
+                    exc_cls=ValidationError,
                 )
         else:
-            handle_critical_error(f"Could not open {merged_vcf}: {exc}.")
+            handle_critical_error(
+                f"Could not open {merged_vcf}: {exc}.",
+                exc_cls=ValidationError,
+            )
 
     if reader is None:
-        handle_critical_error(f"Could not open {merged_vcf}: Unknown error.")
+        handle_critical_error(
+            f"Could not open {merged_vcf}: Unknown error.",
+            exc_cls=ValidationError,
+        )
 
     header = reader.header
     required_meta = ["fileformat", "reference"]
@@ -610,7 +885,8 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
                 break
         if not found:
             handle_critical_error(
-                f"Missing required meta-information: ##{meta} in {merged_vcf} header."
+                f"Missing required meta-information: ##{meta} in {merged_vcf} header.",
+                exc_cls=ValidationError,
             )
 
     defined_info_ids = OrderedDict()
@@ -710,6 +986,8 @@ def validate_merged_vcf(merged_vcf: str, verbose: bool = False):
 
 
 __all__ = [
+    "PreparedVCFInput",
+    "discover_and_prepare_inputs",
     "is_gvcf_header",
     "normalize_vcf_version",
     "find_first_vcf_with_header",

@@ -51,7 +51,7 @@ def metadata_module(monkeypatch):
     monkeypatch.setattr(module, "template_header_lines", [], raising=False)
     monkeypatch.setattr(module, "template_serialized_sample", None, raising=False)
 
-    def raise_critical(message):
+    def raise_critical(message, **_kwargs):
         raise CriticalMetadataError(message)
 
     monkeypatch.setattr(module, "handle_critical_error", raise_critical, raising=False)

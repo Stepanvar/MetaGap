@@ -5,10 +5,13 @@ from __future__ import annotations
 import copy
 import datetime
 import gzip
+import logging
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from typing import Sequence
 
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -68,12 +71,12 @@ class _StubCall:
 class _StubRecord:
     """Simple record carrying FORMAT/call data for padding tests."""
 
-    def __init__(self, sample: str, genotype):
+    def __init__(self, sample: str, genotype, alt: Sequence[str] | None = None):
         self.CHROM = "1"
         self.POS = 100
         self.ID = "."
         self.REF = "A"
-        self.ALT = ["G"]
+        self.ALT = list(alt) if alt is not None else ["G"]
         self.QUAL = "."
         self.FILTER = []
         self.INFO = {}
@@ -104,6 +107,45 @@ class _StubRecord:
         self.call_for_sample = {call.sample: call for call in self.calls}
 
 
+class _MultiSampleRecord:
+    """Record supporting multiple samples for _merge_colliding_records tests."""
+
+    def __init__(self, format_keys, sample_data, *, chrom="1", pos=100, ref="A", alt=None):
+        self.CHROM = chrom
+        self.POS = pos
+        self.ID = "."
+        self.REF = ref
+        self.ALT = list(alt or ["G"])
+        self.QUAL = "."
+        self.FILTER = []
+        self.INFO = {}
+        self.FORMAT = list(format_keys)
+        self.calls = [_StubCall(sample, dict(data)) for sample, data in sample_data.items()]
+        self.call_for_sample = {call.sample: call for call in self.calls}
+
+    def copy(self) -> "_MultiSampleRecord":
+        duplicate = _MultiSampleRecord.__new__(_MultiSampleRecord)
+        duplicate.CHROM = self.CHROM
+        duplicate.POS = self.POS
+        duplicate.ID = self.ID
+        duplicate.REF = self.REF
+        duplicate.ALT = list(self.ALT)
+        duplicate.QUAL = self.QUAL
+        duplicate.FILTER = list(self.FILTER)
+        duplicate.INFO = dict(self.INFO)
+        duplicate.FORMAT = list(self.FORMAT)
+        duplicate.calls = [call.copy() for call in self.calls]
+        duplicate.call_for_sample = {call.sample: call for call in duplicate.calls}
+        return duplicate
+
+    def __deepcopy__(self, memo) -> "_MultiSampleRecord":  # pragma: no cover - delegation
+        return self.copy()
+
+    def update_calls(self, updated_calls):
+        self.calls = [call for call in updated_calls]
+        self.call_for_sample = {call.sample: call for call in self.calls}
+
+
 def _header_with_formats(sample_names):
     header = SimpleNamespace()
     header.samples = SimpleNamespace(names=list(sample_names))
@@ -118,6 +160,40 @@ def _header_with_formats(sample_names):
     header.get_format_field_info = _get_format_field_info
     header.copy = lambda: _header_with_formats(header.samples.names)
     return header
+
+
+def test_merge_colliding_records_recomputes_allele_metrics(monkeypatch):
+    header = _header_with_formats(["S1", "S2"])
+    sample_order = ["S1", "S2"]
+
+    monkeypatch.setattr(merging.vcfpy, "Call", _StubCall)
+
+    record_a = _StubRecord("S1", "0/1")
+    record_a.INFO.update({"AC": [99], "AN": 99, "AF": [0.99]})
+
+    record_b = _StubRecord("S2", "1/1")
+    record_b.INFO.update({"AC": [1], "AN": 2, "AF": [0.5]})
+
+    merged = merging._merge_colliding_records(
+        [(record_a, 0), (record_b, 1)], header, sample_order
+    )
+
+    merging._recompute_ac_an_af(merged)
+
+    assert merged.INFO["AC"] == [3]
+    assert merged.INFO["AN"] == 4
+    assert merged.INFO["AF"] == [pytest.approx(0.75)]
+
+    zero_alt = merged.copy()
+    zero_alt.INFO.update({"AC": [7], "AN": 8, "AF": [1.0]})
+    for call in zero_alt.calls:
+        call.data["GT"] = "./."
+
+    merging._recompute_ac_an_af(zero_alt)
+
+    assert zero_alt.INFO["AC"] == [0]
+    assert zero_alt.INFO["AN"] == 0
+    assert zero_alt.INFO["AF"] == [0.0]
 
 
 def test_pad_record_samples_adds_missing_calls(monkeypatch):
@@ -155,12 +231,55 @@ def test_pad_record_samples_normalizes_blank_genotypes():
     assert record.call_for_sample["S1"].data["GT"] == "./."
 
 
+def test_merge_colliding_records_pads_missing_samples():
+    header = _header_with_formats(["X", "Y"])
+
+    def _format_info(key):
+        if key == "GT":
+            return SimpleNamespace(number="1")
+        if key == "DP":
+            return SimpleNamespace(number="1")
+        if key == "AD":
+            return SimpleNamespace(number="R")
+        return None
+
+    header.get_format_field_info = _format_info
+
+    left = _MultiSampleRecord(["GT", "DP"], {"X": {"GT": "0/1", "DP": 12}})
+    right = _MultiSampleRecord(["GT", "AD"], {"X": {"GT": "0/0", "AD": [3, 5]}})
+
+    merged = merging._merge_colliding_records(
+        [(left, 0), (right, 1)],
+        header,
+        ["X", "Y"],
+    )
+
+    assert set(merged.call_for_sample) == {"X", "Y"}
+    y_call = merged.call_for_sample["Y"].data
+    assert y_call["GT"] == "./."
+    assert y_call["DP"] is None
+    assert y_call["AD"] == []
+
+
 def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     sample_order = ["S1", "S2"]
 
+    def _with_format_info(header):
+        def _format_info(key):
+            if key == "GT":
+                return SimpleNamespace(number="1")
+            if key == "DP":
+                return SimpleNamespace(number="1")
+            if key == "AD":
+                return SimpleNamespace(number="R")
+            return None
+
+        header.get_format_field_info = _format_info
+        return header
+
     def fake_union_headers(paths, sample_order=None):
         names = sample_order if sample_order is not None else ["S1"]
-        return _header_with_formats(names)
+        return _with_format_info(_header_with_formats(names))
 
     monkeypatch.setattr(merging, "union_headers", fake_union_headers)
     monkeypatch.setattr(merging, "apply_metadata_to_header", lambda header, **_: header)
@@ -171,10 +290,18 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
 
     reader_instances = {}
 
+    format_header = _with_format_info(_header_with_formats(sample_order))
+
+    records_by_path: dict[str, list[_MultiSampleRecord]] = {}
+    headers_by_path: dict[str, SimpleNamespace] = {}
+
     class _Reader:
         def __init__(self, path):
-            self.header = _header_with_formats(["S1"])
-            self._records = [_StubRecord("S1", "0/1")]
+            path = str(path)
+            template_header = headers_by_path.get(path, format_header)
+            self.header = template_header.copy()
+            templates = records_by_path.get(path, [])
+            self._records = [record.copy() for record in templates]
 
         def __iter__(self):
             for record in self._records:
@@ -196,6 +323,8 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
 
         def close(self):
             self._handle.close()
+            headers_by_path[str(self.path)] = self.header
+            records_by_path[str(self.path)] = [record.copy() for record in self.records]
             reader_instances["writer"] = self
 
     def fake_reader_from_path(path):
@@ -213,6 +342,11 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
             writer = _Writer(path, header)
             reader_instances["writer"] = writer
             return writer
+
+    def _register_input(path: Path, records: list[_MultiSampleRecord], samples=None):
+        sample_names = list(samples) if samples is not None else ["S1"]
+        headers_by_path[str(path)] = _with_format_info(_header_with_formats(sample_names))
+        records_by_path[str(path)] = [record.copy() for record in records]
 
     monkeypatch.setattr(merging.vcfpy, "Call", _StubCall)
     monkeypatch.setattr(merging.vcfpy, "Reader", _ReaderFactory)
@@ -243,19 +377,133 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     monkeypatch.setattr(merging, "subprocess", SimpleNamespace(run=fake_run))
 
     output_dir = tmp_path
-    input_path = output_dir / "sample1.vcf"
-    input_path.write_text("placeholder")
+    input_path_1 = output_dir / "sample1.vcf"
+    input_path_2 = output_dir / "sample2.vcf"
+    input_path_1.write_text("placeholder")
+    input_path_2.write_text("placeholder")
 
-    result_path = merging.merge_vcfs([str(input_path)], str(output_dir), sample_order=sample_order)
+    record_a = _MultiSampleRecord(["GT", "DP"], {"S1": {"GT": "0/1", "DP": 9}})
+    record_b = _MultiSampleRecord(["GT", "AD"], {"S1": {"GT": "0/0", "AD": [4, 6]}})
+
+    _register_input(input_path_1, [record_a], samples=["S1"])
+    _register_input(input_path_2, [record_b], samples=["S1"])
+
+    result_path = merging.merge_vcfs(
+        [str(input_path_1), str(input_path_2)],
+        str(output_dir),
+        sample_order=sample_order,
+    )
 
     writer = reader_instances["writer"]
     assert writer.records, "Expected merge to emit at least one record"
     merged_record = writer.records[0]
 
     assert set(merged_record.call_for_sample) == {"S1", "S2"}
-    assert merged_record.call_for_sample["S2"].data["GT"] == "./."
-    assert merged_record.call_for_sample["S1"].data["GT"] == "0/1"
+    s1_call = merged_record.call_for_sample["S1"].data
+    s2_call = merged_record.call_for_sample["S2"].data
+
+    assert s2_call["GT"] == "./."
+    assert s2_call["DP"] is None
+    assert s2_call["AD"] == []
+    assert s1_call["GT"] == "0/0"
+    assert s1_call["DP"] is None
+    assert s1_call["AD"] == [4, 6]
+    assert merged_record.FORMAT == ["GT", "DP", "AD"]
     assert result_path.endswith(".gz")
+
+
+def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path, caplog):
+    class _Variant:
+        def __init__(self, qual, an, filters):
+            self.QUAL = qual
+            self.INFO = {"AN": an} if an is not None else {}
+            self.FILTER = list(filters)
+
+    records = [
+        _Variant(qual=60, an=120, filters=[]),
+        _Variant(qual=10, an=200, filters=["PASS"]),
+        _Variant(qual=80, an=20, filters=["PASS"]),
+        _Variant(qual=70, an=200, filters=["q10"]),
+        _Variant(qual=90, an=200, filters=["q10", "LowQual"]),
+    ]
+
+    input_path = tmp_path / "variants.vcf"
+    input_path.write_text("placeholder")
+
+    reader_instances = []
+    writer_instances = []
+
+    class _FakeReader:
+        def __init__(self, path):
+            assert str(path) == str(input_path)
+            self.header = SimpleNamespace()
+            self.closed = False
+
+        def __iter__(self):
+            for record in records:
+                yield record
+
+        def close(self):
+            self.closed = True
+
+    class _ReaderFactory:
+        @staticmethod
+        def from_path(path):
+            reader = _FakeReader(path)
+            reader_instances.append(reader)
+            return reader
+
+    class _FakeWriter:
+        def __init__(self, path, header):
+            assert path.endswith(".filtered")
+            self.path = Path(path)
+            self.header = header
+            self.records = []
+            self.closed = False
+            self._handle = self.path.open("w", encoding="utf-8")
+
+        def write_record(self, record):
+            self.records.append(record)
+            self._handle.write("record\n")
+
+        def close(self):
+            if not self.closed:
+                self._handle.close()
+                self.closed = True
+
+    class _WriterFactory:
+        @staticmethod
+        def from_path(path, header):
+            writer = _FakeWriter(path, header)
+            writer_instances.append(writer)
+            return writer
+
+    monkeypatch.setattr(merging.vcfpy, "Reader", _ReaderFactory)
+    monkeypatch.setattr(merging.vcfpy, "Writer", _WriterFactory)
+
+    with caplog.at_level(logging.INFO, logger="vcf_merger"):
+        merging._filter_vcf_records(
+            str(input_path),
+            qual_threshold=20,
+            an_threshold=50,
+            allowed_filter_values=("PASS", "q10"),
+            verbose=False,
+        )
+
+    reader = reader_instances[0]
+    writer = writer_instances[0]
+
+    assert reader.closed
+    assert writer.closed
+    assert writer.records == [records[0], records[3]]
+
+    final_lines = input_path.read_text().splitlines()
+    assert len(final_lines) == 2
+
+    summary_messages = [
+        rec.message for rec in caplog.records if "Applied variant filter" in rec.message
+    ]
+    assert summary_messages == ["Applied variant filter: kept 2 of 5."]
 
 
 def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):

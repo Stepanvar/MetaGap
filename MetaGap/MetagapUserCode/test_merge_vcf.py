@@ -78,13 +78,32 @@ def run_workflow(args=None):
     if args is None:
         args = parse_arguments()
     verbose = args.verbose
+    parse_kwargs = {}
+    try:
+        import inspect
+
+        signature = inspect.signature(parse_metadata_arguments)
+        if "log_message" in signature.parameters:
+            parse_kwargs["log_message"] = log_message
+        if "handle_critical_error" in signature.parameters:
+            parse_kwargs["handle_critical_error"] = handle_critical_error
+    except (ImportError, ValueError):  # pragma: no cover - defensive guard
+        parse_kwargs = {
+            "log_message": log_message,
+            "handle_critical_error": handle_critical_error,
+        }
+
     (
         sample_header_line,
         simple_header_lines,
         sample_metadata_entries,
         sanitized_header_lines,
         serialized_sample_line,
-    ) = parse_metadata_arguments(args, verbose)
+    ) = parse_metadata_arguments(
+        args,
+        verbose,
+        **parse_kwargs,
+    )
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

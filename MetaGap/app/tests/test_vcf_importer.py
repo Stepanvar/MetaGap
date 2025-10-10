@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from ..models import AlleleFrequency, SampleGroup
@@ -101,6 +102,32 @@ class VCFImporterTests(TestCase):
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 2\t4444\trsFallback\tT\tC\t42\tPASS\t.\tGT\t0/1
+"""
+
+    VCF_WITH_UNSUPPORTED_PLATFORM = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=PlatformGroup,Description=Unsupported platform>
+##SEQUENCING_PLATFORM=<Platform=GalacticSeq,Instrument=Galaxy5000,platform_key=extra>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+4\t5555\trsPlatform\tA\tC\t90\tPASS\tDP=25;UNDECLARED=foo\tGT:XY\t0/1:baz
+"""
+
+    VCF_WITH_UNKNOWN_METADATA_SECTION = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##SAMPLE_PLATFORM=<ID=BadGroup,Description=Should fail>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t123\t.\tA\tT\t50\tPASS\tDP=10\tGT\t0/1
+"""
+
+    VCF_WITH_UNDEFINED_INFO_AND_FORMAT = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=UndefinedGroup,Description=Undefined fields>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+3\t7777\tundef\tG\tA\t60\tPASS\tDP=.;MISSING=.;UNDECLARED=3\tGT:XY\t0/1:abc
 """
 
     def setUp(self) -> None:
@@ -287,7 +314,8 @@ class VCFImporterTests(TestCase):
             additional.get("platform_independent_instrument"),
             "CustomSeq",
         )
-        self.assertEqual(importer.warnings, [])
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Unsupported sequencing platform", importer.warnings[0])
 
     def test_import_without_sample_name_falls_back_to_filename(self) -> None:
         importer, sample_group = self._import(
@@ -298,6 +326,52 @@ class VCFImporterTests(TestCase):
         self.assertEqual(sample_group.name, "fallback_dataset")
         self.assertIsNone(sample_group.comments)
         self.assertIsNone(sample_group.additional_metadata)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_collects_warning_for_unsupported_platform_section(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_UNSUPPORTED_PLATFORM,
+            filename="unsupported_platform.vcf",
+        )
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertEqual(allele.info.dp, "25")
+        self.assertEqual(allele.info.additional.get("undeclared"), "foo")
+        self.assertEqual(allele.format.additional.get("xy"), "baz")
+
+        self.assertTrue(
+            any(
+                "Unsupported sequencing platform" in warning
+                for warning in importer.warnings
+            ),
+        )
+
+    def test_import_raises_for_unknown_metadata_section(self) -> None:
+        path = self._write_vcf(
+            self.VCF_WITH_UNKNOWN_METADATA_SECTION,
+            filename="unknown_section.vcf",
+        )
+        importer = VCFImporter(self.user)
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Unsupported metadata section 'SAMPLE_PLATFORM'",
+        ):
+            importer.import_file(str(path))
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_handles_undefined_info_and_format_fields(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_UNDEFINED_INFO_AND_FORMAT,
+            filename="undefined_fields.vcf",
+        )
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertIsNone(allele.info.dp)
+        self.assertIsNone(allele.info.additional.get("missing"))
+        self.assertEqual(allele.info.additional.get("undeclared"), "3")
+        self.assertEqual(allele.format.genotype, "0/1")
+        self.assertEqual(allele.format.additional.get("xy"), "abc")
         self.assertEqual(importer.warnings, [])
 
     @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("boom"))

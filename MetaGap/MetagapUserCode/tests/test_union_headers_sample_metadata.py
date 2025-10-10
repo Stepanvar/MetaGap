@@ -32,25 +32,33 @@ def _write_vcf_with_samples(path, samples):
 def _write_vcf_with_contigs_and_samples(path, contigs, samples):
     sample_columns = "\t".join(samples)
     sample_calls = "\t".join("0/1" for _ in samples)
-    lines = [
-        "##fileformat=VCFv4.2",
-        "##reference=GRCh38",
+
+    contig_lines = [f"##contig=<ID={c},length=1000>" for c in contigs]
+    records = [
+        "\t".join(
+            [
+                str(c),
+                str(1000 + i + 1),
+                ".",
+                "A",
+                "C",
+                ".",
+                "PASS",
+                ".",
+                "GT",
+                sample_calls,
+            ]
+        )
+        for i, c in enumerate(contigs)
     ]
-    lines.extend(f"##contig=<ID={contig}>" for contig in contigs)
-    lines.append(
-        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_columns}".format(
-            sample_columns=sample_columns
-        )
+
+    content = (
+        ["##fileformat=VCFv4.2", "##reference=GRCh38"]
+        + contig_lines
+        + [f"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_columns}"]
+        + records
     )
-    for index, contig in enumerate(contigs, start=1):
-        lines.append(
-            "{contig}\t{pos}\t.\tA\tC\t.\tPASS\t.\tGT\t{sample_calls}".format(
-                contig=contig, pos=1000 + index, sample_calls=sample_calls
-            )
-        )
-
-    path.write_text("\n".join(lines) + "\n")
-
+    path.write_text("\n".join(content) + "\n", encoding="utf-8")
 
 def test_union_headers_merges_sample_metadata(tmp_path, merge_script_module):
     module = merge_script_module
@@ -123,6 +131,11 @@ def test_union_headers_respects_explicit_sample_order(tmp_path, merge_script_mod
 
     assert list(header.contigs.keys()) == ["1", "2", "3", "4"]
     assert header.samples.names == ["C", "B", "A"]
+    reordered = module.union_headers(
+        [str(vcf_ab), str(vcf_c)], sample_order=["C", "B", "A"]
+    )
+
+    assert reordered.samples.names == ["C", "B", "A"]
 
 
 def test_union_headers_merges_format_and_filter_definitions(

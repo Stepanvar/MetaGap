@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import gzip
 import logging
 import re
-from typing import Any, Dict, Iterable, Optional, Tuple
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, Iterable, Iterator, Optional, TextIO
 
 from django.core.exceptions import ValidationError
 
@@ -18,15 +21,29 @@ from .vcf_metadata import (
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
 def extract_metadata_text_fallback(
     file_path: str, warnings: Optional[list[str]] = None
 ) -> Dict[str, Any]:
+    """Open a VCF file as text, transparently handling gzip compression."""
+
+    path = Path(file_path)
+    suffixes = {suffix.lower() for suffix in path.suffixes}
+    if {".gz", ".bgz"} & suffixes:
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            yield handle
+    else:
+        with path.open("r", encoding="utf-8") as handle:
+            yield handle
+
+
+def extract_metadata_text_fallback(file_path: str) -> Dict[str, Any]:
     """Extract metadata from a VCF file via text parsing."""
 
     metadata: Dict[str, Any] = {}
     parser = VCFMetadataParser(warnings)
     try:
-        with open(file_path, "r", encoding="utf-8") as handle:
+        with open_vcf_text(file_path) as handle:
             for line in handle:
                 stripped = line.strip()
                 if not stripped:
@@ -67,7 +84,7 @@ def parse_vcf_text_fallback(
     warnings_list = warnings if warnings is not None else None
 
     try:
-        with open(file_path, "r", encoding="utf-8") as handle:
+        with open_vcf_text(file_path) as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
                 if not stripped:

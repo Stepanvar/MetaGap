@@ -768,15 +768,12 @@ def append_metadata_to_merged_vcf(
     serialized_sample_line=None,
     sample_header_entries=None,
     simple_header_lines=None,
+    *,
     qual_threshold: Optional[float] = DEFAULT_QUAL_THRESHOLD,
     an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
     allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
     verbose: bool = False,
-    *,
-    qual_threshold: Optional[float] = 30.0,
-    an_threshold: Optional[float] = 50.0,
-    allowed_filter_values: Optional[Sequence[str]] = None,
-):
+) -> None:
     """Finalize the merged VCF by applying in-Python processing and metadata."""
 
     if not PYSAM_AVAILABLE or not VCFPY_AVAILABLE:  # pragma: no cover - defensive
@@ -984,7 +981,7 @@ def append_metadata_to_merged_vcf(
             ]
         )
 
-  def append_metadata_to_merged_vcf(
+    def append_metadata_to_merged_vcf(
     merged_vcf: str,
     sample_metadata_entries=None,
     header_metadata_lines=None,
@@ -993,30 +990,30 @@ def append_metadata_to_merged_vcf(
     an_threshold: Optional[float] = DEFAULT_AN_THRESHOLD,
     allowed_filter_values: Optional[Sequence[str]] = DEFAULT_ALLOWED_FILTER_VALUES,
     verbose: bool = False,
-):
-    """Finalize the merged VCF by applying metadata, AC/AN/AF recomputation, filtering, anonymization, and optional BGZF+Tabix."""
-    if not PYSAM_AVAILABLE or not VCFPY_AVAILABLE:  # pragma: no cover
-        handle_critical_error("vcfpy and pysam must be available to finalize the merged VCF output.")
+    ):
+        """Finalize the merged VCF by applying metadata, AC/AN/AF recomputation, filtering, anonymization, and optional BGZF+Tabix."""
+        if not PYSAM_AVAILABLE or not VCFPY_AVAILABLE:  # pragma: no cover
+            handle_critical_error("vcfpy and pysam must be available to finalize the merged VCF output.")
 
-    header_metadata_lines = header_metadata_lines or []
+        header_metadata_lines = header_metadata_lines or []
 
-    # Decide final output names from input suffix.
-    expects_gzip = merged_vcf.endswith(".gz")
-    if merged_vcf.endswith(".vcf.gz"):
-        base = merged_vcf[: -len(".vcf.gz")]
-        final_plain_vcf = f"{base}.anonymized.vcf"
-        final_vcf = f"{final_plain_vcf}.gz"
-    elif merged_vcf.endswith(".vcf"):
-        base = merged_vcf[: -len(".vcf")]
-        final_plain_vcf = f"{base}.anonymized.vcf"
-        final_vcf = final_plain_vcf
-    elif merged_vcf.endswith(".gz"):
-        base = merged_vcf[: -len(".gz")]
-        final_plain_vcf = f"{base}.anonymized.vcf"
-        final_vcf = f"{final_plain_vcf}.gz"
-    else:
-        final_plain_vcf = f"{merged_vcf}.anonymized.vcf"
-        final_vcf = final_plain_vcf
+        # Decide final output names from input suffix.
+        expects_gzip = merged_vcf.endswith(".gz")
+        if merged_vcf.endswith(".vcf.gz"):
+            base = merged_vcf[: -len(".vcf.gz")]
+            final_plain_vcf = f"{base}.anonymized.vcf"
+            final_vcf = f"{final_plain_vcf}.gz"
+        elif merged_vcf.endswith(".vcf"):
+            base = merged_vcf[: -len(".vcf")]
+            final_plain_vcf = f"{base}.anonymized.vcf"
+            final_vcf = final_plain_vcf
+        elif merged_vcf.endswith(".gz"):
+            base = merged_vcf[: -len(".gz")]
+            final_plain_vcf = f"{base}.anonymized.vcf"
+            final_vcf = f"{final_plain_vcf}.gz"
+        else:
+            final_plain_vcf = f"{merged_vcf}.anonymized.vcf"
+            final_vcf = final_plain_vcf
 
     # ----- Build final header (line-based) -----
     def _read_header_lines(path: str) -> list[str]:

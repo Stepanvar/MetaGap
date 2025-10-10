@@ -211,21 +211,51 @@ class VCFDatabaseWriter:
         field_name: str,
         aliases: Iterable[str],
     ) -> Optional[str]:
-        section_key = normalize_metadata_key(section)
-        field_key = normalize_metadata_key(field_name)
-        primary_candidates = {
-            field_key,
-            f"{section_key}_{field_key}",
-        }
+        def _dedupe_append(collection: list[str], candidate: str) -> None:
+            if candidate and candidate not in collection:
+                collection.append(candidate)
+
+        normalized_section = normalize_metadata_key(section)
+        normalized_field = normalize_metadata_key(field_name)
+
+        alias_candidates: list[str] = []
+        for candidate in (str(field_name), normalized_field):
+            _dedupe_append(alias_candidates, candidate)
 
         for alias in aliases:
-            alias_key = normalize_metadata_key(alias)
-            primary_candidates.add(alias_key)
-            primary_candidates.add(f"{section_key}_{alias_key}")
+            alias_text = str(alias)
+            normalized_alias = normalize_metadata_key(alias_text)
+            _dedupe_append(alias_candidates, alias_text)
+            _dedupe_append(alias_candidates, normalized_alias)
 
-        for candidate in primary_candidates:
+        candidate_order: list[str] = []
+        for section_variant in (section, normalized_section):
+            if not section_variant:
+                continue
+            for alias_candidate in alias_candidates:
+                _dedupe_append(
+                    candidate_order, f"{section_variant}_{alias_candidate}"
+                )
+
+        for alias_candidate in alias_candidates:
+            _dedupe_append(candidate_order, alias_candidate)
+
+        for candidate in candidate_order:
             if candidate in metadata:
                 return candidate
+
+        normalized_lookup: Dict[str, str] = {}
+        for key in metadata.keys():
+            normalized_key = normalize_metadata_key(key)
+            if normalized_key not in normalized_lookup:
+                normalized_lookup[normalized_key] = key
+
+        for candidate in candidate_order:
+            normalized_candidate = normalize_metadata_key(candidate)
+            mapped_key = normalized_lookup.get(normalized_candidate)
+            if mapped_key is not None:
+                return mapped_key
+
         return None
 
     def _coerce_model_value(

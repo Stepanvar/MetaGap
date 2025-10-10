@@ -78,6 +78,31 @@ class VCFImporterTests(TestCase):
 1\t2000\t.\tA\tG\t.\tPASS\tQD=12.5;FS=7.1;SOR=1.8;CUSTOM=note\tGT:GQ\t0/1:77
 """
 
+    VCF_WITH_UNKNOWN_FORMAT_FIELD = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AB,Number=1,Type=Float,Description="Allele balance">
+##SAMPLE=<ID=FormatGroup,Description=Unknown format>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t2222\t.\tC\tA\t50\tPASS\t.\tGT:AB\t0/1:0.65
+"""
+
+    VCF_WITH_UNKNOWN_SAMPLE_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=MetadataGroup,Platform=AlienSeq,Description=Unknown sample>
+##SEQUENCING_PLATFORM=<Platform=AlienSeq,Instrument=CustomSeq>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t3333\trsMetadata\tG\tT\t80\tPASS\t.\tGT\t0/1
+"""
+
+    VCF_WITHOUT_EXPLICIT_NAME = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+2\t4444\trsFallback\tT\tC\t42\tPASS\t.\tGT\t0/1
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -229,6 +254,50 @@ class VCFImporterTests(TestCase):
             float(additional_metadata["platform_independent_q30"]),
             92.5,
         )
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_serializes_unknown_format_fields(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_UNKNOWN_FORMAT_FIELD,
+            filename="unknown_format.vcf",
+        )
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertEqual(allele.format.genotype, "0/1")
+        self.assertNotIn("ab", allele.format.fields)
+        self.assertAlmostEqual(float(allele.format.additional["ab"]), 0.65, places=2)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_records_unhandled_sample_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_UNKNOWN_SAMPLE_METADATA,
+            filename="unknown_metadata.vcf",
+        )
+
+        self.assertEqual(sample_group.name, "MetadataGroup")
+        self.assertEqual(sample_group.comments, "Unknown sample")
+
+        additional = sample_group.additional_metadata or {}
+        self.assertEqual(additional.get("platform"), "AlienSeq")
+        self.assertEqual(
+            additional.get("platform_independent_platform"),
+            "AlienSeq",
+        )
+        self.assertEqual(
+            additional.get("platform_independent_instrument"),
+            "CustomSeq",
+        )
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_without_sample_name_falls_back_to_filename(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITHOUT_EXPLICIT_NAME,
+            filename="fallback_dataset.vcf",
+        )
+
+        self.assertEqual(sample_group.name, "fallback_dataset")
+        self.assertIsNone(sample_group.comments)
+        self.assertIsNone(sample_group.additional_metadata)
         self.assertEqual(importer.warnings, [])
 
     @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("boom"))

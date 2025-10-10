@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 SAMPLE_HEADER = """##fileformat=VCFv4.2
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=S1,Description="Primary sample">
 ##reference=GRCh38
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1
 """
@@ -97,6 +99,8 @@ def test_append_metadata_runs_header_validation_for_gzip(
     with gzip.open(final_vcf, "rt", encoding="utf-8") as handle:
         contents = handle.read()
     assert "##fileformat=VCFv4.2" in contents
+    assert "##FORMAT=" not in contents
+    assert "##SAMPLE=" not in contents
     assert "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" in contents
 
 
@@ -114,7 +118,10 @@ def test_append_metadata_runs_header_validation_for_plain_vcf(
 
     assert final_vcf.endswith(".vcf")
     assert Path(final_vcf) == header_checks[0]
-    assert "##fileformat=VCFv4.2" in Path(final_vcf).read_text()
+    contents = Path(final_vcf).read_text()
+    assert "##fileformat=VCFv4.2" in contents
+    assert "##FORMAT=" not in contents
+    assert "##SAMPLE=" not in contents
 
 
 def test_append_metadata_triggers_bgzip_and_tabix(

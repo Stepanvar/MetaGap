@@ -172,6 +172,7 @@ def main():
         ref_genome,
         vcf_version,
         verbose,
+        allow_gvcf=args.allow_gvcf,
     )
 
     merged_vcf = merge_vcfs(

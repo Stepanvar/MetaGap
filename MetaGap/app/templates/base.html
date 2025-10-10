@@ -44,6 +44,7 @@
         <div class="container">
                 {% block main_container %}
                 <div class="app-surface">
+                        {% include "partials/alerts.html" %}
                         {% block content %}{% endblock %}
                 </div>
                 {% endblock %}

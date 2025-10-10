@@ -146,6 +146,63 @@ class AlleleFrequencyFilterTests(TestCase):
 
         self.assertEqual(list(qs), [self.record_chr3])
 
+    def test_chrom_filter_does_not_match_partial_values(self):
+        info_chr10 = Info.objects.create(
+            af="0.05",
+            dp="30",
+            mq="45",
+            additional={"QD": "12.0", "FS": "1.0", "SOR": "0.8"},
+        )
+        info_chr1 = Info.objects.create(
+            af="0.08",
+            dp="40",
+            mq="50",
+            additional={"QD": "13.0", "FS": "1.2", "SOR": "0.7"},
+        )
+        record_chr1 = AlleleFrequency.objects.create(
+            sample_group=self.sample_group,
+            chrom="1",
+            pos=11112,
+            variant_id="rs1",
+            ref="C",
+            alt="T",
+            qual=55.0,
+            filter="PASS",
+            info=info_chr1,
+        )
+        record_chr10 = AlleleFrequency.objects.create(
+            sample_group=self.sample_group,
+            chrom="10",
+            pos=22222,
+            variant_id="rs10",
+            ref="T",
+            alt="C",
+            qual=60.0,
+            filter="PASS",
+            info=info_chr10,
+        )
+
+        exact_match_qs = filters.AlleleFrequencyFilter(
+            {"chrom": "1"}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertIn(record_chr1, exact_match_qs)
+        self.assertNotIn(record_chr10, exact_match_qs)
+
+    def test_chrom_filter_normalizes_input(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"chrom": "  ChR1  "}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr1])
+
+    def test_position_exact_filter(self):
+        qs = filters.AlleleFrequencyFilter(
+            {"pos": self.record_chr2.pos}, queryset=AlleleFrequency.objects.all()
+        ).qs
+
+        self.assertEqual(list(qs), [self.record_chr2])
+
     def test_position_min_and_max_filters(self):
         qs = filters.AlleleFrequencyFilter(
             {"pos_min": 20000, "pos_max": 60000},

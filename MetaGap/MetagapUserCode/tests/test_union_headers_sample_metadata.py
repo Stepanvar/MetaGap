@@ -29,6 +29,36 @@ def _write_vcf_with_samples(path, samples):
     path.write_text(content)
 
 
+def _write_vcf_with_contigs_and_samples(path, contigs, samples):
+    sample_columns = "\t".join(samples)
+    sample_calls = "\t".join("0/1" for _ in samples)
+    contig_lines = [f"##contig=<ID={contig},length=1000>" for contig in contigs]
+    records = [
+        "\t".join(
+            [
+                str(contig),
+                str(1000 + index),
+                ".",
+                "A",
+                "C",
+                ".",
+                "PASS",
+                ".",
+                "GT",
+                sample_calls,
+            ]
+        )
+        for index, contig in enumerate(contigs)
+    ]
+    content = (
+        ["##fileformat=VCFv4.2", "##reference=GRCh38"]
+        + contig_lines
+        + [f"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_columns}"]
+        + records
+    )
+    path.write_text("\n".join(content) + "\n")
+
+
 def test_union_headers_merges_sample_metadata(tmp_path, merge_script_module):
     module = merge_script_module
 
@@ -68,6 +98,27 @@ def test_union_headers_preserves_sample_order(tmp_path, merge_script_module):
     header = module.union_headers([str(vcf_one), str(vcf_two)])
 
     assert header.samples.names == ["Alpha", "Beta", "Gamma"]
+
+
+def test_union_headers_preserves_contig_and_sample_order(tmp_path, merge_script_module):
+    module = merge_script_module
+
+    vcf_ab = tmp_path / "ab.vcf"
+    vcf_c = tmp_path / "c.vcf"
+
+    _write_vcf_with_contigs_and_samples(vcf_ab, ["1", "2"], ["A", "B"])
+    _write_vcf_with_contigs_and_samples(vcf_c, ["3", "4"], ["C"])
+
+    header = module.union_headers([str(vcf_ab), str(vcf_c)])
+
+    assert list(header.contigs.keys()) == ["1", "2", "3", "4"]
+    assert header.samples.names == ["A", "B", "C"]
+
+    reordered = module.union_headers(
+        [str(vcf_ab), str(vcf_c)], sample_order=["C", "B", "A"]
+    )
+
+    assert reordered.samples.names == ["C", "B", "A"]
 
 
 def test_union_headers_merges_format_and_filter_definitions(

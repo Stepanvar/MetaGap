@@ -8,6 +8,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase
 
 from ..models import (
+    AlleleFrequency,
     BioinfoAlignment,
     BioinfoPostProc,
     BioinfoVariantCalling,
@@ -171,3 +172,31 @@ class AlleleFrequencyTableBuilderTests(TestCase):
             ],
         )
         self.assertNotIn("info__id", fields)
+
+    def test_sample_group_header_uses_friendly_label(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="friendly_user",
+            email="friendly@example.com",
+            password="password123",
+        )
+        sample_group = SampleGroup.objects.create(
+            name="Friendly Cohort",
+            created_by=user.organization_profile,
+            source_lab="Genome Lab",
+        )
+        AlleleFrequency.objects.create(
+            sample_group=sample_group,
+            chrom="1",
+            pos=12345,
+            ref="A",
+            alt="G",
+        )
+
+        table_class = build_allele_frequency_table()
+        table = table_class(AlleleFrequency.objects.all())
+
+        factory = RequestFactory()
+        request = factory.get("/allele-table/")
+        html = table.as_html(request)
+
+        self.assertIn(">Sample group<", html)

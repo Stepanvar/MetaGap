@@ -55,7 +55,7 @@ def parse_vcf_text_fallback(
 
     header_sample: Optional[str] = None
     header_seen = False
-    warnings_list: Optional[list[str]] = warnings
+    warnings_list = warnings if warnings is not None else None
 
     try:
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -63,6 +63,8 @@ def parse_vcf_text_fallback(
                 stripped = line.strip()
                 if not stripped:
                     continue
+
+                # Header parsing
                 if stripped.startswith("#CHROM"):
                     header_seen = True
                     columns = stripped.lstrip("#").split("\t")
@@ -72,18 +74,21 @@ def parse_vcf_text_fallback(
                 if stripped.startswith("#"):
                     continue
 
+                # Data line
                 fields = stripped.split("\t")
                 if len(fields) < 8:
-                    warning_message = (
+                    msg = (
                         "Encountered a truncated data line at line "
                         f"{line_number}: '{stripped}'."
                     )
                     if warnings_list is not None:
-                        warnings_list.append(warning_message)
-                    logger.warning("%s", warning_message)
+                        warnings_list.append(msg)
+                    logger.warning("%s", msg)
                     continue
 
                 chrom, pos, variant_id, ref, alt, qual, filter_value, info_field = fields[:8]
+
+                # INFO map
                 info_mapping: Dict[str, Any] = {}
                 for entry in info_field.split(";"):
                     if not entry:
@@ -96,6 +101,7 @@ def parse_vcf_text_fallback(
 
                 info_instance = writer.create_info_instance(info_mapping)
 
+                # FORMAT / sample
                 format_instance: Optional[Any] = None
                 sample_identifier: Optional[str] = None
                 if len(fields) > 9:
@@ -110,6 +116,7 @@ def parse_vcf_text_fallback(
                     if samples:
                         format_instance, sample_identifier = writer.create_format_instance(samples)
 
+                # POS
                 try:
                     pos_value = int(pos)
                 except ValueError as exc:
@@ -118,9 +125,9 @@ def parse_vcf_text_fallback(
                         f"{line_number}: '{stripped}'."
                     ) from exc
 
-                qual_value: Optional[float]
+                # QUAL
                 if qual in {".", ""}:
-                    qual_value = None
+                    qual_value: Optional[float] = None
                 else:
                     try:
                         qual_value = float(qual)
@@ -130,6 +137,7 @@ def parse_vcf_text_fallback(
                             f"{line_number}: '{stripped}'."
                         ) from exc
 
+                # Persist
                 writer.create_allele_frequency(
                     sample_group,
                     chrom=chrom,
@@ -153,7 +161,6 @@ def parse_vcf_text_fallback(
         raise ValidationError(
             "The uploaded VCF file is missing a '#CHROM' header line and cannot be parsed."
         )
-
 
 def split_sample_attributes(content: str) -> Iterable[str]:
     items: list[str] = []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import logging
+import re
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, Optional, TextIO
@@ -11,13 +12,19 @@ from typing import Any, Dict, Iterable, Iterator, Optional, TextIO
 from django.core.exceptions import ValidationError
 
 from .vcf_database import VCFDatabaseWriter
-from .vcf_metadata import normalize_metadata_value
+from .vcf_metadata import (
+    VCFMetadataParser,
+    normalize_metadata_key,
+    normalize_metadata_value,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def open_vcf_text(file_path: str) -> Iterator[TextIO]:
+def extract_metadata_text_fallback(
+    file_path: str, warnings: Optional[list[str]] = None
+) -> Dict[str, Any]:
     """Open a VCF file as text, transparently handling gzip compression."""
 
     path = Path(file_path)
@@ -34,26 +41,28 @@ def extract_metadata_text_fallback(file_path: str) -> Dict[str, Any]:
     """Extract metadata from a VCF file via text parsing."""
 
     metadata: Dict[str, Any] = {}
+    parser = VCFMetadataParser(warnings)
     try:
         with open_vcf_text(file_path) as handle:
             for line in handle:
                 stripped = line.strip()
                 if not stripped:
                     continue
-                if stripped.startswith("##SAMPLE"):
-                    start = stripped.find("<")
-                    end = stripped.rfind(">")
-                    if start == -1 or end == -1 or end <= start:
-                        continue
-                    content = stripped[start + 1 : end]
-                    for item in split_sample_attributes(content):
-                        if "=" not in item:
-                            continue
-                        key, value = item.split("=", 1)
-                        metadata[key.lower()] = normalize_metadata_value(value)
-                    metadata.setdefault("name", metadata.get("id"))
                 if stripped.startswith("#CHROM"):
                     break
+                if not stripped.startswith("##"):
+                    continue
+
+                for entry_key, entry_items in _iter_metadata_entries(stripped):
+                    parser.ingest_metadata_items(metadata, entry_key, entry_items)
+                    for raw_key, value in entry_items.items():
+                        if raw_key.lower() == "value":
+                            continue
+                        normalized_raw = normalize_metadata_key(raw_key)
+                        if normalized_raw and normalized_raw not in metadata:
+                            metadata[normalized_raw] = value
+        if "name" not in metadata and "sample_group_name" in metadata:
+            metadata["name"] = metadata["sample_group_name"]
     except UnicodeDecodeError as exc:  # pragma: no cover - defensive fallback
         raise ValidationError(
             "The uploaded VCF file could not be decoded using UTF-8. "
@@ -231,6 +240,47 @@ def split_sample_attributes(content: str) -> Iterable[str]:
         items.append(tail)
 
     return items
+
+
+def _iter_metadata_entries(line: str) -> Iterable[Tuple[str, Dict[str, Any]]]:
+    if not line.startswith("##"):
+        return []
+
+    normalized = "##" + re.sub(r"(?<=.)##", "\n##", line[2:])
+    entries: list[Tuple[str, Dict[str, Any]]] = []
+    for candidate in normalized.splitlines():
+        if not candidate.startswith("##"):
+            continue
+        key, items = _parse_metadata_entry(candidate[2:])
+        if key:
+            entries.append((key, items))
+    return entries
+
+
+def _parse_metadata_entry(entry: str) -> Tuple[str, Dict[str, Any]]:
+    key, _, remainder = entry.partition("=")
+    key = key.strip()
+    remainder = remainder.strip()
+
+    if remainder.startswith("<") and remainder.endswith(">"):
+        items = _parse_angle_bracket_items(remainder[1:-1])
+    elif remainder:
+        items = {"value": normalize_metadata_value(remainder)}
+    else:
+        items = {}
+    return key, items
+
+
+def _parse_angle_bracket_items(content: str) -> Dict[str, Any]:
+    parsed: Dict[str, Any] = {}
+    for item in split_sample_attributes(content):
+        if not item:
+            continue
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        parsed[key] = normalize_metadata_value(value)
+    return parsed
 
 
 __all__ = [

@@ -6,6 +6,7 @@ import copy
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from typing import Sequence
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -59,12 +60,12 @@ class _StubCall:
 class _StubRecord:
     """Simple record carrying FORMAT/call data for padding tests."""
 
-    def __init__(self, sample: str, genotype):
+    def __init__(self, sample: str, genotype, alt: Sequence[str] | None = None):
         self.CHROM = "1"
         self.POS = 100
         self.ID = "."
         self.REF = "A"
-        self.ALT = ["G"]
+        self.ALT = list(alt) if alt is not None else ["G"]
         self.QUAL = "."
         self.FILTER = []
         self.INFO = {}
@@ -88,6 +89,45 @@ class _StubRecord:
         return duplicate
 
     def __deepcopy__(self, memo) -> "_StubRecord":  # pragma: no cover - delegation
+        return self.copy()
+
+    def update_calls(self, updated_calls):
+        self.calls = [call for call in updated_calls]
+        self.call_for_sample = {call.sample: call for call in self.calls}
+
+
+class _CollidingRecord:
+    """Stub VCF record with configurable ALT order and multiple samples."""
+
+    def __init__(self, alt: Sequence[str], genotypes: dict[str, str]):
+        self.CHROM = "1"
+        self.POS = 100
+        self.ID = "."
+        self.REF = "A"
+        self.ALT = list(alt)
+        self.QUAL = "."
+        self.FILTER = []
+        self.INFO = {}
+        self.FORMAT = ["GT"]
+        self.calls = [_StubCall(sample, {"GT": gt}) for sample, gt in genotypes.items()]
+        self.call_for_sample = {call.sample: call for call in self.calls}
+
+    def copy(self) -> "_CollidingRecord":
+        duplicate = _CollidingRecord.__new__(_CollidingRecord)
+        duplicate.CHROM = self.CHROM
+        duplicate.POS = self.POS
+        duplicate.ID = self.ID
+        duplicate.REF = self.REF
+        duplicate.ALT = list(self.ALT)
+        duplicate.QUAL = self.QUAL
+        duplicate.FILTER = list(self.FILTER)
+        duplicate.INFO = dict(self.INFO)
+        duplicate.FORMAT = list(self.FORMAT)
+        duplicate.calls = [call.copy() for call in self.calls]
+        duplicate.call_for_sample = {call.sample: call for call in duplicate.calls}
+        return duplicate
+
+    def __deepcopy__(self, memo) -> "_CollidingRecord":  # pragma: no cover - delegation
         return self.copy()
 
     def update_calls(self, updated_calls):
@@ -144,6 +184,24 @@ def test_pad_record_samples_normalizes_blank_genotypes():
     merging._pad_record_samples(record, header, ["S1"])
 
     assert record.call_for_sample["S1"].data["GT"] == "./."
+
+
+def test_merge_colliding_records_rewrites_genotypes_for_consistent_alt_order():
+    header = _header_with_formats(["A", "B", "C"])
+
+    record_a = _CollidingRecord(["G", "T"], {"A": "1|0"})
+    record_b = _CollidingRecord(["T", "G"], {"B": "1|0", "C": "1/0"})
+
+    merged = merging._merge_colliding_records(
+        [(record_a, 0), (record_b, 1)], header, ["A", "B", "C"]
+    )
+
+    assert [merging._alt_value(alt) for alt in merged.ALT] == ["G", "T"]
+
+    calls = merged.call_for_sample
+    assert calls["A"].data["GT"] == "1|0"
+    assert calls["B"].data["GT"] == "2|0"
+    assert calls["C"].data["GT"] == "2/0"
 
 
 def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):

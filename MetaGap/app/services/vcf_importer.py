@@ -218,6 +218,7 @@ class VCFImporter:
     INFO_FIELD_STRING = "string"
     INFO_FIELD_INT = "int"
     INFO_FIELD_FLOAT = "float"
+    INFO_PLACEHOLDER_VALUES = {".", ""}
 
     INFO_FIELD_MAP = {
         "aa": ("aa", INFO_FIELD_STRING),
@@ -860,7 +861,7 @@ class VCFImporter:
             return flattened
         if isinstance(value, str):
             stripped = value.strip()
-            if not stripped:
+            if not stripped or stripped in cls.INFO_PLACEHOLDER_VALUES:
                 return None
             return stripped
         return value

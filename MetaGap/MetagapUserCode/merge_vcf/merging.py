@@ -609,8 +609,8 @@ def merge_vcfs(
             try:
                 if os.path.exists(tmp):
                     os.remove(tmp)
-                except OSError:
-                    pass
+            except OSError:
+                pass
 
     if merged_header is None:
         handle_critical_error("Failed to construct a merged VCF header from the provided files.")

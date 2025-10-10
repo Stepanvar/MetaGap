@@ -214,37 +214,43 @@ class VCFMetadataParser:
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         for record in vcf_in.header.records:
-            key = (record.key or "").upper()
-            if key == "SEQUENCING_PLATFORM":
-                self._ingest_sequencing_platform_record(metadata, record)
-                continue
-
-            section = METADATA_SECTION_MAP.get(key)
-            if not section:
-                if self._is_metadata_section_candidate(key):
-                    items = self._collect_record_items(record)
-                    log_message = (
-                        f"Unsupported metadata section '{record.key}' encountered in the VCF header."
-                    )
-                    logger.warning("%s", log_message)
-                    warning = f"Unsupported metadata section '{record.key}'"
-                    self.warnings.append(warning)
-                    additional = metadata.setdefault("additional_metadata", {})
-                    additional_key = normalize_metadata_key(record.key)
-                    additional[additional_key] = items
-                continue
-
             items = self._collect_record_items(record)
-            self._process_metadata_section(metadata, section, items)
+            self.ingest_metadata_items(metadata, record.key, items)
 
         if "name" not in metadata and "sample_group_name" in metadata:
             metadata["name"] = metadata["sample_group_name"]
         return metadata
 
-    def _ingest_sequencing_platform_record(
-        self, metadata: Dict[str, Any], record: pysam.libcbcf.VariantHeaderRecord
+    def ingest_metadata_items(
+        self,
+        metadata: Dict[str, Any],
+        key: Optional[str],
+        items: Dict[str, Any],
     ) -> None:
-        items = self._collect_record_items(record)
+        normalized_key = (key or "").upper()
+        if normalized_key == "SEQUENCING_PLATFORM":
+            self._ingest_sequencing_platform_items(metadata, items)
+            return
+
+        section = METADATA_SECTION_MAP.get(normalized_key)
+        if not section:
+            if self._is_metadata_section_candidate(normalized_key):
+                log_message = (
+                    f"Unsupported metadata section '{key}' encountered in the VCF header."
+                )
+                logger.warning("%s", log_message)
+                warning = f"Unsupported metadata section '{key}'"
+                self.warnings.append(warning)
+                additional = metadata.setdefault("additional_metadata", {})
+                additional_key = normalize_metadata_key(key)
+                additional[additional_key] = items
+            return
+
+        self._process_metadata_section(metadata, section, items)
+
+    def _ingest_sequencing_platform_items(
+        self, metadata: Dict[str, Any], items: Dict[str, Any]
+    ) -> None:
         platform_value = None
         for candidate in ("platform", "Platform"):
             if candidate in items:

@@ -136,18 +136,63 @@ def parse_arguments():
     if not input_files:
         parser.error("No input VCF files specified.")
 
-    # Clean metadata
-    args.sample_metadata_entries = [s for s in args.sample_metadata_entries if s and s.strip()]
-    args.header_metadata_lines = [
-        s if s.startswith("##") else f"##{s}" for s in args.header_metadata_lines if s and s.strip()
-    ]
-    meta_entries = [s for s in args.meta_entries if s and s.strip()]
-    for entry in meta_entries:
-        key, _ = entry.split("=", 1)
-        if key.strip().lower() == "id":
-            args.sample_metadata_entries.append(entry)
-        else:
-            args.header_metadata_lines.append(entry if entry.startswith("##") else f"##{entry}")
+# Clean metadata (conflict-resolved)
+	def _norm(s: str) -> str:
+		return s.strip()
+
+	def _ensure_hashes(s: str) -> str:
+		return s if s.startswith("##") else f"##{s}"
+
+	def _route_meta(entry: str) -> tuple[str, str]:
+		# SAMPLE=... goes to sample metadata; everything else goes to header metadata
+		body = entry.lstrip("#").strip()
+		if body.upper().startswith("SAMPLE="):
+			return "sample", _ensure_hashes(body)
+		return "header", _ensure_hashes(body)
+
+	def _dedupe(seq: list[str]) -> list[str]:
+		seen = set()
+		out = []
+		for x in seq:
+			if x not in seen:
+				seen.add(x)
+				out.append(x)
+		return out
+
+	sample_src = (getattr(args, "sample_header_entries", []) or []) + \
+				 (getattr(args, "sample_metadata_entries", []) or [])
+	header_src = (getattr(args, "simple_header_lines", []) or []) + \
+				 (getattr(args, "header_metadata_lines", []) or [])
+	meta_src   = (getattr(args, "meta_entries", []) or [])
+
+	sample_list: list[str] = []
+	header_list: list[str] = []
+
+	for s in sample_src:
+		s = _norm(s)
+		if s:
+			sample_list.append(_ensure_hashes(s))
+
+	for h in header_src:
+		h = _norm(h)
+		if h:
+			header_list.append(_ensure_hashes(h))
+
+	for m in meta_src:
+		m = _norm(m)
+		if not m:
+			continue
+		which, v = _route_meta(m)
+		(sample_list if which == "sample" else header_list).append(v)
+
+	# drop fileformat lines; dedupe; set canonical fields
+	args.sample_metadata_entries = _dedupe([x for x in sample_list if not x.startswith("##fileformat")])
+	args.header_metadata_lines   = _dedupe([x for x in header_list if not x.startswith("##fileformat")])
+
+	# optional: clear legacy fields to avoid later confusion
+	args.sample_header_entries = []
+	args.simple_header_lines = []
+	args.meta_entries = []
 
     # Require SAMPLE ID if any SAMPLE metadata present
     has_id = any(
@@ -262,12 +307,13 @@ def main():
             allowed_filter_values=allowed_filter_values,
         )
 
-        # Combine file-provided header lines with CLI-provided metadata
-        header_metadata_lines = (args.header_metadata_lines or []) + (extra_file_lines or [])
+        # Combine file-provided header lines with CLI-provided simple headers
+        cli_header_metadata = getattr(args, "header_metadata_lines", None)
+        header_metadata_lines = (cli_header_metadata or []) + (extra_file_lines or [])
 
         final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
             merged_vcf_path,
-            sample_header_entries=args.sample_metadata_entries,
+            sample_metadata_entries=args.sample_metadata_entries,
             header_metadata_lines=header_metadata_lines,
             qual_threshold=qual_threshold,
             an_threshold=an_threshold,

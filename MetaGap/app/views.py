@@ -895,6 +895,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
     INFO_FIELD_STRING = "string"
     INFO_FIELD_INT = "int"
     INFO_FIELD_FLOAT = "float"
+    INFO_PLACEHOLDER_VALUES = {".", ""}
 
     INFO_FIELD_MAP = {
         "aa": ("aa", INFO_FIELD_STRING),
@@ -1598,7 +1599,8 @@ class ImportDataView(LoginRequiredMixin, FormView):
                 structured[field_name] = self._coerce_info_value(value, field_type)
             else:
                 additional_value = self._normalize_additional_info_value(value)
-                additional[normalized] = additional_value
+                if additional_value is not None:
+                    additional[normalized] = additional_value
 
         if not structured and not additional:
             return None
@@ -1653,18 +1655,16 @@ class ImportDataView(LoginRequiredMixin, FormView):
         if value is None:
             return None
         if isinstance(value, (list, tuple)):
-            normalized_items = [
-                cls._normalize_info_scalar(item)
-                for item in value
-                if item not in (None, "")
-            ]
-            flattened = [item for item in normalized_items if item not in (None, "")]
-            if not flattened:
-                return None
-            return flattened
+            normalized_items = []
+            for item in value:
+                normalized_item = cls._normalize_info_scalar(item)
+                if normalized_item is None:
+                    continue
+                normalized_items.append(normalized_item)
+            return normalized_items or None
         if isinstance(value, str):
             stripped = value.strip()
-            if not stripped:
+            if not stripped or stripped in cls.INFO_PLACEHOLDER_VALUES:
                 return None
             return stripped
         return value
@@ -1703,13 +1703,14 @@ class ImportDataView(LoginRequiredMixin, FormView):
     @classmethod
     def _normalize_additional_info_value(cls, value: Any) -> Any:
         if isinstance(value, (list, tuple)):
-            normalized_list = [
-                cls._normalize_additional_info_value(item)
-                for item in value
-                if item not in (None, "")
-            ]
+            normalized_list = []
+            for item in value:
+                normalized_item = cls._normalize_additional_info_value(item)
+                if normalized_item is None:
+                    continue
+                normalized_list.append(normalized_item)
             return normalized_list or None
-        if value in (None, ""):
+        if value in (None, "", "."):
             return None
         if isinstance(value, (int, float, bool)):
             return value

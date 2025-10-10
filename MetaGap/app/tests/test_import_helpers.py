@@ -43,6 +43,19 @@ class ImportHelpersTests(TestCase):
         self.assertEqual(info_instance.sor, "1.2")
         self.assertEqual(info_instance.additional, {"custom": "value"})
 
+    def test_create_info_instance_discards_placeholder_values(self):
+        """Placeholder INFO values are stored as NULL instead of literal dots."""
+
+        info_payload = {"AF": ".", "DP": ".", "QD": ".", "FS": "."}
+
+        info_instance = self.view._create_info_instance(info_payload)
+
+        self.assertIsNotNone(info_instance)
+        self.assertEqual(Info.objects.count(), 1)
+        self.assertIsNone(info_instance.af)
+        self.assertIsNone(info_instance.dp)
+        self.assertIsNone(info_instance.additional)
+
     def test_create_format_instance_uses_field_map(self):
         """Mapped FORMAT keys populate structured fields and extras remain JSON."""
 
@@ -149,11 +162,11 @@ class ImportHelpersTests(TestCase):
 
         metadata = self.view.extract_sample_group_metadata(mock_vcf)
 
-        self.assertIn("center", metadata)
-        self.assertIn("email", metadata)
-        self.assertIn("phone", metadata)
-        self.assertIn("n", metadata)
-        self.assertIn("inclusion", metadata)
+        self.assertIn("source_lab", metadata)
+        self.assertIn("contact_email", metadata)
+        self.assertIn("contact_phone", metadata)
+        self.assertIn("total_samples", metadata)
+        self.assertIn("inclusion_criteria", metadata)
         self.assertNotIn("email?", metadata)
 
         user_model = get_user_model()

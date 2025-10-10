@@ -101,19 +101,6 @@ def parse_arguments():
         help="Optional file with extra header lines. One entry per line. Lines without '##' will be prefixed.",
     )
     parser.add_argument(
-        "--header-lines",
-        nargs="+",
-        dest="header_metadata_lines",
-        help="Extra header meta lines. Lines without '##' will be prefixed.",
-    )
-    parser.add_argument(
-        "--sample-metadata",
-        nargs="+",
-        dest="sample_metadata_entries",
-        type=_validate_metadata_entry,
-        help="SAMPLE key=value pairs (e.g., ID=Cohort01 Center=Genotek).",
-    )
-    parser.add_argument(
         "--allow-gvcf",
         action="store_true",
         help="Allow gVCF inputs during validation.",

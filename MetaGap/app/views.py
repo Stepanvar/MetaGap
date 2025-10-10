@@ -61,7 +61,7 @@ from .models import (
     SampleGroup,
     SampleOrigin,
 )
-from .tables import create_dynamic_table
+from .tables import build_allele_frequency_table, create_dynamic_table
 
 
 logger = logging.getLogger(__name__)
@@ -118,25 +118,7 @@ class SearchResultsView(SingleTableMixin, FilterView):
     ordering = ("chrom", "pos", "ref", "alt", "pk")
 
     # Dynamically create a table class prioritising variant descriptors first.
-    table_class = create_dynamic_table(
-        AlleleFrequency,
-        table_name="AlleleFrequencyTable",
-        include_related=True,
-        priority_fields=(
-            "chrom",
-            "pos",
-            "ref",
-            "alt",
-            "qual",
-            "filter",
-            "info__af",
-            "info__ac",
-            "info__an",
-            "info__dp",
-            "info__mq",
-        ),
-        exclude_fields=("info__additional", "format__payload"),
-    )
+    table_class = build_allele_frequency_table()
 
     def get_queryset(self):
         base_queryset = (
@@ -551,31 +533,11 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
             "sample_group__id",
             *[f"sample_group__{name}" for name in sample_group_field_names],
             "info__id",
-            "info__additional",
             "format__id",
-            "format__payload",
         ]
-        priority_columns = [
-            "chrom",
-            "pos",
-            "ref",
-            "alt",
-            "qual",
-            "filter",
-            "info__af",
-            "info__ac",
-            "info__an",
-            "info__dp",
-            "info__mq",
-            "variant_id",
-            "format__genotype",
-        ]
-        table_class = create_dynamic_table(
-            AlleleFrequency,
-            table_name="AlleleFrequencyTable",
-            include_related=True,
-            priority_fields=priority_columns,
-            exclude_fields=exclude_columns,
+        table_class = build_allele_frequency_table(
+            priority_extra=("variant_id", "format__genotype"),
+            exclude_extra=exclude_columns,
         )
         allele_qs = self.object.allele_frequencies.all()
         table = table_class(allele_qs)

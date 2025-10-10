@@ -1,4 +1,3 @@
-import importlib.util
 import sys
 import types
 from collections import OrderedDict
@@ -6,12 +5,9 @@ from types import SimpleNamespace
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
-
-
 def _install_vcfpy_stub():
     if "vcfpy" in sys.modules:
-        return
+        return sys.modules["vcfpy"]
 
     stub = types.ModuleType("vcfpy")
 
@@ -83,18 +79,18 @@ def _install_vcfpy_stub():
     stub.header = header_namespace
 
     sys.modules["vcfpy"] = stub
+    return stub
 
 
-def load_user_module():
-    _install_vcfpy_stub()
-    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+def _ensure_vcfpy_available(module):
+    stub = _install_vcfpy_stub()
+    module.vcfpy = stub
+    setattr(module, "VCFPY_AVAILABLE", True)
     return module
 
 
-def test_summarize_produced_vcfs_prefers_sample_files(tmp_path):
-    module = load_user_module()
+def test_summarize_produced_vcfs_prefers_sample_files(tmp_path, merge_script_module):
+    module = _ensure_vcfpy_available(merge_script_module)
 
     output_dir = tmp_path / "outputs"
     output_dir.mkdir()
@@ -113,8 +109,8 @@ def test_summarize_produced_vcfs_prefers_sample_files(tmp_path):
     assert count == 2
 
 
-def test_main_emits_compact_summary(tmp_path, monkeypatch, capsys):
-    module = load_user_module()
+def test_main_emits_compact_summary(tmp_path, monkeypatch, capsys, merge_script_module):
+    module = _ensure_vcfpy_available(merge_script_module)
 
     input_dir = tmp_path / "inputs"
     output_dir = tmp_path / "outputs"
@@ -162,8 +158,8 @@ def test_main_emits_compact_summary(tmp_path, monkeypatch, capsys):
     assert summary_line == f"Wrote: {expected_path} x 2"
 
 
-def test_parse_metadata_arguments_merges_template(tmp_path):
-    module = load_user_module()
+def test_parse_metadata_arguments_merges_template(tmp_path, merge_script_module):
+    module = _ensure_vcfpy_available(merge_script_module)
 
     template_path = tmp_path / "template_header.txt"
     template_path.write_text(
@@ -204,8 +200,10 @@ def test_parse_metadata_arguments_merges_template(tmp_path):
     assert ("contact", "ResearchLab") in simple_pairs
 
 
-def test_parse_metadata_arguments_template_allows_cli_overrides(tmp_path):
-    module = load_user_module()
+def test_parse_metadata_arguments_template_allows_cli_overrides(
+    tmp_path, merge_script_module
+):
+    module = _ensure_vcfpy_available(merge_script_module)
 
     template_path = tmp_path / "template_header.txt"
     template_path.write_text(

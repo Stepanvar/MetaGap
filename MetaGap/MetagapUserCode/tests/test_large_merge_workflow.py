@@ -1,5 +1,4 @@
 import gzip
-import importlib.util
 import os
 import sys
 from collections import OrderedDict
@@ -8,19 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-
-MODULE_PATH = (
-    Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
-)
-
-
-def load_user_module():
-    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 @dataclass
@@ -629,8 +615,8 @@ def _configure_fake_subprocess(monkeypatch, module):
     monkeypatch.setattr(module.subprocess, "run", fake_run)
 
 
-def test_large_cohort_merge_workflow(tmp_path, monkeypatch):
-    module = load_user_module()
+def test_large_cohort_merge_workflow(tmp_path, monkeypatch, merge_script_module):
+    module = merge_script_module
     _install_vcfpy_stub(monkeypatch, module)
 
     _VCF_STORAGE.clear()

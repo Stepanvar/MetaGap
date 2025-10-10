@@ -1,21 +1,8 @@
 import gzip
-import importlib.util
 import io
 from pathlib import Path
 
 import pytest
-
-
-MODULE_PATH = Path(__file__).resolve().parents[2] / "MetagapUserCode" / "test_merge_vcf.py"
-
-
-def load_user_module():
-    spec = importlib.util.spec_from_file_location("user_test_merge_vcf", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
 
 SAMPLE_HEADER = """##fileformat=VCFv4.2
 ##reference=GRCh38
@@ -92,8 +79,10 @@ def _configure_fake_bcftools(monkeypatch, module, header_checks, call_log=None):
     monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
 
 
-def test_append_metadata_runs_header_validation_for_gzip(monkeypatch, tmp_path):
-    module = load_user_module()
+def test_append_metadata_runs_header_validation_for_gzip(
+    monkeypatch, tmp_path, merge_script_module
+):
+    module = merge_script_module
     header_checks = []
     _configure_fake_bcftools(monkeypatch, module, header_checks)
 
@@ -111,8 +100,10 @@ def test_append_metadata_runs_header_validation_for_gzip(monkeypatch, tmp_path):
     assert "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" in contents
 
 
-def test_append_metadata_runs_header_validation_for_plain_vcf(monkeypatch, tmp_path):
-    module = load_user_module()
+def test_append_metadata_runs_header_validation_for_plain_vcf(
+    monkeypatch, tmp_path, merge_script_module
+):
+    module = merge_script_module
     header_checks = []
     _configure_fake_bcftools(monkeypatch, module, header_checks)
 
@@ -126,8 +117,10 @@ def test_append_metadata_runs_header_validation_for_plain_vcf(monkeypatch, tmp_p
     assert "##fileformat=VCFv4.2" in Path(final_vcf).read_text()
 
 
-def test_append_metadata_triggers_bgzip_and_tabix(monkeypatch, tmp_path):
-    module = load_user_module()
+def test_append_metadata_triggers_bgzip_and_tabix(
+    monkeypatch, tmp_path, merge_script_module
+):
+    module = merge_script_module
     header_checks = []
     call_log = []
     _configure_fake_bcftools(monkeypatch, module, header_checks, call_log=call_log)
@@ -148,8 +141,8 @@ def test_append_metadata_triggers_bgzip_and_tabix(monkeypatch, tmp_path):
     assert not plain_path.exists()
 
 
-def test_validate_header_failure_raises(monkeypatch):
-    module = load_user_module()
+def test_validate_header_failure_raises(monkeypatch, merge_script_module):
+    module = merge_script_module
 
     def fake_run(cmd, check=True, **kwargs):
         raise module.subprocess.CalledProcessError(1, cmd)

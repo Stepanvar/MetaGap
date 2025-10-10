@@ -1,40 +1,8 @@
-import importlib.util
 import os
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
-
-
-@pytest.fixture
-def cli_module(monkeypatch):
-    base_dir = Path(__file__).resolve().parents[1]
-
-    package_module = ModuleType("MetagapUserCode")
-    package_module.__path__ = [str(base_dir)]
-    monkeypatch.setitem(sys.modules, "MetagapUserCode", package_module)
-
-    merge_pkg_name = "MetagapUserCode.merge_vcf"
-    merge_pkg_path = base_dir / "merge_vcf" / "__init__.py"
-    merge_spec = importlib.util.spec_from_file_location(
-        merge_pkg_name,
-        merge_pkg_path,
-        submodule_search_locations=[str(base_dir / "merge_vcf")],
-    )
-    merge_pkg = importlib.util.module_from_spec(merge_spec)
-    assert merge_spec.loader is not None
-    monkeypatch.setitem(sys.modules, merge_pkg_name, merge_pkg)
-    merge_spec.loader.exec_module(merge_pkg)
-
-    module_name = "MetagapUserCode.merge_vcf.cli"
-    module_path = base_dir / "merge_vcf" / "cli.py"
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    monkeypatch.setitem(sys.modules, module_name, module)
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture
@@ -63,7 +31,11 @@ def _build_args(input_dir, output_dir, allow_gvcf):
     )
 
 
-def test_cli_accepts_gvcf_when_flag_enabled(monkeypatch, cli_module, gvcf_inputs):
+@pytest.mark.parametrize("merge_script_module", ["cli"], indirect=True)
+def test_cli_accepts_gvcf_when_flag_enabled(
+    monkeypatch, merge_script_module, gvcf_inputs
+):
+    cli_module = merge_script_module
     gvcf_path, input_dir, output_dir = gvcf_inputs
     recorded = {}
 
@@ -116,7 +88,11 @@ def test_cli_accepts_gvcf_when_flag_enabled(monkeypatch, cli_module, gvcf_inputs
     assert recorded["valid_files"] == recorded["validated_files"]
 
 
-def test_cli_rejects_gvcf_without_flag(monkeypatch, cli_module, gvcf_inputs, capsys):
+@pytest.mark.parametrize("merge_script_module", ["cli"], indirect=True)
+def test_cli_rejects_gvcf_without_flag(
+    monkeypatch, merge_script_module, gvcf_inputs, capsys
+):
+    cli_module = merge_script_module
     _, input_dir, output_dir = gvcf_inputs
 
     monkeypatch.setattr(

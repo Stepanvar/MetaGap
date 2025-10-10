@@ -56,15 +56,39 @@ records_d=(
   'rs6040355|A|G|45|PASS|NS=1;DP=8|GT:DP:GQ|0/0:8:45'
 )
 
-write_variants demo_vcfs/1.vcf SAMPLE_A records_a
-write_variants demo_vcfs/2.vcf SAMPLE_B records_b
-write_variants demo_vcfs/3.vcf SAMPLE_C records_c
-write_variants demo_vcfs/4.vcf SAMPLE_D records_d
+sample_id() {
+  local index=$1
+  printf 'SAMPLE_%d' "$((index + 1))"
+}
+
+record_sets=(records_a records_b records_c records_d)
+
+outputs=()
+
+for i in "${!record_sets[@]}"; do
+  sample="$(sample_id "$i")"
+  out="demo_vcfs/$((i + 1)).vcf"
+  outputs+=("$out")
+  write_variants "$out" "$sample" "${record_sets[$i]}"
+done
+
+print_outputs() {
+  printf 'Wrote:'
+  for f in "$@"; do
+    printf ' %s' "$f"
+  done
+  printf '\n'
+}
 
 if command -v bgzip >/dev/null 2>&1 && command -v tabix >/dev/null 2>&1; then
-  for f in demo_vcfs/*.vcf; do bgzip -f "$f"; tabix -f -p vcf "$f.gz"; done
-  echo "Wrote: demo_vcfs/{1..4}.vcf.gz"
+  gz_outputs=()
+  for f in "${outputs[@]}"; do
+    bgzip -f "$f"
+    tabix -f -p vcf "$f.gz"
+    gz_outputs+=("$f.gz")
+  done
+  print_outputs "${gz_outputs[@]}"
 else
   echo "bgzip/tabix not found; skipping compression" >&2
-  echo "Wrote: demo_vcfs/{1..4}.vcf"
+  print_outputs "${outputs[@]}"
 fi

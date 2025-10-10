@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import shutil
 import tempfile
 from pathlib import Path
@@ -146,6 +147,9 @@ class VCFImporterTests(TestCase):
 
     def _import(self, content: str, filename: str = "import.vcf") -> tuple[VCFImporter, SampleGroup]:
         path = self._write_vcf(content, filename)
+        return self._import_from_path(path)
+
+    def _import_from_path(self, path: Path) -> tuple[VCFImporter, SampleGroup]:
         importer = VCFImporter(self.user)
         sample_group = importer.import_file(str(path))
         return importer, sample_group
@@ -384,6 +388,27 @@ class VCFImporterTests(TestCase):
 
         self.assertTrue(mocked_variant_file.called)
         self.assertEqual(sample_group.comments, "Imported group")
+
+        allele = sample_group.allele_frequencies.get()
+        self.assertEqual(allele.chrom, "1")
+        self.assertEqual(allele.pos, 1234)
+        self.assertEqual(allele.variant_id, "rsTest")
+        self.assertAlmostEqual(float(allele.info.af), 0.5)
+        self.assertEqual(allele.format.genotype, "0/1")
+        self.assertEqual(allele.format.additional["sample_id"], "Sample001")
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Falling back to a text parser", importer.warnings[0])
+
+    @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("gzip fallback"))
+    def test_text_fallback_supports_gzip_encoded_vcf(
+        self, mocked_variant_file: mock.Mock
+    ) -> None:
+        path = self.temp_dir / "compressed.vcf.gz"
+        path.write_bytes(gzip.compress(self.VCF_CONTENT.encode("utf-8")))
+
+        importer, sample_group = self._import_from_path(path)
+
+        self.assertTrue(mocked_variant_file.called)
 
         allele = sample_group.allele_frequencies.get()
         self.assertEqual(allele.chrom, "1")

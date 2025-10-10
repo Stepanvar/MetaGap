@@ -84,12 +84,7 @@ def run_workflow(args=None):
         sample_metadata_entries,
         sanitized_header_lines,
         serialized_sample_line,
-    ) = parse_metadata_arguments(
-        args,
-        verbose,
-        log_message=log_message,
-        handle_critical_error=handle_critical_error,
-    )
+    ) = parse_metadata_arguments(args, verbose)
 
     log_message(
         "Script Execution Log - " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

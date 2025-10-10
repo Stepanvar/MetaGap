@@ -1,4 +1,11 @@
-"""Metadata helpers for augmenting merged VCF files."""
+"""Metadata helpers for augmenting merged VCF files.
+
+This module orchestrates the construction of VCF headers by combining CLI
+metadata with auto-generated INFO definitions and helper utilities for reading
+and writing VCF text streams. The helpers centralize tricky logic such as
+escaping header descriptions and de-duplicating metadata contributed by
+multiple sources so that downstream workflows can reuse the same guarantees.
+"""
 
 from __future__ import annotations
 
@@ -89,6 +96,9 @@ def _format_info_definition(
         if value is None:
             continue
         if key == "Description":
+            # Escape embedded quotes so the serialized INFO line survives a
+            # round-trip through vcfpy and pysam without corrupting the
+            # comma-delimited payload defined by the VCF specification.
             escaped_value = str(value).replace('"', '\\"')
             parts.append(f'Description="{escaped_value}"')
             continue
@@ -97,6 +107,14 @@ def _format_info_definition(
 
 
 def ensure_standard_info_definitions(header, verbose: bool = False):
+    """Ensure AC/AN/AF INFO definitions exist on a ``vcfpy`` header object.
+
+    The helper inspects the mutable ``header`` supplied by ``vcfpy`` and
+    inserts definitions for the canonical AC, AN, and AF INFO tags when they are
+    absent. All operations are performed defensively so that environments
+    lacking ``vcfpy`` support can continue without modification.
+    """
+
     if not VCFPY_AVAILABLE:
         return header
 
@@ -155,6 +173,15 @@ def ensure_standard_info_definitions(header, verbose: bool = False):
 def ensure_standard_info_header_lines(
     final_header_lines, existing_header_lines, verbose: bool = False
 ):
+    """Inject AC/AN/AF INFO lines into serialized header text when needed.
+
+    ``final_header_lines`` contains the mutable list of header strings that will
+    be written to disk, while ``existing_header_lines`` tracks the set of lines
+    already present. The helper mirrors :func:`ensure_standard_info_definitions`
+    but operates on raw strings so that code paths without ``vcfpy`` access can
+    benefit from the same guarantees.
+    """
+
     current_ids = set()
     for line in final_header_lines:
         if not isinstance(line, str):
@@ -170,6 +197,8 @@ def ensure_standard_info_header_lines(
 
         formatted = _format_info_definition(info_id, definition)
         if formatted in existing_header_lines:
+            # Header lines supplied by CLI metadata or pre-existing files must
+            # not be duplicated; mark the ID so later iterations skip it.
             current_ids.add(info_id)
             continue
 
@@ -327,53 +356,31 @@ def _format_sample_metadata_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _extract_called_alleles(gt_value) -> List[int]:
-    if gt_value is None:
-        return []
-    if isinstance(gt_value, (list, tuple)):
-        tokens: List[str] = []
-        for item in gt_value:
-            if item is None:
-                continue
-            tokens.extend(str(item).replace("|", "/").split("/"))
-    else:
-        tokens = str(gt_value).replace("|", "/").split("/")
+def _open_vcf_stream(path: str):
+    """Return a text-mode handle for ``path`` that transparently handles gzip."""
 
-    allele_indices: List[int] = []
-    for token in tokens:
-        cleaned = token.strip()
-        if not cleaned or cleaned == ".":
-            continue
-        try:
-            allele_indices.append(int(cleaned))
-        except ValueError:
-            continue
-    return allele_indices
+    return (
+        gzip.open(path, "rt", encoding="utf-8")
+        if path.endswith(".gz")
+        else open(path, "r", encoding="utf-8")
+    )
 
 
-def _compute_ac_an_af(genotypes: Iterable, alt_count: int) -> Tuple[List[int], int, List[float]]:
-    ac = [0] * alt_count
-    an = 0
+def _read_vcf_header_lines(path: str) -> List[str]:
+    """Return the header lines from ``path`` without consuming variant records.
 
-    for genotype in genotypes:
-        for allele in _extract_called_alleles(genotype):
-            if allele is None or allele < 0:
-                continue
-            an += 1
-            if allele == 0:
-                continue
-            index = allele - 1
-            if 0 <= index < alt_count:
-                ac[index] += 1
+    The function mirrors the streaming logic used in :func:`vcfpy.Reader` but
+    returns raw strings without trailing newlines so callers can merge them with
+    additional metadata before writing to disk.
+    """
 
-    if alt_count == 0:
-        af: List[float] = []
-    elif an > 0:
-        af = [count / an for count in ac]
-    else:
-        af = [0.0 for _ in ac]
-
-    return ac, an, af
+    header_lines: List[str] = []
+    with _open_vcf_stream(path) as handle:
+        for raw in handle:
+            if not raw.startswith("#"):
+                break
+            header_lines.append(raw.rstrip("\n"))
+    return header_lines
 
 
 def build_sample_metadata_line(entries: "OrderedDict[str, str]") -> str:
@@ -782,6 +789,67 @@ def append_metadata_to_merged_vcf(
             final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
             final_vcf = final_plain_vcf
 
+    def _format_scalar(value) -> str:
+        if value is None:
+            return "."
+        if isinstance(value, float):
+            return ("%g" % value)
+        return str(value)
+
+    def _serialize_info(info: OrderedDict) -> str:
+        entries = []
+        for key, value in info.items():
+            if value is None:
+                continue
+            if isinstance(value, list):
+                if not value:
+                    serialized = "."
+                else:
+                    serialized = ",".join(_format_scalar(item) for item in value)
+            else:
+                serialized = _format_scalar(value)
+            entries.append(f"{key}={serialized}")
+        return ";".join(entries) if entries else "."
+
+    def _normalize_filter(field) -> str:
+        if field in {None, [], ["PASS"], "PASS"}:
+            return "PASS"
+        if isinstance(field, list):
+            return ";".join(str(entry) for entry in field)
+        return str(field)
+
+    def _normalize_quality(qual_value):
+        if qual_value in {None, ".", ""}:
+            return None
+        try:
+            return float(qual_value)
+        except (TypeError, ValueError):
+            return None
+
+    def _extract_called_alleles(gt_value) -> List[int]:
+        if gt_value is None:
+            return []
+        if isinstance(gt_value, (list, tuple)):
+            tokens = []
+            for item in gt_value:
+                if item is None:
+                    continue
+                tokens.extend(str(item).replace("|", "/").split("/"))
+        else:
+            tokens = str(gt_value).replace("|", "/").split("/")
+        allele_indices: List[int] = []
+        for token in tokens:
+            cleaned = token.strip()
+            if not cleaned or cleaned == ".":
+                continue
+    def _cleanup_temp_files():
+        for path in [joint_temp, filtered_temp]:
+            try:
+                allele_indices.append(int(cleaned))
+            except ValueError:
+                continue
+        return allele_indices
+
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
         genotypes = (
@@ -870,7 +938,7 @@ def append_metadata_to_merged_vcf(
         level=logging.DEBUG,
     )
 
-    header_lines = _read_header_lines(merged_vcf)
+    header_lines = _read_vcf_header_lines(merged_vcf)
     fileformat_line = None
     remaining_header_lines: list[str] = []
     for line in header_lines:
@@ -916,6 +984,9 @@ def append_metadata_to_merged_vcf(
         if not normalized.startswith("##"):
             normalized = "##" + normalized
         if normalized in existing_header_lines:
+            # Metadata provided via CLI flags may duplicate content that already
+            # exists on the merged header; skip the line to preserve a clean
+            # header and to avoid confusing downstream tooling.
             continue
         final_header_lines.append(normalized)
         existing_header_lines.add(normalized)
@@ -926,8 +997,8 @@ def append_metadata_to_merged_vcf(
 
     final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
 
-    body_lines: list[str] = []
-    with _open_vcf(merged_vcf) as stream:
+    body_lines: List[str] = []
+    with _open_vcf_stream(merged_vcf) as stream:
         reader = vcfpy.Reader.from_stream(stream)
         for record in reader:
             allele_number = _recalculate_info_fields(record)

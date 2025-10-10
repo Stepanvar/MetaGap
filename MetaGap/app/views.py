@@ -62,6 +62,7 @@ from .models import (
     SampleOrigin,
 )
 from .tables import create_dynamic_table
+from .mixins import OrganizationSampleGroupMixin
 
 
 logger = logging.getLogger(__name__)
@@ -186,22 +187,15 @@ class HomePageView(TemplateView):
         return context
 
 
-class ProfileView(LoginRequiredMixin, TemplateView):
+class ProfileView(LoginRequiredMixin, OrganizationSampleGroupMixin, TemplateView):
     """Display the user's organisation profile and related import tools."""
 
     template_name = "profile.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        user = self.request.user
-        organization_profile = getattr(user, "organization_profile", None)
-
-        if organization_profile is None:
-            sample_groups = SampleGroup.objects.none()
-        else:
-            sample_groups = SampleGroup.objects.filter(
-                created_by=organization_profile
-            ).order_by("name")
+        organization_profile = self.get_organization_profile()
+        sample_groups = self.get_owned_sample_groups().order_by("name")
 
         context.update(
             {
@@ -429,7 +423,9 @@ class AboutView(TemplateView):
     template_name = "about.html"
 
 
-class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
+class SampleGroupUpdateView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, UpdateView
+):
     """Allow organisation members to edit their sample group metadata."""
 
     model = SampleGroup
@@ -440,10 +436,7 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         """Restrict editing to groups owned by the user's organisation."""
 
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            return SampleGroup.objects.none()
-        return SampleGroup.objects.filter(created_by=organization_profile)
+        return self.get_owned_sample_groups()
 
     def get_form_kwargs(self) -> Dict[str, Any]:
         kwargs = super().get_form_kwargs()
@@ -470,7 +463,9 @@ class SampleGroupUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
+class SampleGroupDeleteView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, DeleteView
+):
     """Provide a confirmation flow for removing imported sample groups."""
 
     model = SampleGroup
@@ -478,10 +473,7 @@ class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy("profile")
 
     def get_queryset(self):
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            return SampleGroup.objects.none()
-        return SampleGroup.objects.filter(created_by=organization_profile)
+        return self.get_owned_sample_groups()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -499,7 +491,9 @@ class SampleGroupDeleteView(LoginRequiredMixin, DeleteView):
         return response
 
 
-class SampleGroupDetailView(LoginRequiredMixin, DetailView):
+class SampleGroupDetailView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, DetailView
+):
     """Display an individual sample group's metadata and variant catalogue."""
 
     model = SampleGroup
@@ -509,12 +503,8 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
     def get_queryset(self):
         """Limit access to groups owned by the requesting organisation."""
 
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            return SampleGroup.objects.none()
-
         return (
-            SampleGroup.objects.filter(created_by=organization_profile)
+            self.get_owned_sample_groups()
             .select_related(
                 "created_by",
                 "created_by__user",
@@ -696,7 +686,7 @@ class SampleGroupDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ImportDataView(LoginRequiredMixin, FormView):
+class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView):
     """Handle ingestion of VCF uploads into the relational schema."""
 
     template_name = "import_data.html"
@@ -705,13 +695,7 @@ class ImportDataView(LoginRequiredMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        organization_profile = getattr(self.request.user, "organization_profile", None)
-        if organization_profile is None:
-            sample_groups = SampleGroup.objects.none()
-        else:
-            sample_groups = SampleGroup.objects.filter(
-                created_by=organization_profile
-            ).order_by("name")
+        sample_groups = self.get_owned_sample_groups().order_by("name")
         context.setdefault("sample_groups", sample_groups)
         return context
 

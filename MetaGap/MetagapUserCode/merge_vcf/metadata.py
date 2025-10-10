@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import copy
 import gzip
-import os
 import re
+from contextlib import ExitStack, closing
+from pathlib import Path
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import logging
 import subprocess
@@ -328,13 +329,13 @@ def _load_metadata_template(
     if not template_path:
         return None, [], [], None
 
-    normalized_path = os.path.abspath(template_path)
-    if not os.path.exists(normalized_path):
+    normalized_path = Path(template_path).expanduser().resolve()
+    if not normalized_path.exists():
         handle_critical_error(
             f"Metadata template header file does not exist: {template_path}",
             exc_cls=ValidationError,
         )
-    if not os.path.isfile(normalized_path):
+    if not normalized_path.is_file():
         handle_critical_error(
             f"Metadata template header path is not a file: {template_path}",
             exc_cls=ValidationError,
@@ -348,7 +349,7 @@ def _load_metadata_template(
     existing_sanitized = set()
 
     try:
-        with open(normalized_path, "r", encoding="utf-8") as handle:
+        with normalized_path.open("r", encoding="utf-8") as handle:
             for line_number, raw_line in enumerate(handle, 1):
                 stripped = raw_line.strip()
                 if not stripped:
@@ -456,13 +457,13 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
             exc_cls=ValidationError,
         )
 
-    normalized_path = os.path.abspath(metadata_file)
-    if not os.path.exists(normalized_path):
+    normalized_path = Path(metadata_file).expanduser().resolve()
+    if not normalized_path.exists():
         handle_critical_error(
             f"Metadata file does not exist: {metadata_file}",
             exc_cls=ValidationError,
         )
-    if not os.path.isfile(normalized_path):
+    if not normalized_path.is_file():
         handle_critical_error(
             f"Metadata file path is not a file: {metadata_file}",
             exc_cls=ValidationError,
@@ -472,7 +473,7 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> List[str]:
     seen_lines = set()
 
     try:
-        with open(normalized_path, "r", encoding="utf-8") as handle:
+        with normalized_path.open("r", encoding="utf-8") as handle:
             for line_number, raw_line in enumerate(handle, 1):
                 stripped = raw_line.strip()
                 if not stripped:
@@ -545,23 +546,29 @@ def apply_metadata_to_header(
     return header
 
 
-def _validate_anonymized_vcf_header(final_vcf_path: str, ensure_for_uncompressed: bool = False):
+def _validate_anonymized_vcf_header(
+    final_vcf_path: Union[str, Path], ensure_for_uncompressed: bool = False
+):
     """Ensure the anonymized VCF header can be parsed by ``vcfpy``."""
 
     if not final_vcf_path:
         return
 
-    requires_validation = ensure_for_uncompressed or final_vcf_path.endswith(".vcf.gz")
+    resolved_path = Path(final_vcf_path)
+    suffixes = resolved_path.suffixes
+    requires_validation = ensure_for_uncompressed or suffixes[-2:] == [
+        ".vcf",
+        ".gz",
+    ]
     if not requires_validation:
         return
 
-    opener = gzip.open if final_vcf_path.endswith(".gz") else open
+    opener = gzip.open if resolved_path.suffix == ".gz" else open
     try:
-        with opener(final_vcf_path, "rt", encoding="utf-8") as stream:
-            reader = vcfpy.Reader.from_stream(stream)
-            # Force header consumption
+        with opener(resolved_path, "rt", encoding="utf-8") as stream, closing(
+            vcfpy.Reader.from_stream(stream)
+        ) as reader:
             _ = reader.header
-            reader.close()
     except Exception as exc:
         handle_critical_error(
             f"Failed to read header from anonymized VCF using vcfpy: {exc}"
@@ -583,35 +590,44 @@ def append_metadata_to_merged_vcf(
         )
 
     header_metadata_lines = header_metadata_lines or []
-    joint_temp = f"{merged_vcf}.joint.temp.vcf"
-    filtered_temp = f"{merged_vcf}.filtered.temp.vcf"
+    merged_path = Path(merged_vcf)
+    joint_temp = merged_path.with_name(f"{merged_path.name}.joint.temp.vcf")
+    filtered_temp = merged_path.with_name(f"{merged_path.name}.filtered.temp.vcf")
 
-    expects_gzip = merged_vcf.endswith(".gz")
-    final_plain_vcf: Optional[str]
-    final_vcf: Optional[str]
+    expects_gzip = merged_path.suffix == ".gz"
+    final_plain_vcf_path: Optional[Path] = None
+    final_vcf_path: Optional[Path] = None
 
-    if merged_vcf.endswith(".vcf.gz"):
-        base_path = merged_vcf[: -len(".vcf.gz")]
-        final_plain_vcf = f"{base_path}.anonymized.vcf"
-        final_vcf = f"{final_plain_vcf}.gz"
-    elif merged_vcf.endswith(".vcf"):
-        base_path = merged_vcf[: -len(".vcf")]
-        final_plain_vcf = f"{base_path}.anonymized.vcf"
-        final_vcf = final_plain_vcf
+    name = merged_path.name
+    parent = merged_path.parent
+    if name.endswith(".vcf.gz"):
+        base_name = name[: -len(".vcf.gz")]
+        final_plain_vcf_path = parent / f"{base_name}.anonymized.vcf"
+        final_vcf_path = final_plain_vcf_path.with_name(
+            f"{final_plain_vcf_path.name}.gz"
+        )
+    elif name.endswith(".vcf"):
+        base_name = name[: -len(".vcf")]
+        final_plain_vcf_path = parent / f"{base_name}.anonymized.vcf"
+        final_vcf_path = final_plain_vcf_path
+    elif name.endswith(".gz"):
+        base_name = name[: -len(".gz")]
+        final_plain_vcf_path = parent / f"{base_name}.anonymized"
+        final_vcf_path = final_plain_vcf_path.with_name(
+            f"{final_plain_vcf_path.name}.gz"
+        )
     else:
-        base_path, ext = os.path.splitext(merged_vcf)
-        if ext == ".gz":
-            base_path = base_path or merged_vcf[:-3]
-            final_plain_vcf = f"{base_path}.anonymized"
-            final_vcf = f"{final_plain_vcf}.gz"
-        else:
-            final_plain_vcf = f"{base_path}.anonymized{ext or '.vcf'}"
-            final_vcf = final_plain_vcf
+        extension = merged_path.suffix or ".vcf"
+        base_name = name[: -len(extension)] if merged_path.suffix else name
+        final_plain_vcf_path = parent / f"{base_name}.anonymized{extension}"
+        final_vcf_path = final_plain_vcf_path
 
-    def _open_vcf(path):
-        return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, "r", encoding="utf-8")
+    def _open_vcf(path: Path):
+        if path.suffix == ".gz":
+            return gzip.open(path, "rt", encoding="utf-8")
+        return path.open("r", encoding="utf-8")
 
-    def _read_header_lines(path: str) -> List[str]:
+    def _read_header_lines(path: Path) -> List[str]:
         header_lines: List[str] = []
         with _open_vcf(path) as handle:
             for raw in handle:
@@ -624,7 +640,7 @@ def append_metadata_to_merged_vcf(
         if value is None:
             return "."
         if isinstance(value, float):
-            return ("%g" % value)
+            return f"{value:g}"
         return str(value)
 
     def _serialize_info(info: OrderedDict) -> str:
@@ -673,13 +689,20 @@ def append_metadata_to_merged_vcf(
             cleaned = token.strip()
             if not cleaned or cleaned == ".":
                 continue
-    def _cleanup_temp_files():
-        for path in [joint_temp, filtered_temp]:
             try:
                 allele_indices.append(int(cleaned))
             except ValueError:
                 continue
         return allele_indices
+
+    def _cleanup_temp_files():
+        for temp_path in (joint_temp, filtered_temp):
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                continue
+            except Exception:
+                pass
 
     def _recalculate_info_fields(record) -> int:
         alt_count = len(getattr(record, "ALT", []) or [])
@@ -746,7 +769,7 @@ def append_metadata_to_merged_vcf(
         level=logging.DEBUG,
     )
 
-    header_lines = _read_header_lines(merged_vcf)
+    header_lines = _read_header_lines(merged_path)
     fileformat_line = None
     remaining_header_lines: List[str] = []
     for line in header_lines:
@@ -803,45 +826,48 @@ def append_metadata_to_merged_vcf(
     final_header_lines.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
 
     body_lines: List[str] = []
-    with _open_vcf(merged_vcf) as stream:
-        reader = vcfpy.Reader.from_stream(stream)
+    with ExitStack() as stack:
+        reader = None
+        try:
+            stream = stack.enter_context(_open_vcf(merged_path))
+            reader = stack.enter_context(closing(vcfpy.Reader.from_stream(stream)))
+        except NotImplementedError:
+            reader = stack.enter_context(
+                closing(vcfpy.Reader.from_path(str(merged_path)))
+            )
+
         for record in reader:
             allele_number = _recalculate_info_fields(record)
             if not _record_passes_filters(record, allele_number):
                 continue
             body_lines.append(_serialize_record(record))
-        reader.close()
 
-    if not final_plain_vcf:
-        base, ext = os.path.splitext(merged_vcf)
-        if not ext:
-            ext = ".vcf"
-        final_plain_vcf = f"{base}.anonymized{ext}"
+    if final_plain_vcf_path is None:
+        extension = merged_path.suffix or ".vcf"
+        base_name = merged_path.stem if merged_path.suffix else merged_path.name
+        final_plain_vcf_path = merged_path.with_name(
+            f"{base_name}.anonymized{extension}"
+        )
 
     try:
-        with open(final_plain_vcf, "w", encoding="utf-8") as output_handle:
+        with final_plain_vcf_path.open("w", encoding="utf-8") as output_handle:
             for line in final_header_lines:
                 output_handle.write(line + "\n")
             for line in body_lines:
                 output_handle.write(line + "\n")
-        final_vcf = final_plain_vcf
+        final_vcf_path = final_plain_vcf_path
     except Exception as exc:
-        if final_plain_vcf and os.path.exists(final_plain_vcf):
+        if final_plain_vcf_path and final_plain_vcf_path.exists():
             try:
-                os.remove(final_plain_vcf)
+                final_plain_vcf_path.unlink()
             except Exception:
                 pass
         handle_critical_error(
             f"Failed to assemble final anonymized VCF contents: {exc}",
             exc_cls=MergeConflictError,
         )
-    finally:
-        try:
-            reader.close()
-        except Exception:
-            pass
 
-    if expects_gzip and final_plain_vcf and os.path.exists(final_plain_vcf):
+    if expects_gzip and final_plain_vcf_path and final_plain_vcf_path.exists():
         if pysam is None:
             _cleanup_temp_files()
             handle_critical_error(
@@ -849,19 +875,21 @@ def append_metadata_to_merged_vcf(
             )
 
         try:
-            final_vcf = f"{final_plain_vcf}.gz"
-            pysam.bgzip(final_plain_vcf, final_vcf, force=True)
-            pysam.tabix_index(final_vcf, preset="vcf", force=True)
+            final_vcf_path = final_plain_vcf_path.with_name(
+                f"{final_plain_vcf_path.name}.gz"
+            )
+            pysam.bgzip(str(final_plain_vcf_path), str(final_vcf_path), force=True)
+            pysam.tabix_index(str(final_vcf_path), preset="vcf", force=True)
         except (OSError, ValueError) as exc:
             _cleanup_temp_files()
-            if os.path.exists(final_plain_vcf):
+            if final_plain_vcf_path.exists():
                 try:
-                    os.remove(final_plain_vcf)
+                    final_plain_vcf_path.unlink()
                 except Exception:
                     pass
-            if final_vcf and os.path.exists(final_vcf):
+            if final_vcf_path and final_vcf_path.exists():
                 try:
-                    os.remove(final_vcf)
+                    final_vcf_path.unlink()
                 except Exception:
                     pass
             handle_critical_error(
@@ -869,16 +897,17 @@ def append_metadata_to_merged_vcf(
                 exc_cls=MergeConflictError,
             )
     elif not expects_gzip:
-        final_vcf = final_plain_vcf
+        final_vcf_path = final_plain_vcf_path
 
-    _validate_anonymized_vcf_header(final_vcf, ensure_for_uncompressed=True)
+    final_vcf_str = str(final_vcf_path) if final_vcf_path is not None else ""
+    _validate_anonymized_vcf_header(final_vcf_str, ensure_for_uncompressed=True)
 
     log_message(
-        f"Anonymized merged VCF written to: {final_vcf}",
+        f"Anonymized merged VCF written to: {final_vcf_str}",
         verbose,
         level=logging.INFO,
     )
-    return final_vcf
+    return final_vcf_str
 
 
 def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
@@ -891,78 +920,71 @@ def recalculate_cohort_info_tags(vcf_path: str, verbose: bool = False) -> None:
     )
 
     if VCFPY_AVAILABLE:
+        header = None
+        records: List = []
         try:
-            reader = vcfpy.Reader.from_path(vcf_path)
+            with closing(vcfpy.Reader.from_path(vcf_path)) as reader:
+                header = reader.header
+
+                for record in reader:
+                    info = dict(getattr(record, "INFO", {}) or {})
+                    alt_alleles = list(getattr(record, "ALT", []) or [])
+                    alt_counts = [0] * len(alt_alleles)
+                    allele_number = 0
+
+                    for call in getattr(record, "calls", []) or []:
+                        data = getattr(call, "data", {}) or {}
+                        genotype = data.get("GT")
+                        if not genotype:
+                            continue
+                        tokens = genotype.replace("|", "/").split("/")
+                        for token in tokens:
+                            token = token.strip()
+                            if not token or token == ".":
+                                continue
+                            try:
+                                allele_index = int(token)
+                            except ValueError:
+                                continue
+                            if allele_index < 0:
+                                continue
+                            allele_number += 1
+                            if allele_index == 0:
+                                continue
+                            normalized_index = allele_index - 1
+                            if 0 <= normalized_index < len(alt_counts):
+                                alt_counts[normalized_index] += 1
+
+                    info["AN"] = allele_number
+                    if alt_counts:
+                        info["AC"] = alt_counts
+                        if allele_number > 0:
+                            info["AF"] = [
+                                count / allele_number for count in alt_counts
+                            ]
+                        else:
+                            info["AF"] = [0.0 for _ in alt_counts]
+                    else:
+                        info["AC"] = []
+                        info["AF"] = []
+
+                    record.INFO = info
+                    records.append(record)
         except Exception as exc:
             handle_critical_error(
                 f"Failed to open {vcf_path} for AC/AN/AF recalculation: {exc}",
                 exc_cls=MergeConflictError,
             )
 
-        records = []
-        header = reader.header
-
-        for record in reader:
-            info = dict(getattr(record, "INFO", {}) or {})
-            alt_alleles = list(getattr(record, "ALT", []) or [])
-            alt_counts = [0] * len(alt_alleles)
-            allele_number = 0
-
-            for call in getattr(record, "calls", []) or []:
-                data = getattr(call, "data", {}) or {}
-                genotype = data.get("GT")
-                if not genotype:
-                    continue
-                tokens = genotype.replace("|", "/").split("/")
-                for token in tokens:
-                    token = token.strip()
-                    if not token or token == ".":
-                        continue
-                    try:
-                        allele_index = int(token)
-                    except ValueError:
-                        continue
-                    if allele_index < 0:
-                        continue
-                    allele_number += 1
-                    if allele_index == 0:
-                        continue
-                    normalized_index = allele_index - 1
-                    if 0 <= normalized_index < len(alt_counts):
-                        alt_counts[normalized_index] += 1
-
-            info["AN"] = allele_number
-            if alt_counts:
-                info["AC"] = alt_counts
-                if allele_number > 0:
-                    info["AF"] = [count / allele_number for count in alt_counts]
-                else:
-                    info["AF"] = [0.0 for _ in alt_counts]
-            else:
-                info["AC"] = []
-                info["AF"] = []
-
-            record.INFO = info
-            records.append(record)
-
         try:
-            reader.close()
-        except Exception:
-            pass
-
-        try:
-            writer = vcfpy.Writer.from_path(vcf_path, header)
+            with closing(vcfpy.Writer.from_path(vcf_path, header)) as writer:
+                for record in records:
+                    writer.write_record(record)
         except Exception as exc:
             handle_critical_error(
                 f"Failed to reopen {vcf_path} for writing: {exc}",
                 exc_cls=MergeConflictError,
             )
-
-        try:
-            for record in records:
-                writer.write_record(record)
-        finally:
-            writer.close()
         return
 
     _recalculate_cohort_info_tags_without_vcfpy(vcf_path)

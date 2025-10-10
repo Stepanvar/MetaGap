@@ -525,7 +525,7 @@ def append_metadata_to_merged_vcf(
                 "view",
                 joint_temp,
                 "-i",
-                'QUAL>30 && INFO/AN>50 && FILTER="PASS"',
+                'QUAL>30 && INFO/AN>10 && FILTER="PASS"',
                 "-O",
                 "v",
                 "-o",

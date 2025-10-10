@@ -1,235 +1,187 @@
 """Command-line entrypoint for the VCF merging workflow."""
-
 from __future__ import annotations
 
 import argparse
-import datetime
-import glob
-import os
-import shutil
+import sys
+from pathlib import Path
 
-from .logging_utils import (
-    MergeConflictError,
-    MergeVCFError,
-    ValidationError,
-    handle_critical_error,
-    log_message,
-)
-from .metadata import append_metadata_to_merged_vcf, load_metadata_lines
-from .merging import merge_vcfs
-from .validation import (
-    find_first_vcf_with_header,
-    normalize_vcf_version,
-    validate_all_vcfs,
-    validate_merged_vcf,
-)
+from .logging_utils import MergeConflictError, MergeVCFError, ValidationError, log_message
+from . import metadata as metadata_module
+from . import validation
+from . import merging
 
+def _validate_metadata_entry(arg: str) -> str:
+    """Validate that a metadata argument is in KEY=VALUE format and return a sanitized string."""
+    if arg is None:
+        raise argparse.ArgumentTypeError("Metadata entry cannot be empty")
+    s = arg.strip()
+    if s == "":
+        # Allow empty strings (they will be filtered out later)
+        return s
+    if "=" not in s:
+        raise argparse.ArgumentTypeError("Metadata entries must be in KEY=VALUE format (e.g., ID=VALUE)")
+    key, value = s.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if key == "" or (key.lower() == "id" and value == ""):
+        raise argparse.ArgumentTypeError("Metadata entries must have a non-empty ID")
+    if key.startswith("-"):
+        raise argparse.ArgumentTypeError("Metadata key cannot start with '-'")
+    return f"{key}={value}"
 
 def parse_arguments():
+    """Parse and return command-line arguments for the VCF merging CLI."""
     parser = argparse.ArgumentParser(
+        prog="merge_vcf",
         description="Consolidate multiple VCF files into a single merged VCF file."
     )
+    # Input VCFs: allow multiple via --inputs or as positional arguments
     parser.add_argument(
-        "--input-dir",
-        required=True,
-        help="Directory containing the VCF files to merge.",
+        "input_vcfs",
+        nargs="*",
+        help="Input VCF files to merge (provide one or more file paths)."
     )
     parser.add_argument(
-        "-o",
-        "--output-dir",
-        "--output",
+        "--inputs",
+        nargs="+",
+        dest="input_list",
+        help="List of input VCF files to merge (alternative to providing them positionally)."
+    )
+    parser.add_argument(
+        "-o", "--out-dir", "--output-dir", "--output",
         dest="output_dir",
-        help="Directory for the merged VCF. Defaults to the input directory when omitted.",
-    )
-    parser.add_argument(
-        "-t",
-        "--metadata-file",
-        required=True,
-        dest="metadata_file",
-        help=(
-            "Path to a metadata template file containing header lines to apply to the merged VCF."
-        ),
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable verbose console logging in addition to the log file.",
+        help="Directory for the merged output VCF. Defaults to current directory if omitted."
     )
     parser.add_argument(
         "--qual-threshold",
         type=float,
         default=30.0,
-        help=(
-            "Minimum QUAL value required to keep a variant after merging. "
-            "Set to a negative value to disable the filter."
-        ),
+        help="Minimum QUAL value required to keep a variant (set negative to disable QUAL filtering)."
     )
     parser.add_argument(
         "--an-threshold",
         type=float,
         default=50.0,
-        help=(
-            "Minimum INFO/AN value required to keep a variant after tag recalculation. "
-            "Set to a negative value to disable the filter."
-        ),
+        help="Minimum INFO/AN (allele count) required to keep a variant (set negative to disable AN filtering)."
     )
-    return parser.parse_args()
-
+    parser.add_argument(
+        "--sample-header",
+        action="append",
+        dest="sample_header_entries",
+        type=_validate_metadata_entry,
+        default=[],
+        help="Sample metadata KEY=VALUE entry to include in the output VCF's SAMPLE header line (repeatable)."
+    )
+    parser.add_argument(
+        "--simple-header",
+        action="append",
+        dest="simple_header_lines",
+        type=_validate_metadata_entry,
+        default=[],
+        help="Additional header KEY=VALUE line to include in output VCF (repeatable, '##' will be prefixed automatically)."
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose logging to console."
+    )
+    args = parser.parse_args()
+    # Determine input file list (combine positional and --inputs)
+    input_files = []
+    if args.input_list:
+        input_files.extend(args.input_list)
+    if args.input_vcfs:
+        input_files.extend(args.input_vcfs)
+    if not input_files:
+        parser.error("No input VCF files specified. Provide file paths or use --inputs.")
+    # Remove any empty metadata entries that might have been added
+    args.sample_header_entries = [s for s in args.sample_header_entries if s and s.strip()]
+    args.simple_header_lines = [s if s.startswith("##") else f"##{s}" for s in args.simple_header_lines if s and s.strip()]
+    # Ensure at least one sample ID is provided if any sample metadata given
+    has_id = any(entry.split("=", 1)[0].strip().lower() == "id" and entry.split("=", 1)[1].strip() for entry in args.sample_header_entries)
+    if not has_id and args.sample_header_entries:
+        parser.error("A non-empty ID must be provided in sample header entries (e.g., --sample-header ID=SampleName).")
+    # Normalize output directory
+    args.output_dir = str(Path(args.output_dir)) if args.output_dir else "."
+    # Finalize input file paths
+    args.input_files = [str(Path(p)) for p in input_files]
+    return args
 
 def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
-    """Return a directory, representative filename, and count for output VCFs."""
-
-    discovered = []
-    output_dir = os.path.abspath(output_dir) if output_dir else None
-    if output_dir and os.path.isdir(output_dir):
-        for pattern in ("SAMPLE_*.vcf.gz", "SAMPLE_*.vcf"):
-            discovered.extend(
-                sorted(
-                    glob.glob(os.path.join(output_dir, pattern)),
-                    key=lambda path: os.path.basename(path),
-                )
-            )
-
-    if discovered:
-        discovered.sort(
-            key=lambda path: (
-                0 if path.endswith(".vcf.gz") else 1,
-                os.path.basename(path),
-            )
-        )
-        representative_path = discovered[0]
-        directory = os.path.dirname(os.path.abspath(representative_path))
-        filename = os.path.basename(representative_path)
-        count = len(discovered)
-        return directory, filename, count
-
-    fallback_abs = os.path.abspath(fallback_vcf)
-    return os.path.dirname(fallback_abs), os.path.basename(fallback_abs), 1
-
+    """Return a tuple (directory, representative_filename, count) for output VCF shards in output_dir.
+    If no per-sample VCF shards are found, returns the fallback_vcf's directory, filename, and count=1."""
+    directory = Path(output_dir).resolve()
+    if directory.is_dir():
+        # Look for any per-sample VCF files in the output directory
+        vcf_candidates = sorted(directory.glob("SAMPLE_*.vcf.gz")) + sorted(directory.glob("SAMPLE_*.vcf"))
+        if vcf_candidates:
+            # Pick the first (alphabetically) as representative
+            representative_path = vcf_candidates[0].resolve()
+            count = len(vcf_candidates)
+            return str(representative_path.parent), representative_path.name, count
+    # If no per-sample files found, fall back to the final VCF itself
+    fallback_path = Path(fallback_vcf).resolve()
+    return str(fallback_path.parent), fallback_path.name, 1
 
 def main():
+    """Main entry point for the VCF merging CLI. Parses arguments, runs the merging pipeline, and handles output."""
     args = parse_arguments()
     verbose = args.verbose
-
     try:
-        metadata_header_lines = load_metadata_lines(args.metadata_file, verbose)
-
-        log_message(
-            "Script Execution Log - "
-            + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            verbose,
-        )
-
-        input_dir = os.path.abspath(args.input_dir)
-        if not os.path.isdir(input_dir):
-            handle_critical_error(
-                f"Input directory does not exist: {input_dir}",
-                exc_cls=ValidationError,
-            )
-        log_message("Input directory: " + input_dir, verbose)
-
-        output_dir = os.path.abspath(args.output_dir) if args.output_dir else input_dir
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
-        log_message("Output directory: " + output_dir, verbose)
-
-        (
-            detected_file,
-            detected_fileformat,
-            detected_reference,
-        ) = find_first_vcf_with_header(input_dir, verbose)
-        ref_genome = detected_reference
-        vcf_version = normalize_vcf_version(detected_fileformat)
-
-        if not ref_genome:
-            handle_critical_error(
-                "Reference genome build must be auto-detectable from input files.",
-                exc_cls=ValidationError,
-            )
-        if not vcf_version:
-            handle_critical_error(
-                "VCF version must be auto-detectable from input files.",
-                exc_cls=ValidationError,
-            )
-
-        if detected_file:
-            log_message(
-                f"Auto-detected metadata from {detected_file} -> reference={detected_reference or 'unknown'}, "
-                f"version={detected_fileformat or 'unknown'}",
-                verbose,
-            )
-
-        log_message(f"Reference genome: {ref_genome}, VCF version: {vcf_version}", verbose)
-
-        valid_files, sample_order = validate_all_vcfs(
-            input_dir,
-            ref_genome,
-            vcf_version,
-            verbose,
-        )
-
-        merged_vcf = merge_vcfs(
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        log_message(f"Output directory: {out_dir}", verbose)
+        # Validate and prepare input VCF files
+        valid_files, sample_order = validation.validate_all_vcfs(args.input_files, verbose=verbose)
+        # Perform merge and apply QUAL/AN filters
+        merged_vcf_path = merging.merge_vcfs(
             valid_files,
-            output_dir,
-            verbose,
-            sample_order=sample_order,
-        )
-
-        final_vcf = append_metadata_to_merged_vcf(
-            merged_vcf,
-            header_metadata_lines=metadata_header_lines,
+            str(out_dir),
             verbose=verbose,
-        )
-
-        validate_merged_vcf(final_vcf, verbose)
-            merged_vcf = merge_vcfs(
-            valid_files,
-            output_dir,
-            verbose,
             sample_order=sample_order,
-            qual_threshold=args.qual_threshold if args.qual_threshold >= 0 else None,
-            an_threshold=args.an_threshold if args.an_threshold >= 0 else None,
+            qual_threshold=(args.qual_threshold if args.qual_threshold >= 0 else None),
+            an_threshold=(args.an_threshold if args.an_threshold >= 0 else None)
         )
-
-        summary_dir, sample_filename, produced_count = summarize_produced_vcfs(
-            output_dir, final_vcf
+        # Append sample and simple header metadata (if provided) to the merged VCF
+        final_vcf_path = metadata_module.append_metadata_to_merged_vcf(
+            merged_vcf_path,
+            sample_header_entries=args.sample_header_entries,
+            simple_header_lines=args.simple_header_lines,
+            verbose=verbose
         )
-        summary_path = os.path.join(summary_dir, sample_filename)
-        log_message(
-            f"Discovered {produced_count} per-sample shard file(s) in {summary_dir} (e.g., {sample_filename}).",
-            verbose,
-        )
-
-        final_target = os.path.join(output_dir, "cohort_final.vcf.gz")
-        if final_vcf != final_target:
-            os.makedirs(os.path.dirname(final_target), exist_ok=True)
-            if os.path.exists(final_target):
-                os.remove(final_target)
-            shutil.move(final_vcf, final_target)
-            for ext in (".tbi", ".csi"):
-                source_index = final_vcf + ext
-                target_index = final_target + ext
-                if os.path.exists(source_index):
-                    if os.path.exists(target_index):
-                        os.remove(target_index)
-                    shutil.move(source_index, target_index)
-            final_vcf = final_target
-        else:
-            final_target = final_vcf
-
-        log_message(
-            f"Script execution completed successfully. Final cohort VCF: {final_target}",
-            verbose,
-        )
-        print(f"Wrote: {final_target} x 1.")
+        # Validate the final merged VCF file structure and content
+        validation.validate_merged_vcf(final_vcf_path, verbose=verbose)
+        # Determine final output path and compress/index if needed
+        final_target = out_dir / "cohort_final.vcf.gz"
+        final_vcf_path = Path(final_vcf_path)
+        if final_vcf_path.resolve() != final_target.resolve():
+            if final_target.exists():
+                final_target.unlink()
+            # Compress final output if not already compressed
+            if final_vcf_path.suffix != ".gz":
+                try:
+                    validation.pysam.tabix_compress(str(final_vcf_path), str(final_vcf_path) + ".gz", force=True)
+                except Exception as e:
+                    raise MergeVCFError(f"Failed to compress final VCF: {e}")
+                try:
+                    final_vcf_path.unlink()  # remove uncompressed file
+                except Exception:
+                    pass
+                final_vcf_path = Path(str(final_vcf_path) + ".gz")
+            # Rename to standard final file name
+            try:
+                final_vcf_path.replace(final_target)
+            except Exception as e:
+                raise MergeVCFError(f"Failed to rename final VCF: {e}")
+            # Index the final VCF (create .tbi index for the bgzipped file)
+            try:
+                validation.pysam.tabix_index(str(final_target), preset="vcf", force=True)
+            except Exception as e:
+                raise MergeVCFError(f"Failed to index final VCF: {e}")
+            final_vcf_path = final_target
+        log_message(f"Script execution completed successfully. Final cohort VCF: {final_vcf_path}", verbose)
+        print(f"Wrote: {final_vcf_path} x 1.")
     except (ValidationError, MergeConflictError, MergeVCFError) as exc:
+        # Print error message and exit with code 1 on known exceptions
         print(f"ERROR: {exc}")
-        raise SystemExit(1)
-
-
-__all__ = [
-    "parse_arguments",
-    "summarize_produced_vcfs",
-    "main",
-]
+        sys.exit(1)

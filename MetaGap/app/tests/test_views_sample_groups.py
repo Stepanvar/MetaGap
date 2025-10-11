@@ -229,6 +229,47 @@ class SampleGroupDetailViewTests(SampleGroupViewMatrixMixin, TestCase):
         )
         self.assertEqual(str(result.query), str(expected.query))
 
+    def test_sequencing_section_uses_active_platform_only(self) -> None:
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self.detail_url())
+
+        metadata_sections = response.context.get("metadata_sections")
+        self.assertIsNotNone(metadata_sections)
+        assert metadata_sections is not None
+
+        sequencing_section = next(
+            (
+                section
+                for section in metadata_sections
+                if section["title"] == "Sequencing & Bioinformatics"
+            ),
+            None,
+        )
+        self.assertIsNotNone(sequencing_section)
+        assert sequencing_section is not None
+
+        labels = [item["label"] for item in sequencing_section["items"]]
+        values = [item["value"] for item in sequencing_section["items"]]
+
+        active_platform_label = self.sample_group.active_platform_label or "Sequencing platform"
+        active_platform_value = self.sample_group.active_platform_value
+
+        self.assertIn(active_platform_label, labels)
+        if active_platform_value:
+            rendered_values = [str(value) for value in values if value is not None]
+            self.assertIn(active_platform_value, rendered_values)
+
+        unexpected_labels = {"Oxford Nanopore", "PacBio", "Ion Torrent"} - {active_platform_label}
+        for label in unexpected_labels:
+            self.assertNotIn(label, labels)
+
+        content = response.content.decode()
+        for label in unexpected_labels:
+            self.assertNotIn(label, content)
+        if active_platform_label != "Sequencing platform":
+            self.assertNotIn("Sequencing platform", content)
+
 
 class SampleGroupUpdateViewTests(TestCase):
     """Ensure sample group metadata can be edited securely."""

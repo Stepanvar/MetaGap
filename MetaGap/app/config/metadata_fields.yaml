@@ -1,0 +1,264 @@
+metadata_section_map:
+  SAMPLE_GROUP: sample_group
+  SAMPLEGROUP: sample_group
+  GROUP: sample_group
+  SAMPLE: sample_group
+  REFERENCE_GENOME_BUILD: reference_genome_build
+  REFERENCE_GENOME: reference_genome_build
+  REFERENCE: reference_genome_build
+  GENOME_COMPLEXITY: genome_complexity
+  SAMPLE_ORIGIN: sample_origin
+  ORIGIN: sample_origin
+  MATERIAL_TYPE: material_type
+  LIBRARY_CONSTRUCTION: library_construction
+  LIBRARY_PREP: library_construction
+  ILLUMINA_SEQ: illumina_seq
+  ONT_SEQ: ont_seq
+  PACBIO_SEQ: pacbio_seq
+  IONTORRENT_SEQ: iontorrent_seq
+  ION_TORRENT_SEQ: iontorrent_seq
+  BIOINFO_ALIGNMENT: bioinfo_alignment
+  ALIGNMENT: bioinfo_alignment
+  BIOINFO_VARIANT_CALLING: bioinfo_variant_calling
+  VARIANT_CALLING: bioinfo_variant_calling
+  BIOINFO_POSTPROC: bioinfo_post_proc
+  BIOINFO_POST_PROC: bioinfo_post_proc
+  BIOINFO_POST_PROCESSING: bioinfo_post_proc
+  INPUT_QUALITY: input_quality
+  PLATFORM_INDEPENDENT: platform_independent
+  PLATFORM-INDEPENDENT: platform_independent
+  PLATFORMINDEPENDENT: platform_independent
+
+metadata_models:
+  reference_genome_build: app.models.ReferenceGenomeBuild
+  genome_complexity: app.models.GenomeComplexity
+  sample_origin: app.models.SampleOrigin
+  material_type: app.models.MaterialType
+  library_construction: app.models.LibraryConstruction
+  illumina_seq: app.models.IlluminaSeq
+  ont_seq: app.models.OntSeq
+  pacbio_seq: app.models.PacBioSeq
+  iontorrent_seq: app.models.IonTorrentSeq
+  bioinfo_alignment: app.models.BioinfoAlignment
+  bioinfo_variant_calling: app.models.BioinfoVariantCalling
+  bioinfo_post_proc: app.models.BioinfoPostProc
+  input_quality: app.models.InputQuality
+
+metadata_field_aliases:
+  sample_group:
+    name:
+      - group
+      - group_name
+      - dataset
+      - id
+    doi:
+      - dataset_doi
+      - group_doi
+    source_lab:
+      - lab
+      - lab_name
+      - source
+      - center
+    contact_email:
+      - email
+      - lab_email
+      - contact
+    contact_phone:
+      - phone
+      - lab_phone
+    total_samples:
+      - samples
+      - sample_count
+      - n_samples
+      - n
+      - num_samples
+      - number_of_samples
+    inclusion_criteria:
+      - inclusion
+      - inclusioncriteria
+    exclusion_criteria:
+      - exclusion
+      - exclusioncriteria
+    comments:
+      - description
+      - notes
+  input_quality:
+    a260_a280:
+      - a260_280
+      - ratio_a260_a280
+    a260_a230:
+      - a260_230
+      - ratio_a260_a230
+    dna_concentration:
+      - dna_conc
+      - dna_concentration_ng_ul
+      - concentration
+    rna_concentration:
+      - rna_conc
+      - rna_concentration_ng_ul
+    notes:
+      - note
+      - comment
+      - comments
+    additional_metrics:
+      - metrics
+      - additional_metrics
+  reference_genome_build:
+    build_name:
+      - name
+      - reference
+      - build
+    build_version:
+      - version
+      - build_version
+    additional_info:
+      - additional
+      - additional_info
+  genome_complexity:
+    size:
+      - genome_size
+      - size_bp
+    ploidy:
+      - ploidy_level
+    gc_content:
+      - gc
+      - gc_percent
+  sample_origin:
+    tissue:
+      - tissue_type
+      - sample_group_tissue
+      - samplegroup_tissue
+    collection_method:
+      - collection
+      - method
+      - sample_group_collection_method
+      - samplegroup_collection_method
+    storage_conditions:
+      - storage
+      - storage_conditions
+      - sample_group_storage_conditions
+      - samplegroup_storage_conditions
+    time_stored:
+      - time
+      - storage_time
+  material_type:
+    material_type:
+      - type
+    integrity_number:
+      - rin
+      - din
+      - integrity
+  library_construction:
+    kit:
+      - library_kit
+      - kit_name
+    fragmentation:
+      - fragmentation_method
+    adapter_ligation_efficiency:
+      - adapter_efficiency
+    pcr_cycles:
+      - pcr
+      - pcr_cycles
+  illumina_seq:
+    instrument:
+      - machine
+      - instrument
+    flow_cell:
+      - flowcell
+      - flow_cell_id
+    channel_method:
+      - channel
+    cluster_density:
+      - cluster
+    qc_software:
+      - qc
+      - software
+  ont_seq:
+    instrument:
+      - machine
+      - instrument
+    flow_cell:
+      - flowcell
+      - flow_cell_id
+    flow_cell_version:
+      - flowcell_version
+    pore_type:
+      - pore
+    bias_voltage:
+      - bias
+  pacbio_seq:
+    instrument:
+      - machine
+      - instrument
+    flow_cell:
+      - flowcell
+      - flow_cell_id
+    smrt_cell_type:
+      - smrt_cell
+      - cell_type
+    zmw_density:
+      - zmw
+  iontorrent_seq:
+    instrument:
+      - machine
+      - instrument
+    flow_cell:
+      - flowcell
+      - flow_cell_id
+    chip_type:
+      - chip
+    ph_calibration:
+      - ph
+    flow_order:
+      - floworder
+    ion_sphere_metrics:
+      - ionsphere
+      - sphere_metrics
+  bioinfo_alignment:
+    tool:
+      - aligner
+      - software
+      - tool
+    params:
+      - parameters
+      - params
+    ref_genome_version:
+      - reference_version
+    recalibration_settings:
+      - recalibration
+      - recal_settings
+  bioinfo_variant_calling:
+    tool:
+      - caller
+      - tool
+    version:
+      - tool_version
+      - version
+    filtering_thresholds:
+      - filters
+      - thresholds
+    duplicate_handling:
+      - duplicates
+    mq:
+      - mapping_quality
+  bioinfo_post_proc:
+    normalization:
+      - normalisation
+      - normalization_method
+    harmonization:
+      - harmonisation
+      - harmonization_method
+
+section_primary_field:
+  reference_genome_build: build_name
+  genome_complexity: size
+  sample_origin: tissue
+  material_type: material_type
+  library_construction: kit
+  illumina_seq: instrument
+  ont_seq: instrument
+  pacbio_seq: instrument
+  iontorrent_seq: instrument
+  bioinfo_alignment: tool
+  bioinfo_variant_calling: tool
+  bioinfo_post_proc: normalization

@@ -54,6 +54,22 @@ class VCFImporterTests(TestCase):
 1\t5678\trsMeta\tC\tG\t88\tPASS\tAF=0.25\tGT:GQ\t0/1:80
 """
 
+    VCF_WITH_ONT_ONLY_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##SAMPLE=<ID=NanoporeOnly,Description=ONT exclusive dataset>
+##SEQUENCING_PLATFORM=<Platform=Oxford Nanopore Technologies,Instrument=PromethION,Flow_Cell=FLO-MIN112,Flow_Cell_Version=v1.0,Pore_Type=R10.4,Bias_Voltage=180mV>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t2345\trsOnt\tA\tG\t60\tPASS\tAF=0.4\tGT\t0/1
+"""
+
+    VCF_WITH_PLATFORM_INDEPENDENT_ONLY_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##SAMPLE=<ID=PlatformNeutral,Description=Platform agnostic dataset>
+##PLATFORM_INDEPENDENT=<Run_Name=NeutralRun,Read_Length=100,Device=GenericSeq,Notes=Stored as text>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t3456\trsNeutral\tG\tA\t50\tPASS\tAF=0.1\tGT\t0/1
+"""
+
     MALFORMED_HEADER_VCF = """##fileformat=VCFv4.2
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t1234\trsMalformed\tA\tC\t60\tPASS\tSOMATIC;AF=0.1\tGT:GQ\t0/1:45
@@ -79,6 +95,15 @@ class VCFImporterTests(TestCase):
 1\t2000\t.\tA\tG\t.\tPASS\tQD=12.5;FS=7.1;SOR=1.8;CUSTOM=note\tGT:GQ\t0/1:77
 """
 
+    VCF_WITH_CANONICAL_SAMPLE_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=CanonicalGroup,Description=Canonical metadata>
+##SAMPLE_GROUP=<Name=CanonicalGroup,DOI=10.1234/example>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t101\t.\tA\tT\t.\tPASS\t.\tGT\t0/1
+"""
+
     VCF_WITH_UNKNOWN_FORMAT_FIELD = """##fileformat=VCFv4.2
 ##contig=<ID=1>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -88,6 +113,19 @@ class VCFImporterTests(TestCase):
 1\t2222\t.\tC\tA\t50\tPASS\t.\tGT:AB\t0/1:0.65
 """
 
+    VCF_WITH_METADATA_FILE_STYLE = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=Cohort01,Description=Metadata import,Center="Genotek",Sample_Group_Source_Lab="Genotek Annex",N=100,Sample_Group_Contact_Email=cohort@example.com>
+##REFERENCE_GENOME_BUILD=<BuildName=GRCh38,BuildVersion="p14",Additional_Info={\"notes\":\"p14\"}>
+##SAMPLE_ORIGIN=<Tissue=Lung,Sample_Group_Collection_Method=Biopsy>
+##LIBRARY_CONSTRUCTION=<Kit="TruSeq",PCRCyles=12>
+##BIOINFO_ALIGNMENT=<Software=BWA>
+##BIOINFO_VARIANT_CALLING=<Tool=GATK,Version=4.2>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t100\t.\tA\tG\t.\tPASS\t.\tGT\t0/1
+"""
+
     VCF_WITH_UNKNOWN_SAMPLE_METADATA = """##fileformat=VCFv4.2
 ##contig=<ID=1>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -95,6 +133,15 @@ class VCFImporterTests(TestCase):
 ##SEQUENCING_PLATFORM=<Platform=AlienSeq,Instrument=CustomSeq>
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t3333\trsMetadata\tG\tT\t80\tPASS\t.\tGT\t0/1
+"""
+
+    VCF_WITH_LIBRARY_CONSTRUCTION_PCRTYPO = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=TypoGroup,Description=Library PCR cycles typo>
+##LIBRARY_CONSTRUCTION=<PCRCyles=12>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t999\trsTypo\tA\tG\t60\tPASS\t.\tGT\t0/1
 """
 
     VCF_WITHOUT_EXPLICIT_NAME = """##fileformat=VCFv4.2
@@ -130,6 +177,25 @@ class VCFImporterTests(TestCase):
 3\t7777\tundef\tG\tA\t60\tPASS\tDP=.;MISSING=.;UNDECLARED=3\tGT:XY\t0/1:abc
 """
 
+    VCF_WITH_ALIAS_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=AliasGroup,Description=Alias metadata>
+##REFERENCE_GENOME_BUILD=<BuildName=AliasRef,BuildVersion=v2>
+##LIBRARY_CONSTRUCTION=<Kit=AliasKit,PCRCyles=12>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t1010\trsAlias\tA\tG\t.\tPASS\t.\tGT\t0/1
+"""
+
+    VCF_WITH_PCR_CYCLE_ALIAS = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=CycleGroup,Description=PCR cycle alias>
+##LIBRARY_CONSTRUCTION=<Kit=CycleKit,PCRCycle=10>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t2020\trsCycle\tC\tT\t.\tPASS\t.\tGT\t0/1
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -153,6 +219,47 @@ class VCFImporterTests(TestCase):
         importer = VCFImporter(self.user)
         sample_group = importer.import_file(str(path))
         return importer, sample_group
+
+    def _refresh_sequencing_platform_relations(self, sample_group: SampleGroup) -> SampleGroup:
+        return SampleGroup.objects.select_related(
+            "ont_seq",
+            "illumina_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
+        ).get(pk=sample_group.pk)
+
+    def _assert_only_ont_metadata(self, sample_group: SampleGroup) -> None:
+        sample_group = self._refresh_sequencing_platform_relations(sample_group)
+
+        self.assertIsNone(sample_group.illumina_seq)
+        self.assertIsNone(sample_group.pacbio_seq)
+        self.assertIsNone(sample_group.iontorrent_seq)
+        self.assertIsNotNone(sample_group.ont_seq)
+
+        assert sample_group.ont_seq is not None
+        self.assertEqual(sample_group.ont_seq.instrument, "PromethION")
+        self.assertEqual(sample_group.ont_seq.flow_cell, "FLO-MIN112")
+        self.assertEqual(sample_group.ont_seq.flow_cell_version, "v1.0")
+        self.assertEqual(sample_group.ont_seq.pore_type, "R10.4")
+        self.assertEqual(sample_group.ont_seq.bias_voltage, "180mV")
+
+    def _assert_platform_independent_metadata(self, sample_group: SampleGroup) -> None:
+        sample_group = self._refresh_sequencing_platform_relations(sample_group)
+
+        self.assertIsNone(sample_group.illumina_seq)
+        self.assertIsNone(sample_group.ont_seq)
+        self.assertIsNone(sample_group.pacbio_seq)
+        self.assertIsNone(sample_group.iontorrent_seq)
+
+        metadata = sample_group.additional_metadata or {}
+        self.assertIn("platform_independent_run_name", metadata)
+        self.assertEqual(metadata["platform_independent_run_name"], "NeutralRun")
+        self.assertEqual(metadata.get("platform_independent_read_length"), 100)
+        self.assertEqual(metadata.get("platform_independent_device"), "GenericSeq")
+        self.assertEqual(
+            metadata.get("platform_independent_notes"),
+            "Stored as text",
+        )
 
     def test_import_links_alleles_to_sample_group(self) -> None:
         importer, sample_group = self._import(self.VCF_CONTENT)
@@ -189,6 +296,37 @@ class VCFImporterTests(TestCase):
         self.assertEqual(sample_group.additional_metadata, {"customkey": "Value"})
         self.assertEqual(importer.warnings, [])
 
+    def test_import_does_not_duplicate_canonical_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_CANONICAL_SAMPLE_METADATA,
+            filename="canonical_metadata.vcf",
+        )
+
+        self.assertEqual(sample_group.doi, "10.1234/example")
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertNotIn("doi", additional_metadata)
+        self.assertNotIn("sample_group_doi", additional_metadata)
+        self.assertNotIn("dataset_doi", additional_metadata)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_retains_sample_group_name_with_shared_aliases(self) -> None:
+        header_path = (
+            Path(__file__).resolve().parents[2] / "MetagapUserCode" / "metadata.txt"
+        )
+        header_lines = header_path.read_text().splitlines()
+        vcf_lines = [
+            "##fileformat=VCFv4.2",
+            *header_lines,
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001",
+            "1\t100\t.\tA\tT\t50\tPASS\t.\tGT\t0/1",
+        ]
+
+        importer, sample_group = self._import("\n".join(vcf_lines), filename="alias.vcf")
+
+        self.assertEqual(sample_group.name, "Cohort01")
+        self.assertIsNotNone(sample_group.reference_genome_build)
+        self.assertEqual(sample_group.reference_genome_build.build_name, "GRCh38")
+        
     def test_import_populates_related_metadata(self) -> None:
         importer, sample_group = self._import(self.VCF_WITH_METADATA, filename="metadata.vcf")
 
@@ -202,6 +340,16 @@ class VCFImporterTests(TestCase):
             "bioinfo_post_proc",
             "input_quality",
         ).get(pk=sample_group.pk)
+
+        self.assertEqual(
+            sample_group.sequencing_platform,
+            SampleGroup.SequencingPlatform.ILLUMINA,
+        )
+        self.assertIsNotNone(sample_group.illumina_seq)
+        self.assertIsNone(sample_group.ont_seq)
+        self.assertIsNone(sample_group.pacbio_seq)
+        self.assertIsNone(sample_group.iontorrent_seq)
+        self.assertIs(sample_group.get_active_platform_instance(), sample_group.illumina_seq)
 
         self.assertEqual(sample_group.comments, "Detailed group")
         self.assertEqual(sample_group.source_lab, "MetaLab")
@@ -284,7 +432,164 @@ class VCFImporterTests(TestCase):
             float(additional_metadata["platform_independent_q30"]),
             92.5,
         )
+        self.assertNotIn("ont_seq_instrument", additional_metadata)
+        self.assertNotIn("pacbio_seq_instrument", additional_metadata)
+        self.assertNotIn("iontorrent_seq_instrument", additional_metadata)
         self.assertEqual(importer.warnings, [])
+
+    def test_import_metadata_file_style_header_avoids_duplicate_additional_fields(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_METADATA_FILE_STYLE,
+            filename="metadata_file_style.vcf",
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build",
+            "sample_origin",
+            "library_construction",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+        ).get(pk=sample_group.pk)
+
+        self.assertEqual(sample_group.name, "Cohort01")
+        self.assertEqual(sample_group.comments, "Metadata import")
+        self.assertEqual(sample_group.source_lab, "Genotek Annex")
+        self.assertEqual(sample_group.contact_email, "cohort@example.com")
+        self.assertEqual(sample_group.total_samples, 100)
+
+        reference_build = sample_group.reference_genome_build
+        self.assertIsNotNone(reference_build)
+        assert reference_build is not None
+        self.assertEqual(reference_build.build_name, "GRCh38")
+        self.assertEqual(reference_build.build_version, "p14")
+        self.assertEqual(reference_build.additional_info, {"notes": "p14"})
+
+        origin = sample_group.sample_origin
+        self.assertIsNotNone(origin)
+        assert origin is not None
+        self.assertEqual(origin.tissue, "Lung")
+        self.assertEqual(origin.collection_method, "Biopsy")
+
+        library = sample_group.library_construction
+        self.assertIsNotNone(library)
+        assert library is not None
+        self.assertEqual(library.kit, "TruSeq")
+        self.assertIsNone(library.fragmentation)
+        self.assertIsNone(library.adapter_ligation_efficiency)
+        self.assertIsNone(library.pcr_cycles)
+
+        alignment = sample_group.bioinfo_alignment
+        self.assertIsNotNone(alignment)
+        assert alignment is not None
+        self.assertEqual(alignment.tool, "BWA")
+
+        variant_calling = sample_group.bioinfo_variant_calling
+        self.assertIsNotNone(variant_calling)
+        assert variant_calling is not None
+        self.assertEqual(variant_calling.tool, "GATK")
+        self.assertEqual(variant_calling.version, "4.2")
+
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertNotIn("source_lab", additional_metadata)
+        self.assertNotIn("sample_group_source_lab", additional_metadata)
+        self.assertNotIn("center", additional_metadata)
+        self.assertNotIn("sample_group_contact_email", additional_metadata)
+        self.assertNotIn("library_construction_kit", additional_metadata)
+        self.assertNotIn("library_construction_pcrcyles", additional_metadata)
+        self.assertNotIn("reference_genome_build_build_name", additional_metadata)
+
+        self.assertIsNone(getattr(library, "additional_info", None))
+        self.assertIsNone(getattr(alignment, "additional", None))
+        self.assertIsNone(getattr(variant_calling, "additional", None))
+
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_handles_metadata_alias_variants(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_ALIAS_METADATA, filename="alias_metadata.vcf"
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build", "library_construction"
+        ).get(pk=sample_group.pk)
+
+        self.assertIsNotNone(sample_group.reference_genome_build)
+        assert sample_group.reference_genome_build is not None
+        self.assertEqual(
+            sample_group.reference_genome_build.build_name, "AliasRef"
+        )
+        self.assertEqual(
+            sample_group.reference_genome_build.build_version, "v2"
+        )
+        self.assertIsNotNone(sample_group.library_construction)
+        assert sample_group.library_construction is not None
+        self.assertEqual(sample_group.library_construction.kit, "AliasKit")
+        self.assertEqual(sample_group.library_construction.pcr_cycles, 12)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_handles_pcrcycle_alias_variant(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_PCR_CYCLE_ALIAS, filename="pcrcycle_metadata.vcf"
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "library_construction"
+        ).get(pk=sample_group.pk)
+
+        self.assertIsNotNone(sample_group.library_construction)
+        assert sample_group.library_construction is not None
+        self.assertEqual(sample_group.library_construction.kit, "CycleKit")
+        self.assertEqual(sample_group.library_construction.pcr_cycles, 10)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_parses_ont_only_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_ONT_ONLY_METADATA,
+            filename="ont_only.vcf",
+        )
+
+        self._assert_only_ont_metadata(sample_group)
+        self.assertEqual(importer.warnings, [])
+
+    @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("ont fallback"))
+    def test_text_fallback_parses_ont_only_metadata(
+        self, mocked_variant_file: mock.Mock
+    ) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_ONT_ONLY_METADATA,
+            filename="ont_only_fallback.vcf",
+        )
+
+        self.assertTrue(mocked_variant_file.called)
+        self._assert_only_ont_metadata(sample_group)
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Falling back to a text parser", importer.warnings[0])
+
+    def test_import_records_platform_independent_only_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_PLATFORM_INDEPENDENT_ONLY_METADATA,
+            filename="platform_independent_only.vcf",
+        )
+
+        self._assert_platform_independent_metadata(sample_group)
+        self.assertEqual(importer.warnings, [])
+
+    @mock.patch(
+        "app.services.vcf_importer.pysam.VariantFile",
+        side_effect=OSError("platform independent fallback"),
+    )
+    def test_text_fallback_records_platform_independent_only_metadata(
+        self, mocked_variant_file: mock.Mock
+    ) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_PLATFORM_INDEPENDENT_ONLY_METADATA,
+            filename="platform_independent_only_fallback.vcf",
+        )
+
+        self.assertTrue(mocked_variant_file.called)
+        self._assert_platform_independent_metadata(sample_group)
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Falling back to a text parser", importer.warnings[0])
 
     def test_import_serializes_unknown_format_fields(self) -> None:
         importer, sample_group = self._import(
@@ -317,8 +622,27 @@ class VCFImporterTests(TestCase):
             additional.get("platform_independent_instrument"),
             "CustomSeq",
         )
+        self.assertIsNone(sample_group.sequencing_platform)
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Unsupported sequencing platform", importer.warnings[0])
+
+    def test_import_maps_library_construction_pcr_cycles_typo(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_LIBRARY_CONSTRUCTION_PCRTYPO,
+            filename="library_typo.vcf",
+        )
+
+        library = sample_group.library_construction
+        self.assertIsNotNone(library)
+        assert library is not None
+        self.assertEqual(library.pcr_cycles, 12)
+
+        additional = sample_group.additional_metadata or {}
+        self.assertNotIn("library_construction_pcrcyles", additional)
+        self.assertNotIn("pcrcyles", additional)
+
+        self.assertIsNone(getattr(library, "additional_info", None))
+        self.assertEqual(importer.warnings, [])
 
     def test_import_without_sample_name_falls_back_to_filename(self) -> None:
         importer, sample_group = self._import(
@@ -348,6 +672,7 @@ class VCFImporterTests(TestCase):
                 for warning in importer.warnings
             ),
         )
+        self.assertIsNone(sample_group.sequencing_platform)
 
     def test_import_collects_unknown_metadata_section(self) -> None:
         importer, sample_group = self._import(

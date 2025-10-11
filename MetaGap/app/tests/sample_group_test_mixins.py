@@ -15,11 +15,8 @@ from ..models import (
     IlluminaSeq,
     Info,
     InputQuality,
-    IonTorrentSeq,
     LibraryConstruction,
     MaterialType,
-    OntSeq,
-    PacBioSeq,
     ReferenceGenomeBuild,
     SampleGroup,
     SampleOrigin,
@@ -57,18 +54,6 @@ class SampleGroupTestDataMixin:
             instrument="NovaSeq 6000",
             flow_cell="S4",
         )
-        ont_seq = OntSeq.objects.create(
-            instrument="PromethION",
-            flow_cell_version="R10.4",
-        )
-        pacbio_seq = PacBioSeq.objects.create(
-            instrument="Sequel II",
-            smrt_cell_type="8M",
-        )
-        iontorrent_seq = IonTorrentSeq.objects.create(
-            instrument="Ion S5",
-            chip_type="530",
-        )
         bioinfo_alignment = BioinfoAlignment.objects.create(
             tool="BWA",
             ref_genome_version="GRCh38",
@@ -101,10 +86,8 @@ class SampleGroupTestDataMixin:
             sample_origin=sample_origin,
             material_type=material_type,
             library_construction=library_construction,
+            sequencing_platform=SampleGroup.SequencingPlatform.ILLUMINA,
             illumina_seq=illumina_seq,
-            ont_seq=ont_seq,
-            pacbio_seq=pacbio_seq,
-            iontorrent_seq=iontorrent_seq,
             bioinfo_alignment=bioinfo_alignment,
             bioinfo_variant_calling=bioinfo_variant_calling,
             bioinfo_post_proc=bioinfo_post_proc,

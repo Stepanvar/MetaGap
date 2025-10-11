@@ -6,8 +6,10 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from app import forms
 from app.models import (
     BioinfoAlignment,
+    IlluminaSeq,
     MaterialType,
     OrganizationProfile,
+    OntSeq,
     SampleGroup,
     SampleOrigin,
 )
@@ -311,3 +313,49 @@ class SampleGroupFormTests(TestCase):
         self.assertEqual(BioinfoAlignment.objects.count(), 1)
         self.assertIsNotNone(sample_group.bioinfo_alignment)
         self.assertEqual(sample_group.bioinfo_alignment.tool, "BWA-MEM")
+
+    def test_platform_selector_defaults_to_inferred_relation(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        illumina = IlluminaSeq.objects.create(instrument="NovaSeq 6000")
+        group = SampleGroup.objects.create(
+            name="Instrument Group",
+            created_by=user.organization_profile,
+            illumina_seq=illumina,
+        )
+
+        form = forms.SampleGroupForm(instance=group, user=user)
+
+        self.assertEqual(form["sequencing_platform"].value(), "illumina_seq")
+
+    def test_save_clears_non_selected_platform_relations(self):
+        user = User.objects.create_user("creator", "creator@example.com", "secret")
+        illumina = IlluminaSeq.objects.create(instrument="NovaSeq 6000")
+        ont = OntSeq.objects.create(instrument="PromethION")
+        group = SampleGroup.objects.create(
+            name="Platform Switch",
+            created_by=user.organization_profile,
+            illumina_seq=illumina,
+            ont_seq=ont,
+        )
+
+        form = forms.SampleGroupForm(
+            data={
+                "name": group.name,
+                "sequencing_platform": "illumina_seq",
+                "illumina_seq": illumina.instrument,
+                "ont_seq": ont.instrument,
+                "pacbio_seq": "",
+                "iontorrent_seq": "",
+            },
+            instance=group,
+            user=user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+        updated_group = form.save()
+        updated_group.refresh_from_db()
+
+        self.assertEqual(updated_group.sequencing_platform, "illumina_seq")
+        self.assertIsNotNone(updated_group.illumina_seq)
+        self.assertIsNone(updated_group.ont_seq)

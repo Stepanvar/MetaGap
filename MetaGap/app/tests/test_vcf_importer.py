@@ -54,6 +54,22 @@ class VCFImporterTests(TestCase):
 1\t5678\trsMeta\tC\tG\t88\tPASS\tAF=0.25\tGT:GQ\t0/1:80
 """
 
+    VCF_WITH_ONT_ONLY_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##SAMPLE=<ID=NanoporeOnly,Description=ONT exclusive dataset>
+##SEQUENCING_PLATFORM=<Platform=Oxford Nanopore Technologies,Instrument=PromethION,Flow_Cell=FLO-MIN112,Flow_Cell_Version=v1.0,Pore_Type=R10.4,Bias_Voltage=180mV>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t2345\trsOnt\tA\tG\t60\tPASS\tAF=0.4\tGT\t0/1
+"""
+
+    VCF_WITH_PLATFORM_INDEPENDENT_ONLY_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##SAMPLE=<ID=PlatformNeutral,Description=Platform agnostic dataset>
+##PLATFORM_INDEPENDENT=<Run_Name=NeutralRun,Read_Length=100,Device=GenericSeq,Notes=Stored as text>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t3456\trsNeutral\tG\tA\t50\tPASS\tAF=0.1\tGT\t0/1
+"""
+
     MALFORMED_HEADER_VCF = """##fileformat=VCFv4.2
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t1234\trsMalformed\tA\tC\t60\tPASS\tSOMATIC;AF=0.1\tGT:GQ\t0/1:45
@@ -203,6 +219,47 @@ class VCFImporterTests(TestCase):
         importer = VCFImporter(self.user)
         sample_group = importer.import_file(str(path))
         return importer, sample_group
+
+    def _refresh_sequencing_platform_relations(self, sample_group: SampleGroup) -> SampleGroup:
+        return SampleGroup.objects.select_related(
+            "ont_seq",
+            "illumina_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
+        ).get(pk=sample_group.pk)
+
+    def _assert_only_ont_metadata(self, sample_group: SampleGroup) -> None:
+        sample_group = self._refresh_sequencing_platform_relations(sample_group)
+
+        self.assertIsNone(sample_group.illumina_seq)
+        self.assertIsNone(sample_group.pacbio_seq)
+        self.assertIsNone(sample_group.iontorrent_seq)
+        self.assertIsNotNone(sample_group.ont_seq)
+
+        assert sample_group.ont_seq is not None
+        self.assertEqual(sample_group.ont_seq.instrument, "PromethION")
+        self.assertEqual(sample_group.ont_seq.flow_cell, "FLO-MIN112")
+        self.assertEqual(sample_group.ont_seq.flow_cell_version, "v1.0")
+        self.assertEqual(sample_group.ont_seq.pore_type, "R10.4")
+        self.assertEqual(sample_group.ont_seq.bias_voltage, "180mV")
+
+    def _assert_platform_independent_metadata(self, sample_group: SampleGroup) -> None:
+        sample_group = self._refresh_sequencing_platform_relations(sample_group)
+
+        self.assertIsNone(sample_group.illumina_seq)
+        self.assertIsNone(sample_group.ont_seq)
+        self.assertIsNone(sample_group.pacbio_seq)
+        self.assertIsNone(sample_group.iontorrent_seq)
+
+        metadata = sample_group.additional_metadata or {}
+        self.assertIn("platform_independent_run_name", metadata)
+        self.assertEqual(metadata["platform_independent_run_name"], "NeutralRun")
+        self.assertEqual(metadata.get("platform_independent_read_length"), 100)
+        self.assertEqual(metadata.get("platform_independent_device"), "GenericSeq")
+        self.assertEqual(
+            metadata.get("platform_independent_notes"),
+            "Stored as text",
+        )
 
     def test_import_links_alleles_to_sample_group(self) -> None:
         importer, sample_group = self._import(self.VCF_CONTENT)
@@ -484,6 +541,55 @@ class VCFImporterTests(TestCase):
         self.assertEqual(sample_group.library_construction.kit, "CycleKit")
         self.assertEqual(sample_group.library_construction.pcr_cycles, 10)
         self.assertEqual(importer.warnings, [])
+
+    def test_import_parses_ont_only_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_ONT_ONLY_METADATA,
+            filename="ont_only.vcf",
+        )
+
+        self._assert_only_ont_metadata(sample_group)
+        self.assertEqual(importer.warnings, [])
+
+    @mock.patch("app.services.vcf_importer.pysam.VariantFile", side_effect=OSError("ont fallback"))
+    def test_text_fallback_parses_ont_only_metadata(
+        self, mocked_variant_file: mock.Mock
+    ) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_ONT_ONLY_METADATA,
+            filename="ont_only_fallback.vcf",
+        )
+
+        self.assertTrue(mocked_variant_file.called)
+        self._assert_only_ont_metadata(sample_group)
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Falling back to a text parser", importer.warnings[0])
+
+    def test_import_records_platform_independent_only_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_PLATFORM_INDEPENDENT_ONLY_METADATA,
+            filename="platform_independent_only.vcf",
+        )
+
+        self._assert_platform_independent_metadata(sample_group)
+        self.assertEqual(importer.warnings, [])
+
+    @mock.patch(
+        "app.services.vcf_importer.pysam.VariantFile",
+        side_effect=OSError("platform independent fallback"),
+    )
+    def test_text_fallback_records_platform_independent_only_metadata(
+        self, mocked_variant_file: mock.Mock
+    ) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_PLATFORM_INDEPENDENT_ONLY_METADATA,
+            filename="platform_independent_only_fallback.vcf",
+        )
+
+        self.assertTrue(mocked_variant_file.called)
+        self._assert_platform_independent_metadata(sample_group)
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Falling back to a text parser", importer.warnings[0])
 
     def test_import_serializes_unknown_format_fields(self) -> None:
         importer, sample_group = self._import(

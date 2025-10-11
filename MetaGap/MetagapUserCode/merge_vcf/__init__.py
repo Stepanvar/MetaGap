@@ -1,4 +1,12 @@
-"""Utilities for merging and validating VCF files."""
+"""Utilities for merging and validating VCF files.
+
+This module ensures the third-party dependencies :mod:`vcfpy` and
+:mod:`pysam` are importable before exposing the rest of the package's
+functionality.  It also protects against accidental invocation of external
+command-line tools such as ``bcftools``, ``bgzip``, or ``tabix`` by statically
+scanning companion modules for disallowed ``subprocess`` calls before any
+public utilities become available.
+"""
 
 from __future__ import annotations
 

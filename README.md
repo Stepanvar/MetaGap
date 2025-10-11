@@ -29,6 +29,40 @@ After loading the data you can sign in with either demo account and visit the pr
   server logs so developers can diagnose issues without exposing Django's debug
   pages to end users.
 
+### Maintaining VCF metadata configuration
+
+Metadata section mappings, model bindings, and field aliases are now stored in
+`MetaGap/app/config/metadata_fields.yaml`.  The loader in
+`app/services/vcf_metadata.py` validates the file, caches the parsed result, and
+exposes it to the importer/database helpers.  The YAML file contains four
+top-level mappings:
+
+* `metadata_section_map` – normalises header section names (e.g. `SAMPLE_GROUP`
+  → `sample_group`).
+* `metadata_models` – maps section identifiers to the Django model class that
+  persists the parsed data.  Each value must be a dotted import path such as
+  `app.models.IlluminaSeq`.
+* `metadata_field_aliases` – lists the recognised aliases for each model field
+  within a section.  Provide every alternate header key that should populate a
+  field.  Empty lists are allowed when no aliases exist.
+* `section_primary_field` – designates the field that should mirror the overall
+  section value when a header omits structured keys.
+
+To add a new metadata field or section:
+
+1. Update `metadata_fields.yaml` with the new section key, model mapping, and
+   alias list.  Keep keys upper-cased in `metadata_section_map` to match VCF
+   header conventions and ensure the model path is importable.
+2. Run `python manage.py test app.tests.test_import_helpers.MetadataConfigurationTests`
+   to confirm the configuration parses successfully.  The tests also surface
+   meaningful errors if the YAML is malformed or the model reference cannot be
+   imported.
+3. If a new Django model or field is required, add it to `app/models.py` and
+   create a migration before adjusting the configuration.
+
+The importer and database writer use the cached configuration automatically, so
+no further code changes are needed once the YAML file and models are in sync.
+
 ### Logging format for the VCF merger
 
 The `MetaGap.MetagapUserCode.merge_vcf` workflow logs to both `script_execution.log`

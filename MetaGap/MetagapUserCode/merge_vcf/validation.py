@@ -1,19 +1,20 @@
 """Validation routines for VCF shards and merged outputs.
 
-This module orchestrates three major responsibilities in the merge pipeline:
+This module enforces structural and content integrity across all stages of the
+merge workflow. It covers three key responsibilities:
 
-* Input discovery and preparation – ``discover_and_prepare_inputs`` walks the
-  requested directory, identifies candidate ``.vcf``/``.vcf.gz`` files, and
-  ensures each file has a BGZF-compressed representation along with a Tabix
-  index so downstream tooling can stream records efficiently.
-* gVCF screening – when ``--allow-gvcf`` is not supplied we defensively inspect
-  VCF headers and a sample of records to detect gVCF-specific ``<NON_REF>``
-  alleles, excluding any inputs that appear to contain gVCF markers.
-* Artifact validation – helper routines invoked later in the module perform
-  structural checks over the merged VCF products to confirm that the expected
-  index and data files were emitted and that their contents conform to the VCF
-  specification.
+* **Input discovery and preparation** – ``discover_and_prepare_inputs`` walks
+  the input directory, identifies ``.vcf`` and ``.vcf.gz`` files, and ensures
+  each has a BGZF-compressed form with a Tabix index so records can be streamed
+  efficiently by downstream tools.
+* **gVCF screening** – when ``--allow-gvcf`` is not provided, headers and sample
+  records are scanned for gVCF markers such as ``<NON_REF>`` alleles or
+  ``##GVCF`` metadata, excluding such inputs from the merge.
+* **Artifact validation** – helper functions confirm that merged products and
+  intermediate shards meet VCF structural requirements, including correct
+  indexing, header integrity, sample set consistency, and sorted order.
 """
+
 
 from __future__ import annotations
 

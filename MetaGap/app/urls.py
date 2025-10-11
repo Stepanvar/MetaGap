@@ -1,3 +1,7 @@
+"""URL configuration mapping MetaGap views for home, dashboards, search,
+informational pages, authentication, profile management, sample-group CRUD,
+and import/export utilities."""
+
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static

@@ -211,6 +211,24 @@ class VCFImporterTests(TestCase):
         self.assertEqual(sample_group.additional_metadata, {"customkey": "Value"})
         self.assertEqual(importer.warnings, [])
 
+    def test_import_retains_sample_group_name_with_shared_aliases(self) -> None:
+        header_path = (
+            Path(__file__).resolve().parents[2] / "MetagapUserCode" / "metadata.txt"
+        )
+        header_lines = header_path.read_text().splitlines()
+        vcf_lines = [
+            "##fileformat=VCFv4.2",
+            *header_lines,
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001",
+            "1\t100\t.\tA\tT\t50\tPASS\t.\tGT\t0/1",
+        ]
+
+        importer, sample_group = self._import("\n".join(vcf_lines), filename="alias.vcf")
+
+        self.assertEqual(sample_group.name, "Cohort01")
+        self.assertIsNotNone(sample_group.reference_genome_build)
+        self.assertEqual(sample_group.reference_genome_build.build_name, "GRCh38")
+        
     def test_import_populates_related_metadata(self) -> None:
         importer, sample_group = self._import(self.VCF_WITH_METADATA, filename="metadata.vcf")
 

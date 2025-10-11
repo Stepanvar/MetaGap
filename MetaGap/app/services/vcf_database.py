@@ -81,11 +81,15 @@ class VCFDatabaseWriter:
         file_path: str,
         organization_profile: Any,
     ) -> SampleGroup:
+        parser_consumed_raw = metadata.pop("_consumed_keys", None)
+        parser_consumed = set(parser_consumed_raw or [])
+
         group_data, group_consumed, group_additional = self._extract_section_data(
             metadata, "sample_group", SampleGroup
         )
 
         consumed_keys = set(group_consumed)
+        consumed_keys.update(parser_consumed)
         additional_metadata: Dict[str, Any] = {}
         parser_additional = metadata.get("additional_metadata")
         if isinstance(parser_additional, dict):
@@ -96,12 +100,35 @@ class VCFDatabaseWriter:
             additional_metadata.update(group_additional)
 
         fallback_name = os.path.splitext(os.path.basename(file_path))[0]
-        name = group_data.pop("name", None) or metadata.get("name") or fallback_name
-        comments = (
-            group_data.pop("comments", None)
-            or metadata.get("comments")
-            or metadata.get("description")
-        )
+        name_candidate = group_data.pop("name", None)
+        metadata_name = metadata.get("name")
+        if name_candidate:
+            name = name_candidate
+        elif metadata_name:
+            name = metadata_name
+            consumed_keys.add("name")
+        else:
+            name = fallback_name
+            if "name" in metadata:
+                consumed_keys.add("name")
+
+        comments_candidate = group_data.pop("comments", None)
+        metadata_comments = metadata.get("comments")
+        metadata_description = metadata.get("description")
+        if comments_candidate:
+            comments = comments_candidate
+        elif metadata_comments:
+            comments = metadata_comments
+            consumed_keys.add("comments")
+        elif metadata_description:
+            comments = metadata_description
+            consumed_keys.add("description")
+        else:
+            comments = None
+            if "comments" in metadata:
+                consumed_keys.add("comments")
+            if "description" in metadata:
+                consumed_keys.add("description")
 
         try:
             sample_group = SampleGroup.objects.create(
@@ -114,7 +141,7 @@ class VCFDatabaseWriter:
             update_fields: list[str] = []
             for section, model_cls in self.metadata_model_map.items():
                 section_data, section_consumed, additional = self._extract_section_data(
-                    metadata, section, model_cls
+                    metadata, section, model_cls, skip_keys=consumed_keys
                 )
 
                 consumed_keys.update(section_consumed)
@@ -174,17 +201,25 @@ class VCFDatabaseWriter:
         metadata: Dict[str, Any],
         section: str,
         model_cls: Any,
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> Tuple[Dict[str, Any], set[str], Optional[Dict[str, Any]]]:
         alias_map = self.metadata_field_aliases.get(section, {})
         section_data: Dict[str, Any] = {}
         consumed: set[str] = set()
+        skip_set = set(skip_keys or [])
         normalized_section = normalize_metadata_key(section)
 
         for field_name, aliases in alias_map.items():
             model_field = self._get_model_field(model_cls, field_name)
             if model_field is None:
                 continue
-            key = self._find_metadata_key(metadata, section, field_name, aliases)
+            key = self._find_metadata_key(
+                metadata,
+                section,
+                field_name,
+                aliases,
+                skip_keys=skip_set | consumed,
+            )
             if key is None:
                 continue
             raw_value = metadata[key]
@@ -217,6 +252,7 @@ class VCFDatabaseWriter:
             primary_field
             and primary_field not in section_data
             and section in metadata
+            and section not in skip_set
         ):
             model_field = self._get_model_field(model_cls, primary_field)
             if model_field is not None:
@@ -226,7 +262,7 @@ class VCFDatabaseWriter:
                 consumed.add(section)
 
         additional, additional_consumed = self._build_additional_payload(
-            metadata, section, consumed
+            metadata, section, consumed | skip_set
         )
         consumed.update(additional_consumed)
         return section_data, consumed, additional
@@ -244,7 +280,11 @@ class VCFDatabaseWriter:
         section: str,
         field_name: str,
         aliases: Iterable[str],
+        *,
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> Optional[str]:
+        skip_set = set(skip_keys or [])
+
         def _dedupe_append(collection: list[str], candidate: str) -> None:
             if candidate and candidate not in collection:
                 collection.append(candidate)
@@ -287,7 +327,7 @@ class VCFDatabaseWriter:
             _dedupe_append(candidate_order, alias_candidate)
 
         for candidate in candidate_order:
-            if candidate in metadata:
+            if candidate in metadata and candidate not in skip_set:
                 return candidate
 
         normalized_lookup: Dict[str, str] = {}
@@ -305,12 +345,12 @@ class VCFDatabaseWriter:
         for candidate in candidate_order:
             normalized_candidate = normalize_metadata_key(candidate)
             mapped_key = normalized_lookup.get(normalized_candidate)
-            if mapped_key is not None:
+            if mapped_key is not None and mapped_key not in skip_set:
                 return mapped_key
 
             collapsed_candidate = normalized_candidate.replace("_", "")
             mapped_key = normalized_lookup.get(collapsed_candidate)
-            if mapped_key is not None:
+            if mapped_key is not None and mapped_key not in skip_set:
                 return mapped_key
 
         return None

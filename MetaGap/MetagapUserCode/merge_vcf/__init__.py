@@ -1,13 +1,11 @@
-"""MetaGap VCF merging utilities with built-in safety checks.
+"""MetaGap VCF merging utilities with built-in safety and dependency checks.
 
-This package exposes the Python helpers used by MetaGap to merge and validate
-Variant Call Format (VCF) files. Importing the package immediately verifies
-that the required runtime dependencies :mod:`vcfpy` and :mod:`pysam` are
-available so that later operations can rely on them without deferred import
-errors. In addition, the package performs an abstract syntax tree (AST) audit
-of its modules to ensure subprocess calls never invoke external utilities such
-as ``bcftools``, ``bgzip``, or ``tabix``. This guard enforces the use of the
-native Python implementations bundled with MetaGap when handling VCF data.
+This package provides helpers for merging and validating Variant Call Format
+(VCF) files used within MetaGap. Importing the package verifies that
+:mod:`vcfpy` and :mod:`pysam` are available, preventing deferred import errors.
+It also performs a static audit of its modules to ensure no subprocess calls
+invoke external tools such as ``bcftools``, ``bgzip``, or ``tabix``, enforcing
+the use of MetaGap’s native Python implementations for all VCF operations.
 """
 
 from __future__ import annotations

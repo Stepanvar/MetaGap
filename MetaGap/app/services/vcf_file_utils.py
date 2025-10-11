@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 
 from .vcf_database import VCFDatabaseWriter
 from .vcf_metadata import (
+    METADATA_SECTION_MAP,
     VCFMetadataParser,
     normalize_metadata_key,
     normalize_metadata_value,
@@ -55,6 +56,16 @@ def extract_metadata_text_fallback(
 
                 for entry_key, entry_items in _iter_metadata_entries(stripped):
                     parser.ingest_metadata_items(metadata, entry_key, entry_items)
+
+                    normalized_entry_key = (entry_key or "").upper()
+                    skip_raw_capture = (
+                        normalized_entry_key in METADATA_SECTION_MAP
+                        or normalized_entry_key == "SEQUENCING_PLATFORM"
+                    )
+
+                    if skip_raw_capture:
+                        continue
+
                     for raw_key, value in entry_items.items():
                         if raw_key.lower() == "value":
                             continue

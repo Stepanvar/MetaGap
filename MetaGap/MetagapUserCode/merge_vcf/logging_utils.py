@@ -1,14 +1,20 @@
 """Shared logging helpers for the VCF merging workflow.
 
-The :func:`configure_logging` helper exposes a small, well-documented surface for
-customising how the merger reports progress. Downstream tools can reuse the
-default configuration or redirect logs to a specific location::
+The module configures a dual logging setup that writes human-readable messages
+to both the console and ``script_execution.log`` by default. The
+:func:`configure_logging` helper exposes a small, well-documented entry point
+for customising that behaviour. Downstream tools can reuse the default
+configuration or redirect logs to a specific location::
 
     from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
     configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
 
 The helper is idempotent and clears previously registered handlers so repeated
-configuration does not accumulate duplicate outputs.
+configuration does not accumulate duplicate outputs. The module also documents
+the error surface that other code can rely on: :class:`MergeVCFError` and its
+more specific subclasses describe unrecoverable conditions, while
+``handle_critical_error`` and ``handle_non_critical_error`` wrap consistent
+logging and escalation semantics for fatal versus recoverable issues.
 """
 from __future__ import annotations
 

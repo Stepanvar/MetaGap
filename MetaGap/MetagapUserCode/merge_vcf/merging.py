@@ -1,3 +1,16 @@
+"""Core routines for normalizing, merging, and writing MetaGap VCF shards.
+
+The module-level :func:`merge_vcfs` workflow first normalizes each shard via
+``preprocess_vcf`` and the optional record-level filtering implemented in
+``_filter_vcf_records`` before combining headers with :func:`union_headers` and
+``apply_metadata_to_header``.  Sorted iteration is coordinated with
+``_record_sort_key`` and a heap-based merge, while per-variant collisions are
+resolved through ``_merge_colliding_records`` which pads samples using
+``_pad_record_samples`` and refreshes AC/AN/AF annotations with
+``_recompute_ac_an_af``.  Finally the merged stream is written out with
+``vcfpy.Writer`` and indexed using ``pysam`` utilities.
+"""
+
 from __future__ import annotations
 
 import logging

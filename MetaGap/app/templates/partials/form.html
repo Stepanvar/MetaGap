@@ -36,9 +36,9 @@
       </div>
     {% endif %}
     {% for field in form.visible_fields %}
-      {% with widget=field.field.widget widget_class_name=field.field.widget.attrs.data_widget_class_name|default:'' %}
+      {% with widget=field.field.widget widget_class_name=field.field.widget.attrs.data_widget_class_name|default:'' platform_scope=widget.platform_scope|default:'' %}
         {% if widget.input_type == 'checkbox' or widget_class_name == 'CheckboxInput' %}
-          <div class="form-check mb-3">
+          <div class="form-check mb-3"{% if platform_scope %} data-platform-scope="{{ platform_scope }}"{% endif %}>
             {{ field }}
             {% if field.label %}
               <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -51,7 +51,7 @@
             {% endfor %}
           </div>
         {% elif widget_class_name == 'CheckboxSelectMultiple' %}
-          <fieldset class="mb-3">
+          <fieldset class="mb-3"{% if platform_scope %} data-platform-scope="{{ platform_scope }}"{% endif %}>
             <legend class="form-label">{{ field.label }}</legend>
             {{ field }}
             {% if field.help_text %}
@@ -62,7 +62,7 @@
             {% endfor %}
           </fieldset>
         {% else %}
-            <div class="mb-3">
+            <div class="mb-3"{% if platform_scope %} data-platform-scope="{{ platform_scope }}"{% endif %}>
               {% if field.label %}
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
               {% endif %}

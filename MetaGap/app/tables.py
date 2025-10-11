@@ -127,6 +127,7 @@ def create_dynamic_table(
 DEFAULT_ALLELE_PRIORITY_FIELDS: Sequence[str] = (
     "chrom",
     "pos",
+    "variant_id",
     "ref",
     "alt",
     "qual",
@@ -265,7 +266,6 @@ def build_allele_frequency_table(
         _append_sequence(field_name)
 
     for field_name in [
-        "variant_id",
         "info__qd",
         "info__fs",
         "info__sor",

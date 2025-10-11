@@ -1,4 +1,13 @@
-# app/models.py
+"""Metadata models and utilities for the MetaGap application.
+
+This module centralizes the data models that describe organizational
+profiles along with sequencing, bioinformatics, and sample grouping
+metadata captured throughout the MetaGap platform.  In addition to the
+model definitions themselves, it provides helper utilities such as
+``_format_attributes`` for readable metadata summaries and bespoke
+cleanup logic on :class:`SampleGroup` deletions to ensure related,
+unshared metadata is removed alongside the group record.
+"""
 
 from typing import Any, ClassVar, Dict, Iterable, Optional, Tuple
 

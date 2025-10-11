@@ -11,12 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, models as django_models
 
 from ..models import AlleleFrequency, Format, Info, SampleGroup
-from .vcf_metadata import (
-    METADATA_FIELD_ALIASES,
-    METADATA_MODEL_MAP,
-    SECTION_PRIMARY_FIELD,
-    normalize_metadata_key,
-)
+from .vcf_metadata import load_metadata_configuration, normalize_metadata_key
 
 
 INFO_FIELD_STRING = "string"
@@ -68,9 +63,10 @@ class VCFDatabaseWriter:
     """Handle creation of database records from parsed VCF content."""
 
     def __init__(self) -> None:
-        self.metadata_field_aliases = METADATA_FIELD_ALIASES
-        self.metadata_model_map = METADATA_MODEL_MAP
-        self.section_primary_field = SECTION_PRIMARY_FIELD
+        configuration = load_metadata_configuration()
+        self.metadata_field_aliases = configuration.field_aliases
+        self.metadata_model_map = configuration.models
+        self.section_primary_field = configuration.section_primary_field
 
     # ------------------------------------------------------------------
     # Sample group handling
@@ -81,11 +77,15 @@ class VCFDatabaseWriter:
         file_path: str,
         organization_profile: Any,
     ) -> SampleGroup:
+        parser_consumed_raw = metadata.pop("_consumed_keys", None)
+        parser_consumed = set(parser_consumed_raw or [])
+
         group_data, group_consumed, group_additional = self._extract_section_data(
             metadata, "sample_group", SampleGroup
         )
 
         consumed_keys = set(group_consumed)
+        consumed_keys.update(parser_consumed)
         additional_metadata: Dict[str, Any] = {}
         parser_additional = metadata.get("additional_metadata")
         if isinstance(parser_additional, dict):
@@ -96,12 +96,35 @@ class VCFDatabaseWriter:
             additional_metadata.update(group_additional)
 
         fallback_name = os.path.splitext(os.path.basename(file_path))[0]
-        name = group_data.pop("name", None) or metadata.get("name") or fallback_name
-        comments = (
-            group_data.pop("comments", None)
-            or metadata.get("comments")
-            or metadata.get("description")
-        )
+        name_candidate = group_data.pop("name", None)
+        metadata_name = metadata.get("name")
+        if name_candidate:
+            name = name_candidate
+        elif metadata_name:
+            name = metadata_name
+            consumed_keys.add("name")
+        else:
+            name = fallback_name
+            if "name" in metadata:
+                consumed_keys.add("name")
+
+        comments_candidate = group_data.pop("comments", None)
+        metadata_comments = metadata.get("comments")
+        metadata_description = metadata.get("description")
+        if comments_candidate:
+            comments = comments_candidate
+        elif metadata_comments:
+            comments = metadata_comments
+            consumed_keys.add("comments")
+        elif metadata_description:
+            comments = metadata_description
+            consumed_keys.add("description")
+        else:
+            comments = None
+            if "comments" in metadata:
+                consumed_keys.add("comments")
+            if "description" in metadata:
+                consumed_keys.add("description")
 
         try:
             sample_group = SampleGroup.objects.create(
@@ -114,7 +137,7 @@ class VCFDatabaseWriter:
             update_fields: list[str] = []
             for section, model_cls in self.metadata_model_map.items():
                 section_data, section_consumed, additional = self._extract_section_data(
-                    metadata, section, model_cls
+                    metadata, section, model_cls, skip_keys=consumed_keys
                 )
 
                 consumed_keys.update(section_consumed)
@@ -174,27 +197,67 @@ class VCFDatabaseWriter:
         metadata: Dict[str, Any],
         section: str,
         model_cls: Any,
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> Tuple[Dict[str, Any], set[str], Optional[Dict[str, Any]]]:
         alias_map = self.metadata_field_aliases.get(section, {})
         section_data: Dict[str, Any] = {}
         consumed: set[str] = set()
+        skip_set = set(skip_keys or [])
+        normalized_section = normalize_metadata_key(section)
 
         for field_name, aliases in alias_map.items():
             model_field = self._get_model_field(model_cls, field_name)
             if model_field is None:
                 continue
-            key = self._find_metadata_key(metadata, section, field_name, aliases)
+            key = self._find_metadata_key(
+                metadata,
+                section,
+                field_name,
+                aliases,
+                skip_keys=skip_set | consumed,
+            )
             if key is None:
                 continue
             raw_value = metadata[key]
+            if (
+                section == "sample_group"
+                and field_name == "sequencing_platform"
+                and str(raw_value) not in SampleGroup.SequencingPlatform.values
+            ):
+                consumed.add(key)
+                continue
             section_data[field_name] = self._coerce_model_value(model_field, raw_value)
-            consumed.add(key)
+
+		# Consume the original key and normalized variants
+		consumed.add(key)
+		consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
+		consumed.add(normalize_metadata_key(field_name))
+
+		normalized_key = normalize_metadata_key(key)
+		for prefix in (
+			f"{normalized_section}_",
+			f"{normalized_section}.",
+			f"{normalized_section}-",
+		):
+			if normalized_key.startswith(prefix):
+				suffix = normalized_key[len(prefix):]
+				if suffix:
+					consumed.add(suffix)
+				break
+
+		# Also consume equivalent/aliased keys (from codex branch)
+		consumed.update(
+			self._resolve_equivalent_metadata_keys(
+				metadata, section, field_name, aliases, key
+			)
+		)	
 
         primary_field = self.section_primary_field.get(section)
         if (
             primary_field
             and primary_field not in section_data
             and section in metadata
+            and section not in skip_set
         ):
             model_field = self._get_model_field(model_cls, primary_field)
             if model_field is not None:
@@ -204,7 +267,7 @@ class VCFDatabaseWriter:
                 consumed.add(section)
 
         additional, additional_consumed = self._build_additional_payload(
-            metadata, section, consumed
+            metadata, section, consumed | skip_set
         )
         consumed.update(additional_consumed)
         return section_data, consumed, additional
@@ -222,7 +285,42 @@ class VCFDatabaseWriter:
         section: str,
         field_name: str,
         aliases: Iterable[str],
+        *,
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> Optional[str]:
+        candidate_order = self._enumerate_metadata_candidates(section, field_name, aliases)
+
+        for candidate in candidate_order:
+            if candidate in metadata:
+                return candidate
+
+        normalized_lookup = self._build_normalized_lookup(metadata)
+
+        for candidate in candidate_order:
+            normalized_candidate = normalize_metadata_key(candidate)
+            if not normalized_candidate:
+                continue
+
+            mapped_keys = normalized_lookup.get(normalized_candidate)
+            if mapped_keys:
+                return mapped_keys[0]
+
+            collapsed_candidate = normalized_candidate.replace("_", "")
+            if collapsed_candidate != normalized_candidate:
+                mapped_keys = normalized_lookup.get(collapsed_candidate)
+                if mapped_keys:
+                    return mapped_keys[0]
+
+        return None
+
+    def _enumerate_metadata_candidates(
+        self,
+        section: str,
+        field_name: str,
+        aliases: Iterable[str],
+    ) -> list[str]:
+        skip_set = set(skip_keys or [])
+
         def _dedupe_append(collection: list[str], candidate: str) -> None:
             if candidate and candidate not in collection:
                 collection.append(candidate)
@@ -264,34 +362,58 @@ class VCFDatabaseWriter:
         for alias_candidate in alias_candidates:
             _dedupe_append(candidate_order, alias_candidate)
 
+        return candidate_order
+
+    @staticmethod
+    def _build_normalized_lookup(metadata: Dict[str, Any]) -> Dict[str, list[str]]:
+        lookup: Dict[str, list[str]] = {}
+
+        def _append_lookup(key: str, original_key: str) -> None:
+            if not key:
+                return
+            bucket = lookup.setdefault(key, [])
+            if original_key not in bucket:
+                bucket.append(original_key)
+
+        for original_key in metadata.keys():
+            normalized_key = normalize_metadata_key(original_key)
+            _append_lookup(normalized_key, original_key)
+            collapsed_key = normalized_key.replace("_", "")
+            if collapsed_key != normalized_key:
+                _append_lookup(collapsed_key, original_key)
+
+        return lookup
+
+    def _resolve_equivalent_metadata_keys(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        field_name: str,
+        aliases: Iterable[str],
+        matched_key: str,
+    ) -> set[str]:
+        equivalents: set[str] = {matched_key}
+        candidate_order = self._enumerate_metadata_candidates(section, field_name, aliases)
+        normalized_lookup = self._build_normalized_lookup(metadata)
+
         for candidate in candidate_order:
             if candidate in metadata:
-                return candidate
-
-        normalized_lookup: Dict[str, str] = {}
-
-        def _register_lookup(normalized_key: str, original_key: str) -> None:
-            if normalized_key and normalized_key not in normalized_lookup:
-                normalized_lookup[normalized_key] = original_key
-
-        for key in metadata.keys():
-            normalized_key = normalize_metadata_key(key)
-            _register_lookup(normalized_key, key)
-            collapsed_key = normalized_key.replace("_", "")
-            _register_lookup(collapsed_key, key)
+                equivalents.add(candidate)
 
         for candidate in candidate_order:
             normalized_candidate = normalize_metadata_key(candidate)
-            mapped_key = normalized_lookup.get(normalized_candidate)
-            if mapped_key is not None:
-                return mapped_key
+            if not normalized_candidate:
+                continue
+
+            for mapped_key in normalized_lookup.get(normalized_candidate, []):
+                equivalents.add(mapped_key)
 
             collapsed_candidate = normalized_candidate.replace("_", "")
-            mapped_key = normalized_lookup.get(collapsed_candidate)
-            if mapped_key is not None:
-                return mapped_key
+            if collapsed_candidate != normalized_candidate:
+                for mapped_key in normalized_lookup.get(collapsed_candidate, []):
+                    equivalents.add(mapped_key)
 
-        return None
+        return equivalents
 
     def _coerce_model_value(
         self, field: django_models.Field, value: Any
@@ -329,17 +451,61 @@ class VCFDatabaseWriter:
         consumed: Iterable[str],
     ) -> Tuple[Optional[Dict[str, Any]], set[str]]:
         consumed_set = set(consumed)
-        prefixes = (f"{section}_", f"{section}.", f"{section}-")
+        normalized_section = normalize_metadata_key(section)
+        section_variants = {section, normalized_section}
+        prefixes: list[tuple[str, str]] = []
+        for variant in filter(None, section_variants):
+            lower_variant = variant.lower()
+            prefixes.extend(
+                [
+                    (f"{variant}_", f"{lower_variant}_"),
+                    (f"{variant}.", f"{lower_variant}."),
+                    (f"{variant}-", f"{lower_variant}-"),
+                ]
+            )
+
+        normalized_consumed = {
+            normalize_metadata_key(entry) for entry in consumed_set if entry
+        }
+        consumed_suffixes: set[str] = set()
+        for entry in consumed_set:
+            normalized_entry = normalize_metadata_key(entry)
+            for prefix in (
+                f"{normalized_section}_",
+                f"{normalized_section}.",
+                f"{normalized_section}-",
+            ):
+                if normalized_entry.startswith(prefix):
+                    suffix = normalized_entry[len(prefix) :]
+                    if suffix:
+                        consumed_suffixes.add(suffix)
+                    break
+
         additional: Dict[str, Any] = {}
         additional_consumed: set[str] = set()
 
         for key, value in metadata.items():
             if key in consumed_set:
                 continue
-            for prefix in prefixes:
-                if key.startswith(prefix):
+            normalized_key = normalize_metadata_key(key)
+            if normalized_key in normalized_consumed or normalized_key in consumed_suffixes:
+                additional_consumed.add(key)
+                continue
+            for prefix, prefix_lower in prefixes:
+                if key.lower().startswith(prefix_lower):
                     trimmed = key[len(prefix) :]
-                    additional[trimmed] = self._coerce_additional_value(value)
+                    if not trimmed:
+                        additional_consumed.add(key)
+                        break
+                    normalized_trimmed = normalize_metadata_key(trimmed)
+                    if (
+                        normalized_trimmed in normalized_consumed
+                        or normalized_trimmed in consumed_suffixes
+                    ):
+                        additional_consumed.add(key)
+                        break
+                    if trimmed not in additional:
+                        additional[trimmed] = self._coerce_additional_value(value)
                     additional_consumed.add(key)
                     break
 

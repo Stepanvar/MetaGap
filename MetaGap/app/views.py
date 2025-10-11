@@ -42,7 +42,11 @@ from .forms import (
 )
 from .mixins import OrganizationSampleGroupMixin
 from .models import AlleleFrequency, Info, SampleGroup
-from .services.import_exceptions import ImporterError, ImporterValidationError
+from .services.import_exceptions import (
+    GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    ImporterError,
+    ImporterValidationError,
+)
 from .services.vcf_importer import VCFImporter
 from .tables import build_allele_frequency_table, create_dynamic_table
 
@@ -731,3 +735,8 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         for warning in getattr(exc, "warnings", []) or []:
             messages.warning(self.request, warning)
         messages.error(self.request, message)
+        if message == GENERIC_FALLBACK_VALIDATION_MESSAGE:
+            messages.error(
+                self.request,
+                "We could not import the file because some required metadata was missing or invalid.",
+            )

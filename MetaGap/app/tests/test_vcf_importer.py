@@ -97,6 +97,15 @@ class VCFImporterTests(TestCase):
 1\t3333\trsMetadata\tG\tT\t80\tPASS\t.\tGT\t0/1
 """
 
+    VCF_WITH_LIBRARY_CONSTRUCTION_PCRTYPO = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=TypoGroup,Description=Library PCR cycles typo>
+##LIBRARY_CONSTRUCTION=<PCRCyles=12>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t999\trsTypo\tA\tG\t60\tPASS\t.\tGT\t0/1
+"""
+
     VCF_WITHOUT_EXPLICIT_NAME = """##fileformat=VCFv4.2
 ##contig=<ID=1>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -319,6 +328,24 @@ class VCFImporterTests(TestCase):
         )
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Unsupported sequencing platform", importer.warnings[0])
+
+    def test_import_maps_library_construction_pcr_cycles_typo(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_LIBRARY_CONSTRUCTION_PCRTYPO,
+            filename="library_typo.vcf",
+        )
+
+        library = sample_group.library_construction
+        self.assertIsNotNone(library)
+        assert library is not None
+        self.assertEqual(library.pcr_cycles, 12)
+
+        additional = sample_group.additional_metadata or {}
+        self.assertNotIn("library_construction_pcrcyles", additional)
+        self.assertNotIn("pcrcyles", additional)
+
+        self.assertIsNone(getattr(library, "additional_info", None))
+        self.assertEqual(importer.warnings, [])
 
     def test_import_without_sample_name_falls_back_to_filename(self) -> None:
         importer, sample_group = self._import(

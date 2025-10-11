@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Edit Sample Group - {{ SITE_NAME }}{% endblock %}
 
@@ -18,4 +19,9 @@
         <p class="text-muted">Update the descriptive metadata for this cohort. Changes will be immediately reflected in search results.</p>
         {% include 'partials/form.html' with form=form submit_button_label="Save Changes" extra_actions=form_extra_actions wrapper_class='mt-3' %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script defer src="{% static 'js/platform-fields.js' %}"></script>
 {% endblock %}

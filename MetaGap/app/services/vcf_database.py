@@ -231,21 +231,30 @@ class VCFDatabaseWriter:
                 consumed.add(key)
                 continue
             section_data[field_name] = self._coerce_model_value(model_field, raw_value)
-            consumed.add(key)
-            consumed.add(field_name)
-            consumed.add(normalize_metadata_key(field_name))
 
-            normalized_key = normalize_metadata_key(key)
-            for prefix in (
-                f"{normalized_section}_",
-                f"{normalized_section}.",
-                f"{normalized_section}-",
-            ):
-                if normalized_key.startswith(prefix):
-                    suffix = normalized_key[len(prefix) :]
-                    if suffix:
-                        consumed.add(suffix)
-                    break
+		# Consume the original key and normalized variants
+		consumed.add(key)
+		consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
+		consumed.add(normalize_metadata_key(field_name))
+
+		normalized_key = normalize_metadata_key(key)
+		for prefix in (
+			f"{normalized_section}_",
+			f"{normalized_section}.",
+			f"{normalized_section}-",
+		):
+			if normalized_key.startswith(prefix):
+				suffix = normalized_key[len(prefix):]
+				if suffix:
+					consumed.add(suffix)
+				break
+
+		# Also consume equivalent/aliased keys (from codex branch)
+		consumed.update(
+			self._resolve_equivalent_metadata_keys(
+				metadata, section, field_name, aliases, key
+			)
+		)	
 
         primary_field = self.section_primary_field.get(section)
         if (
@@ -283,6 +292,37 @@ class VCFDatabaseWriter:
         *,
         skip_keys: Optional[Iterable[str]] = None,
     ) -> Optional[str]:
+        candidate_order = self._enumerate_metadata_candidates(section, field_name, aliases)
+
+        for candidate in candidate_order:
+            if candidate in metadata:
+                return candidate
+
+        normalized_lookup = self._build_normalized_lookup(metadata)
+
+        for candidate in candidate_order:
+            normalized_candidate = normalize_metadata_key(candidate)
+            if not normalized_candidate:
+                continue
+
+            mapped_keys = normalized_lookup.get(normalized_candidate)
+            if mapped_keys:
+                return mapped_keys[0]
+
+            collapsed_candidate = normalized_candidate.replace("_", "")
+            if collapsed_candidate != normalized_candidate:
+                mapped_keys = normalized_lookup.get(collapsed_candidate)
+                if mapped_keys:
+                    return mapped_keys[0]
+
+        return None
+
+    def _enumerate_metadata_candidates(
+        self,
+        section: str,
+        field_name: str,
+        aliases: Iterable[str],
+    ) -> list[str]:
         skip_set = set(skip_keys or [])
 
         def _dedupe_append(collection: list[str], candidate: str) -> None:
@@ -326,34 +366,58 @@ class VCFDatabaseWriter:
         for alias_candidate in alias_candidates:
             _dedupe_append(candidate_order, alias_candidate)
 
-        for candidate in candidate_order:
-            if candidate in metadata and candidate not in skip_set:
-                return candidate
+        return candidate_order
 
-        normalized_lookup: Dict[str, str] = {}
+    @staticmethod
+    def _build_normalized_lookup(metadata: Dict[str, Any]) -> Dict[str, list[str]]:
+        lookup: Dict[str, list[str]] = {}
 
-        def _register_lookup(normalized_key: str, original_key: str) -> None:
-            if normalized_key and normalized_key not in normalized_lookup:
-                normalized_lookup[normalized_key] = original_key
+        def _append_lookup(key: str, original_key: str) -> None:
+            if not key:
+                return
+            bucket = lookup.setdefault(key, [])
+            if original_key not in bucket:
+                bucket.append(original_key)
 
-        for key in metadata.keys():
-            normalized_key = normalize_metadata_key(key)
-            _register_lookup(normalized_key, key)
+        for original_key in metadata.keys():
+            normalized_key = normalize_metadata_key(original_key)
+            _append_lookup(normalized_key, original_key)
             collapsed_key = normalized_key.replace("_", "")
-            _register_lookup(collapsed_key, key)
+            if collapsed_key != normalized_key:
+                _append_lookup(collapsed_key, original_key)
+
+        return lookup
+
+    def _resolve_equivalent_metadata_keys(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        field_name: str,
+        aliases: Iterable[str],
+        matched_key: str,
+    ) -> set[str]:
+        equivalents: set[str] = {matched_key}
+        candidate_order = self._enumerate_metadata_candidates(section, field_name, aliases)
+        normalized_lookup = self._build_normalized_lookup(metadata)
+
+        for candidate in candidate_order:
+            if candidate in metadata:
+                equivalents.add(candidate)
 
         for candidate in candidate_order:
             normalized_candidate = normalize_metadata_key(candidate)
-            mapped_key = normalized_lookup.get(normalized_candidate)
-            if mapped_key is not None and mapped_key not in skip_set:
-                return mapped_key
+            if not normalized_candidate:
+                continue
+
+            for mapped_key in normalized_lookup.get(normalized_candidate, []):
+                equivalents.add(mapped_key)
 
             collapsed_candidate = normalized_candidate.replace("_", "")
-            mapped_key = normalized_lookup.get(collapsed_candidate)
-            if mapped_key is not None and mapped_key not in skip_set:
-                return mapped_key
+            if collapsed_candidate != normalized_candidate:
+                for mapped_key in normalized_lookup.get(collapsed_candidate, []):
+                    equivalents.add(mapped_key)
 
-        return None
+        return equivalents
 
     def _coerce_model_value(
         self, field: django_models.Field, value: Any

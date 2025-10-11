@@ -79,6 +79,15 @@ class VCFImporterTests(TestCase):
 1\t2000\t.\tA\tG\t.\tPASS\tQD=12.5;FS=7.1;SOR=1.8;CUSTOM=note\tGT:GQ\t0/1:77
 """
 
+    VCF_WITH_CANONICAL_SAMPLE_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=CanonicalGroup,Description=Canonical metadata>
+##SAMPLE_GROUP=<Name=CanonicalGroup,DOI=10.1234/example>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t101\t.\tA\tT\t.\tPASS\t.\tGT\t0/1
+"""
+
     VCF_WITH_UNKNOWN_FORMAT_FIELD = """##fileformat=VCFv4.2
 ##contig=<ID=1>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -228,6 +237,19 @@ class VCFImporterTests(TestCase):
         importer, sample_group = self._import(self.VCF_CONTENT, filename="custom_metadata.vcf")
 
         self.assertEqual(sample_group.additional_metadata, {"customkey": "Value"})
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_does_not_duplicate_canonical_metadata(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_CANONICAL_SAMPLE_METADATA,
+            filename="canonical_metadata.vcf",
+        )
+
+        self.assertEqual(sample_group.doi, "10.1234/example")
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertNotIn("doi", additional_metadata)
+        self.assertNotIn("sample_group_doi", additional_metadata)
+        self.assertNotIn("dataset_doi", additional_metadata)
         self.assertEqual(importer.warnings, [])
 
     def test_import_retains_sample_group_name_with_shared_aliases(self) -> None:

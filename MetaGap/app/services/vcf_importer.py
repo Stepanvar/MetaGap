@@ -203,9 +203,15 @@ class VCFImporter:
                 yield force_str(message)
 
     def _extract_section_data(
-        self, metadata: Dict[str, Any], section: str, model_cls: Any
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        model_cls: Any,
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> Tuple[Dict[str, Any], set[str], Optional[Dict[str, Any]]]:
-        return self.database_writer._extract_section_data(metadata, section, model_cls)
+        return self.database_writer._extract_section_data(
+            metadata, section, model_cls, skip_keys=skip_keys
+        )
 
     def extract_sample_group_metadata(
         self, vcf_in: pysam.VariantFile

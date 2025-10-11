@@ -359,6 +359,19 @@ class Format(models.Model):
 class SampleGroup(models.Model):
     """A group of samples along with the associated metadata."""
 
+    class SequencingPlatform(models.TextChoices):
+        ILLUMINA = "illumina", "Illumina"
+        ONT = "ont", "ONT"
+        PACBIO = "pacbio", "PacBio"
+        ION_TORRENT = "ion_torrent", "Ion Torrent"
+
+    PLATFORM_FIELD_MAP = {
+        SequencingPlatform.ILLUMINA: "illumina_seq",
+        SequencingPlatform.ONT: "ont_seq",
+        SequencingPlatform.PACBIO: "pacbio_seq",
+        SequencingPlatform.ION_TORRENT: "iontorrent_seq",
+    }
+
     name = models.CharField(max_length=255)
     created_by = models.ForeignKey(OrganizationProfile, on_delete=models.CASCADE)
     doi = models.CharField(max_length=100, blank=True, null=True)
@@ -408,6 +421,12 @@ class SampleGroup(models.Model):
         null=True,
         blank=True,
     )
+    sequencing_platform = models.CharField(
+        max_length=32,
+        choices=SequencingPlatform.choices,
+        blank=True,
+        null=True,
+    )
     illumina_seq = models.ForeignKey(
         IlluminaSeq,
         on_delete=models.SET_NULL,
@@ -453,6 +472,30 @@ class SampleGroup(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def active_sequencing_platform(self) -> SequencingPlatform | None:
+        """Return the active sequencing platform choice if configured."""
+
+        value = self.sequencing_platform
+        if not value:
+            return None
+        try:
+            return self.SequencingPlatform(value)
+        except ValueError:
+            return None
+
+    def get_active_platform_instance(self) -> models.Model | None:
+        """Return the related sequencing instrument instance for the active platform."""
+
+        platform = self.active_sequencing_platform
+        if platform is None:
+            return None
+
+        field_name = self.PLATFORM_FIELD_MAP.get(platform)
+        if not field_name:
+            return None
+        return getattr(self, field_name, None)
 
     def delete(self, using: Any | None = None, keep_parents: bool = False) -> None:
         """Delete the sample group along with unshared related metadata."""

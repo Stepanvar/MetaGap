@@ -1,4 +1,13 @@
-# filters.py
+"""Filter set definitions for allele frequency and sample group browsing.
+
+This module defines Django ``FilterSet`` classes that support rich querying of
+variant records, including chromosome and position searches, pass/fail status,
+and numeric range constraints across INFO attributes such as AF, DP, MQ, QD,
+FS, and SOR. The filters also expose related :class:`SampleGroup` metadata
+fields (laboratory source, sample origin, alignment, and variant calling
+details), enabling combined exploration of variant characteristics alongside
+their originating cohorts.
+"""
 from django import forms
 import django_filters
 from django.db.models import (

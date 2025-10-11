@@ -88,6 +88,19 @@ class VCFImporterTests(TestCase):
 1\t2222\t.\tC\tA\t50\tPASS\t.\tGT:AB\t0/1:0.65
 """
 
+    VCF_WITH_METADATA_FILE_STYLE = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=Cohort01,Description=Metadata import,Center="Genotek",Sample_Group_Source_Lab="Genotek Annex",N=100,Sample_Group_Contact_Email=cohort@example.com>
+##REFERENCE_GENOME_BUILD=<BuildName=GRCh38,BuildVersion="p14",Additional_Info={\"notes\":\"p14\"}>
+##SAMPLE_ORIGIN=<Tissue=Lung,Sample_Group_Collection_Method=Biopsy>
+##LIBRARY_CONSTRUCTION=<Kit="TruSeq",PCRCyles=12>
+##BIOINFO_ALIGNMENT=<Software=BWA>
+##BIOINFO_VARIANT_CALLING=<Tool=GATK,Version=4.2>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t100\t.\tA\tG\t.\tPASS\t.\tGT\t0/1
+"""
+
     VCF_WITH_UNKNOWN_SAMPLE_METADATA = """##fileformat=VCFv4.2
 ##contig=<ID=1>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -297,6 +310,73 @@ class VCFImporterTests(TestCase):
         self.assertNotIn("ont_seq_instrument", additional_metadata)
         self.assertNotIn("pacbio_seq_instrument", additional_metadata)
         self.assertNotIn("iontorrent_seq_instrument", additional_metadata)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_metadata_file_style_header_avoids_duplicate_additional_fields(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_METADATA_FILE_STYLE,
+            filename="metadata_file_style.vcf",
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build",
+            "sample_origin",
+            "library_construction",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+        ).get(pk=sample_group.pk)
+
+        self.assertEqual(sample_group.name, "Cohort01")
+        self.assertEqual(sample_group.comments, "Metadata import")
+        self.assertEqual(sample_group.source_lab, "Genotek Annex")
+        self.assertEqual(sample_group.contact_email, "cohort@example.com")
+        self.assertEqual(sample_group.total_samples, 100)
+
+        reference_build = sample_group.reference_genome_build
+        self.assertIsNotNone(reference_build)
+        assert reference_build is not None
+        self.assertEqual(reference_build.build_name, "GRCh38")
+        self.assertEqual(reference_build.build_version, "p14")
+        self.assertEqual(reference_build.additional_info, {"notes": "p14"})
+
+        origin = sample_group.sample_origin
+        self.assertIsNotNone(origin)
+        assert origin is not None
+        self.assertEqual(origin.tissue, "Lung")
+        self.assertEqual(origin.collection_method, "Biopsy")
+
+        library = sample_group.library_construction
+        self.assertIsNotNone(library)
+        assert library is not None
+        self.assertEqual(library.kit, "TruSeq")
+        self.assertIsNone(library.fragmentation)
+        self.assertIsNone(library.adapter_ligation_efficiency)
+        self.assertIsNone(library.pcr_cycles)
+
+        alignment = sample_group.bioinfo_alignment
+        self.assertIsNotNone(alignment)
+        assert alignment is not None
+        self.assertEqual(alignment.tool, "BWA")
+
+        variant_calling = sample_group.bioinfo_variant_calling
+        self.assertIsNotNone(variant_calling)
+        assert variant_calling is not None
+        self.assertEqual(variant_calling.tool, "GATK")
+        self.assertEqual(variant_calling.version, "4.2")
+
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertNotIn("source_lab", additional_metadata)
+        self.assertNotIn("sample_group_source_lab", additional_metadata)
+        self.assertNotIn("center", additional_metadata)
+        self.assertNotIn("sample_group_contact_email", additional_metadata)
+        self.assertNotIn("library_construction_kit", additional_metadata)
+        self.assertNotIn("library_construction_pcrcyles", additional_metadata)
+        self.assertNotIn("reference_genome_build_build_name", additional_metadata)
+
+        self.assertIsNone(getattr(library, "additional_info", None))
+        self.assertIsNone(getattr(alignment, "additional", None))
+        self.assertIsNone(getattr(variant_calling, "additional", None))
+
         self.assertEqual(importer.warnings, [])
 
     def test_import_serializes_unknown_format_fields(self) -> None:

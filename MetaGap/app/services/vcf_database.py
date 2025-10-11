@@ -178,6 +178,7 @@ class VCFDatabaseWriter:
         alias_map = self.metadata_field_aliases.get(section, {})
         section_data: Dict[str, Any] = {}
         consumed: set[str] = set()
+        normalized_section = normalize_metadata_key(section)
 
         for field_name, aliases in alias_map.items():
             model_field = self._get_model_field(model_cls, field_name)
@@ -196,6 +197,20 @@ class VCFDatabaseWriter:
                 continue
             section_data[field_name] = self._coerce_model_value(model_field, raw_value)
             consumed.add(key)
+            consumed.add(field_name)
+            consumed.add(normalize_metadata_key(field_name))
+
+            normalized_key = normalize_metadata_key(key)
+            for prefix in (
+                f"{normalized_section}_",
+                f"{normalized_section}.",
+                f"{normalized_section}-",
+            ):
+                if normalized_key.startswith(prefix):
+                    suffix = normalized_key[len(prefix) :]
+                    if suffix:
+                        consumed.add(suffix)
+                    break
 
         primary_field = self.section_primary_field.get(section)
         if (
@@ -336,17 +351,61 @@ class VCFDatabaseWriter:
         consumed: Iterable[str],
     ) -> Tuple[Optional[Dict[str, Any]], set[str]]:
         consumed_set = set(consumed)
-        prefixes = (f"{section}_", f"{section}.", f"{section}-")
+        normalized_section = normalize_metadata_key(section)
+        section_variants = {section, normalized_section}
+        prefixes: list[tuple[str, str]] = []
+        for variant in filter(None, section_variants):
+            lower_variant = variant.lower()
+            prefixes.extend(
+                [
+                    (f"{variant}_", f"{lower_variant}_"),
+                    (f"{variant}.", f"{lower_variant}."),
+                    (f"{variant}-", f"{lower_variant}-"),
+                ]
+            )
+
+        normalized_consumed = {
+            normalize_metadata_key(entry) for entry in consumed_set if entry
+        }
+        consumed_suffixes: set[str] = set()
+        for entry in consumed_set:
+            normalized_entry = normalize_metadata_key(entry)
+            for prefix in (
+                f"{normalized_section}_",
+                f"{normalized_section}.",
+                f"{normalized_section}-",
+            ):
+                if normalized_entry.startswith(prefix):
+                    suffix = normalized_entry[len(prefix) :]
+                    if suffix:
+                        consumed_suffixes.add(suffix)
+                    break
+
         additional: Dict[str, Any] = {}
         additional_consumed: set[str] = set()
 
         for key, value in metadata.items():
             if key in consumed_set:
                 continue
-            for prefix in prefixes:
-                if key.startswith(prefix):
+            normalized_key = normalize_metadata_key(key)
+            if normalized_key in normalized_consumed or normalized_key in consumed_suffixes:
+                additional_consumed.add(key)
+                continue
+            for prefix, prefix_lower in prefixes:
+                if key.lower().startswith(prefix_lower):
                     trimmed = key[len(prefix) :]
-                    additional[trimmed] = self._coerce_additional_value(value)
+                    if not trimmed:
+                        additional_consumed.add(key)
+                        break
+                    normalized_trimmed = normalize_metadata_key(trimmed)
+                    if (
+                        normalized_trimmed in normalized_consumed
+                        or normalized_trimmed in consumed_suffixes
+                    ):
+                        additional_consumed.add(key)
+                        break
+                    if trimmed not in additional:
+                        additional[trimmed] = self._coerce_additional_value(value)
                     additional_consumed.add(key)
                     break
 

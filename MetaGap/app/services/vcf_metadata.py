@@ -267,7 +267,10 @@ class VCFMetadataParser:
             self.warnings.append(warning)
             section = "platform_independent"
 
-        self._process_metadata_section(metadata, section, items)
+        restrict = section != "platform_independent"
+        self._process_metadata_section(
+            metadata, section, items, restrict_to_section=restrict
+        )
 
     @staticmethod
     def _is_metadata_section_candidate(key: str) -> bool:
@@ -309,7 +312,12 @@ class VCFMetadataParser:
         return collected
 
     def _process_metadata_section(
-        self, metadata: Dict[str, Any], section: str, items: Dict[str, Any]
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        items: Dict[str, Any],
+        *,
+        restrict_to_section: bool = False,
     ) -> None:
         def normalize_alias_key(candidate: str) -> str:
             stripped = candidate.rstrip("?!.,;:")
@@ -317,6 +325,19 @@ class VCFMetadataParser:
 
         alias_map = METADATA_FIELD_ALIASES.get(section, {})
         normalized_section = normalize_metadata_key(section)
+        section_values: Dict[str, Any] = {}
+
+        if restrict_to_section and alias_map:
+            alias_keys_to_remove = {
+                normalize_metadata_key(field_name)
+                for field_name in alias_map.keys()
+            }
+            for aliases in alias_map.values():
+                for alias in aliases:
+                    alias_keys_to_remove.add(normalize_alias_key(alias))
+
+            for alias_key in alias_keys_to_remove:
+                metadata.pop(alias_key, None)
 
         for key, value in items.items():
             normalized_key = normalize_metadata_key(key)
@@ -328,11 +349,18 @@ class VCFMetadataParser:
                     normalized_key = normalize_metadata_key(field_name)
                     break
 
+            section_values[normalized_key] = value
             qualified_key = f"{normalized_section}_{value_key}"
-            metadata[normalized_key] = value
+            if not restrict_to_section:
+                metadata[normalized_key] = value
             metadata[qualified_key] = value
 
-        if section not in metadata:
+        primary_field = SECTION_PRIMARY_FIELD.get(section)
+        if primary_field:
+            normalized_primary = normalize_metadata_key(primary_field)
+            if normalized_primary in section_values:
+                metadata[section] = section_values[normalized_primary]
+        elif not restrict_to_section and section not in metadata:
             primary_aliases: Iterable[str] = alias_map.get(section, [])
             for alias in primary_aliases:
                 alias_key = normalize_metadata_key(alias)

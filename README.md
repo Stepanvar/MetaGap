@@ -29,6 +29,59 @@ After loading the data you can sign in with either demo account and visit the pr
   server logs so developers can diagnose issues without exposing Django's debug
   pages to end users.
 
+## Metadata configuration workflow
+
+MetaGap's VCF importer is driven by a configuration module at
+`MetaGap/app/services/vcf_metadata.py`.  It maps VCF header sections to Django
+models (`METADATA_MODEL_MAP`), enumerates supported aliases
+(`METADATA_FIELD_ALIASES`), defines section-level fallbacks, and normalizes any
+input keys to snake_case before they are persisted.【F:MetaGap/app/services/vcf_metadata.py†L30-L200】【F:MetaGap/app/services/vcf_metadata.py†L320-L397】
+
+### Alias mapping guidelines
+
+- Prefer descriptive canonical field names and list common legacy spellings as
+  aliases; the importer strips punctuation and lower-cases everything before
+  comparison, so aliases should focus on semantic variants rather than casing
+  changes.【F:MetaGap/app/services/vcf_metadata.py†L320-L368】【F:MetaGap/app/services/vcf_metadata.py†L384-L397】
+- When retiring or renaming a field, keep the previous spelling in the alias
+  list until all upstream feeds are migrated so older VCFs continue to ingest
+  cleanly.【F:MetaGap/app/services/vcf_metadata.py†L78-L190】
+
+### Adding or renaming metadata fields
+
+1. Extend the relevant section in `vcf_metadata.py` with the new field and any
+   aliases, and update `SECTION_PRIMARY_FIELD` if the field should become the
+   section's display default.【F:MetaGap/app/services/vcf_metadata.py†L78-L200】
+2. Ensure the corresponding Django model exposes the new attribute and, when
+   necessary, add a migration so it is stored alongside imported data.【F:MetaGap/app/models.py†L360-L458】
+3. Review the importer/database integration tests to keep expectations aligned:
+   `test_import_helpers.py` exercises alias resolution while
+   `test_vcf_importer.py` verifies the end-to-end import payload.  Update or add
+   fixtures so the new field is covered by these guard rails.【F:MetaGap/app/tests/test_import_helpers.py†L134-L210】【F:MetaGap/app/tests/test_vcf_importer.py†L242-L320】
+4. If the field should appear prominently in search results or detail tables,
+   update the `friendly_names` mapping and curated ordering in
+   `MetaGap/app/tables.py` so the UI renders a readable label and groups the
+   column with related metadata.【F:MetaGap/app/tables.py†L160-L260】
+
+### Removing metadata fields
+
+- Remove the field and its aliases from `vcf_metadata.py`, drop or adjust the
+  associated model field and migration, and prune any tests that depended on the
+  retired metadata.  When backwards compatibility is required, leave an alias in
+  place and route the value into `SampleGroup.additional_metadata` instead of
+  deleting it outright.【F:MetaGap/app/services/vcf_metadata.py†L78-L200】【F:MetaGap/app/tests/test_vcf_importer.py†L301-L320】
+
+### Configuration loading and validation
+
+`VCFImporter` wires the configuration into the runtime importer by instantiating
+`VCFMetadataParser` and `VCFDatabaseWriter` for each import.  This loader applies
+the dictionaries above before any rows are written, ensuring updates to the
+configuration module immediately affect new uploads.【F:MetaGap/app/services/vcf_importer.py†L31-L80】【F:MetaGap/app/services/vcf_metadata.py†L30-L200】【F:MetaGap/app/services/vcf_database.py†L1-L104】
+
+After making configuration changes, run `python manage.py test` so the importer,
+table rendering, and integration suites confirm the workflow remains consistent
+with the documented expectations.【F:MetaGap/app/tests/test_import_helpers.py†L134-L210】【F:MetaGap/app/tests/test_tables.py†L109-L202】
+
 ### Logging format for the VCF merger
 
 The `MetaGap.MetagapUserCode.merge_vcf` workflow logs to both `script_execution.log`

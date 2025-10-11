@@ -1,6 +1,6 @@
 # app/models.py
 
-from typing import Any, Dict
+from typing import Any, ClassVar, Dict, Iterable, Optional, Tuple
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -359,6 +359,12 @@ class Format(models.Model):
 class SampleGroup(models.Model):
     """A group of samples along with the associated metadata."""
 
+    SEQUENCING_PLATFORM_FIELDS: ClassVar[Tuple[Tuple[str, str], ...]] = (
+        ("illumina_seq", "Illumina"),
+        ("ont_seq", "Oxford Nanopore"),
+        ("pacbio_seq", "PacBio"),
+        ("iontorrent_seq", "Ion Torrent"),
+    )
     class SequencingPlatform(models.TextChoices):
         ILLUMINA = "illumina", "Illumina"
         ONT = "ont", "ONT"
@@ -473,6 +479,73 @@ class SampleGroup(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @staticmethod
+    def _normalize_platform_key(value: str) -> str:
+        if not isinstance(value, str):
+            return ""
+        return "_".join(value.strip().lower().replace("-", " ").split())
+
+    @classmethod
+    def _platform_aliases(cls, field_name: str, label: str) -> set[str]:
+        base_name = field_name[:-4] if field_name.endswith("_seq") else field_name
+        return {
+            cls._normalize_platform_key(field_name),
+            cls._normalize_platform_key(base_name),
+            cls._normalize_platform_key(label),
+        }
+
+    def iter_sequencing_platforms(self) -> Iterable[Tuple[str, str, Optional[Any]]]:
+        for field_name, label in self.SEQUENCING_PLATFORM_FIELDS:
+            yield field_name, label, getattr(self, field_name, None)
+
+    def _match_platform_candidate(self, candidate: str) -> Tuple[Optional[str], Optional[Any]]:
+        normalized_candidate = self._normalize_platform_key(candidate)
+        if not normalized_candidate:
+            return None, None
+
+        for field_name, label, instance in self.iter_sequencing_platforms():
+            if instance is None:
+                continue
+            aliases = self._platform_aliases(field_name, label)
+            if any(
+                normalized_candidate == alias or alias in normalized_candidate
+                for alias in aliases
+            ):
+                return label, instance
+
+        return None, None
+
+    def get_active_sequencing_platform(self) -> Tuple[Optional[str], Optional[Any]]:
+        metadata = self.additional_metadata
+        if isinstance(metadata, dict):
+            for key in (
+                "active_sequencing_platform",
+                "sequencing_platform",
+                "platform",
+            ):
+                candidate = metadata.get(key)
+                if isinstance(candidate, str):
+                    label, instance = self._match_platform_candidate(candidate)
+                    if instance is not None:
+                        return label, instance
+
+        for _, label, instance in self.iter_sequencing_platforms():
+            if instance is not None:
+                return label, instance
+
+        return None, None
+
+    @property
+    def active_platform_label(self) -> Optional[str]:
+        label, _ = self.get_active_sequencing_platform()
+        return label
+
+    @property
+    def active_platform_value(self) -> Optional[str]:
+        _, instance = self.get_active_sequencing_platform()
+        if instance is None:
+            return None
+        return str(instance)
     @property
     def active_sequencing_platform(self) -> SequencingPlatform | None:
         """Return the active sequencing platform choice if configured."""

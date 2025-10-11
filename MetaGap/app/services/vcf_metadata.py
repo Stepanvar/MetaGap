@@ -149,7 +149,7 @@ METADATA_FIELD_ALIASES = {
         "kit": ["library_kit", "kit_name"],
         "fragmentation": ["fragmentation_method"],
         "adapter_ligation_efficiency": ["adapter_efficiency"],
-        "pcr_cycles": ["pcr", "pcr_cycles"],
+        "pcr_cycles": ["pcr", "pcr_cycles", "pcrcyles"],
     },
     "illumina_seq": {
         "instrument": ["machine", "instrument"],

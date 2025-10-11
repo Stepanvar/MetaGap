@@ -1,4 +1,24 @@
-"""Application views."""
+"""Views powering the MetaGap web interface.
+
+This module brings together the major user-facing pages and supporting
+utilities:
+
+* :class:`HomePageView` exposes the landing-page search form and delegates
+  filtering to :class:`SearchResultsView`, which renders allele-frequency
+  tables with django-filter and django-tables2 integration.
+* :class:`DashboardView` and :class:`ProfileView` provide authenticated
+  overview and profile pages, including import tooling and lists of owned
+  sample groups.
+* Sample group CRUD is handled by :class:`SampleGroupTableView`,
+  :class:`SampleGroupDetailView`, :class:`SampleGroupUpdateView`, and
+  :class:`SampleGroupDeleteView` alongside related helper methods.
+* Data import and export helpers such as :class:`ImportDataView` and
+  :func:`export_sample_group_variants` manage VCF ingestion and CSV/TSV
+  downloads of allele frequencies.
+* Registration and informational utilities cover
+  :class:`UserRegistrationView`, :class:`ContactView`, and
+  :class:`AboutView`.
+"""
 
 import csv
 import json

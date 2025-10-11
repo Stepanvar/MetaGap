@@ -226,31 +226,33 @@ class VCFDatabaseWriter:
             ):
                 consumed.add(key)
                 continue
-            section_data[field_name] = self._coerce_model_value(model_field, raw_value)
+            section_data[field_name] = self._coerce_model_value(
+                model_field, raw_value
+            )
 
-		# Consume the original key and normalized variants
-		consumed.add(key)
-		consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
-		consumed.add(normalize_metadata_key(field_name))
+            # Consume the original key and normalized variants
+            consumed.add(key)
+            consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
+            consumed.add(normalize_metadata_key(field_name))
 
-		normalized_key = normalize_metadata_key(key)
-		for prefix in (
-			f"{normalized_section}_",
-			f"{normalized_section}.",
-			f"{normalized_section}-",
-		):
-			if normalized_key.startswith(prefix):
-				suffix = normalized_key[len(prefix):]
-				if suffix:
-					consumed.add(suffix)
-				break
+            normalized_key = normalize_metadata_key(key)
+            for prefix in (
+                f"{normalized_section}_",
+                f"{normalized_section}.",
+                f"{normalized_section}-",
+            ):
+                if normalized_key.startswith(prefix):
+                    suffix = normalized_key[len(prefix) :]
+                    if suffix:
+                        consumed.add(suffix)
+                    break
 
-		# Also consume equivalent/aliased keys (from codex branch)
-		consumed.update(
-			self._resolve_equivalent_metadata_keys(
-				metadata, section, field_name, aliases, key
-			)
-		)	
+            # Also consume equivalent/aliased keys (from codex branch)
+            equivalent_keys = self._resolve_equivalent_metadata_keys(
+                metadata, section, field_name, aliases, key
+            )
+            if equivalent_keys:
+                consumed.update(equivalent_keys)
 
         primary_field = self.section_primary_field.get(section)
         if (

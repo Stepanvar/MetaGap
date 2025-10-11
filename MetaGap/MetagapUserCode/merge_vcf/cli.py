@@ -1,5 +1,10 @@
 """Command-line entrypoint for the VCF merging workflow.
 
+This module parses the command-line arguments that describe input VCF paths,
+metadata annotations, and threshold parameters before orchestrating the
+end-to-end merge workflow. It also re-exports the helper functions that our
+tests patch or invoke directly.
+
 The CLI can be executed via ``python -m merge_vcf.cli`` or
 ``python merge_vcf/cli.py``.
 """

@@ -210,15 +210,20 @@ class VCFMetadataParser:
 
     def __init__(self, warnings: Optional[list[str]] = None) -> None:
         self.warnings = warnings if warnings is not None else []
+        self._consumed_keys: set[str] = set()
 
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
+        self._consumed_keys.clear()
         for record in vcf_in.header.records:
             items = self._collect_record_items(record)
             self.ingest_metadata_items(metadata, record.key, items)
 
         if "name" not in metadata and "sample_group_name" in metadata:
             metadata["name"] = metadata["sample_group_name"]
+
+        if self._consumed_keys:
+            metadata["_consumed_keys"] = sorted(self._consumed_keys)
         return metadata
 
     def ingest_metadata_items(
@@ -354,6 +359,13 @@ class VCFMetadataParser:
             if not restrict_to_section:
                 metadata[normalized_key] = value
             metadata[qualified_key] = value
+
+            if section == "sample_group" and normalized_key in {
+                "name",
+                "comments",
+                "description",
+            }:
+                self._consumed_keys.add(normalized_key)
 
         primary_field = SECTION_PRIMARY_FIELD.get(section)
         if primary_field:

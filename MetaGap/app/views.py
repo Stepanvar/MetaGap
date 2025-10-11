@@ -534,6 +534,16 @@ class SampleGroupDetailView(
                 section["items"].append(item_context)
             return section
 
+        platform_label, platform_instance = sample_group.get_active_sequencing_platform()
+        if platform_instance is None:
+            sequencing_platform_row = ("Sequencing platform", None, None)
+        else:
+            sequencing_platform_row = (
+                platform_label or "Sequencing platform",
+                str(platform_instance),
+                None,
+            )
+
         metadata_sections = [
             build_section(
                 "Summary",
@@ -589,10 +599,7 @@ class SampleGroupDetailView(
             build_section(
                 "Sequencing & Bioinformatics",
                 [
-                    ("Illumina", sample_group.illumina_seq, None),
-                    ("Oxford Nanopore", sample_group.ont_seq, None),
-                    ("PacBio", sample_group.pacbio_seq, None),
-                    ("Ion Torrent", sample_group.iontorrent_seq, None),
+                    sequencing_platform_row,
                     ("Alignment", sample_group.bioinfo_alignment, None),
                     ("Variant calling", sample_group.bioinfo_variant_calling, None),
                     ("Post-processing", sample_group.bioinfo_post_proc, None),

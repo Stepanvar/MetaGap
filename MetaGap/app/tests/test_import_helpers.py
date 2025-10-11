@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
@@ -16,6 +17,60 @@ from app.models import (
     SampleGroup,
 )
 from app.services.vcf_importer import VCFImporter
+from app.services.vcf_metadata import (
+    MetadataConfigurationError,
+    VCFMetadataParser,
+    load_metadata_configuration,
+)
+
+
+class MetadataConfigurationTests(TestCase):
+    """Validate loading of the structured metadata configuration."""
+
+    def test_configuration_loads_expected_sections_and_aliases(self):
+        config = load_metadata_configuration()
+
+        self.assertIn("SAMPLE_GROUP", config.section_map)
+        self.assertIn("illumina_seq", config.models)
+        self.assertIn("sample_group", config.field_aliases)
+        self.assertIn("name", config.field_aliases["sample_group"])
+        self.assertIn("bioinfo_alignment", config.section_primary_field)
+
+        parser = VCFMetadataParser(configuration=config)
+        metadata: dict[str, str] = {}
+        parser.ingest_metadata_items(
+            metadata,
+            "SAMPLE_GROUP",
+            {"Group_Name": "Example Cohort", "Email": "contact@example.com"},
+        )
+
+        self.assertEqual(metadata["name"], "Example Cohort")
+        self.assertEqual(metadata["contact_email"], "contact@example.com")
+
+    def test_missing_configuration_file_raises_helpful_error(self):
+        missing_path = Path(tempfile.gettempdir()) / "does-not-exist.yaml"
+        if missing_path.exists():
+            missing_path.unlink()
+
+        with self.assertRaises(MetadataConfigurationError) as exc:
+            load_metadata_configuration(missing_path)
+
+        self.assertIn("not found", str(exc.exception))
+
+    def test_malformed_configuration_file_raises_helpful_error(self):
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as handle:
+            handle.write("metadata_section_map: []\n")
+            malformed_path = Path(handle.name)
+
+        try:
+            with self.assertRaises(MetadataConfigurationError) as exc:
+                load_metadata_configuration(malformed_path)
+
+            self.assertIn("must be defined as a mapping", str(exc.exception))
+        finally:
+            malformed_path.unlink(missing_ok=True)
 
 
 class ImportHelpersTests(TestCase):

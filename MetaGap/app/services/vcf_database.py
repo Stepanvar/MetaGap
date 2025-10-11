@@ -11,12 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, models as django_models
 
 from ..models import AlleleFrequency, Format, Info, SampleGroup
-from .vcf_metadata import (
-    METADATA_FIELD_ALIASES,
-    METADATA_MODEL_MAP,
-    SECTION_PRIMARY_FIELD,
-    normalize_metadata_key,
-)
+from .vcf_metadata import load_metadata_configuration, normalize_metadata_key
 
 
 INFO_FIELD_STRING = "string"
@@ -68,9 +63,10 @@ class VCFDatabaseWriter:
     """Handle creation of database records from parsed VCF content."""
 
     def __init__(self) -> None:
-        self.metadata_field_aliases = METADATA_FIELD_ALIASES
-        self.metadata_model_map = METADATA_MODEL_MAP
-        self.section_primary_field = SECTION_PRIMARY_FIELD
+        configuration = load_metadata_configuration()
+        self.metadata_field_aliases = configuration.field_aliases
+        self.metadata_model_map = configuration.models
+        self.section_primary_field = configuration.section_primary_field
 
     # ------------------------------------------------------------------
     # Sample group handling

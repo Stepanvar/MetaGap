@@ -341,16 +341,24 @@ class VCFMetadataParser:
 
         for key, value in items.items():
             normalized_key = normalize_metadata_key(key)
-            value_key = normalized_key
 
             for field_name, aliases in alias_map.items():
-                alias_candidates = [normalize_alias_key(alias) for alias in aliases]
+                canonical_field = normalize_metadata_key(field_name)
+                alias_candidates = {canonical_field, canonical_field.replace("_", "")}
+                for alias in aliases:
+                    normalized_alias = normalize_alias_key(alias)
+                    if normalized_alias:
+                        alias_candidates.add(normalized_alias)
+                        alias_candidates.add(normalized_alias.replace("_", ""))
                 if normalized_key in alias_candidates:
-                    normalized_key = normalize_metadata_key(field_name)
+                    normalized_key = canonical_field
                     break
 
             section_values[normalized_key] = value
-            qualified_key = f"{normalized_section}_{value_key}"
+            if normalized_key.startswith(f"{normalized_section}_"):
+                qualified_key = normalized_key
+            else:
+                qualified_key = f"{normalized_section}_{normalized_key}"
             if not restrict_to_section:
                 metadata[normalized_key] = value
             metadata[qualified_key] = value

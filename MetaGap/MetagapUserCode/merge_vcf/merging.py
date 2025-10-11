@@ -1,3 +1,6 @@
+# Primary VCF merging workflow: reads inputs via vcfpy/pysam, sorts and combines
+# records, resolves conflicts and ALT alleles, respects contig order, and writes
+# the merged VCF.
 from __future__ import annotations
 
 import logging

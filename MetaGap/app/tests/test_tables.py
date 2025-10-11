@@ -96,10 +96,8 @@ class SampleGroupTableViewTests(TestCase):
             sample_origin=self.sample_origin,
             material_type=self.material_type,
             library_construction=self.library_construction,
+            sequencing_platform=SampleGroup.SequencingPlatform.ILLUMINA,
             illumina_seq=self.illumina_seq,
-            ont_seq=self.ont_seq,
-            pacbio_seq=self.pacbio_seq,
-            iontorrent_seq=self.iontorrent_seq,
             bioinfo_alignment=self.bioinfo_alignment,
             bioinfo_variant_calling=self.bioinfo_variant_calling,
             bioinfo_post_proc=self.bioinfo_post_proc,
@@ -120,6 +118,9 @@ class SampleGroupTableViewTests(TestCase):
 
         self.assertIn(self.sample_group.name, html)
         self.assertIn(self.reference_genome_build.build_name, html)
+        self.assertIsNone(self.sample_group.ont_seq)
+        self.assertIsNone(self.sample_group.pacbio_seq)
+        self.assertIsNone(self.sample_group.iontorrent_seq)
 
 
 class AlleleFrequencyTableBuilderTests(TestCase):

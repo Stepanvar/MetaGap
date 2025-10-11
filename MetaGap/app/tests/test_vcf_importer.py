@@ -203,6 +203,16 @@ class VCFImporterTests(TestCase):
             "input_quality",
         ).get(pk=sample_group.pk)
 
+        self.assertEqual(
+            sample_group.sequencing_platform,
+            SampleGroup.SequencingPlatform.ILLUMINA,
+        )
+        self.assertIsNotNone(sample_group.illumina_seq)
+        self.assertIsNone(sample_group.ont_seq)
+        self.assertIsNone(sample_group.pacbio_seq)
+        self.assertIsNone(sample_group.iontorrent_seq)
+        self.assertIs(sample_group.get_active_platform_instance(), sample_group.illumina_seq)
+
         self.assertEqual(sample_group.comments, "Detailed group")
         self.assertEqual(sample_group.source_lab, "MetaLab")
         self.assertEqual(sample_group.contact_email, "lab@example.com")
@@ -284,6 +294,9 @@ class VCFImporterTests(TestCase):
             float(additional_metadata["platform_independent_q30"]),
             92.5,
         )
+        self.assertNotIn("ont_seq_instrument", additional_metadata)
+        self.assertNotIn("pacbio_seq_instrument", additional_metadata)
+        self.assertNotIn("iontorrent_seq_instrument", additional_metadata)
         self.assertEqual(importer.warnings, [])
 
     def test_import_serializes_unknown_format_fields(self) -> None:
@@ -317,6 +330,7 @@ class VCFImporterTests(TestCase):
             additional.get("platform_independent_instrument"),
             "CustomSeq",
         )
+        self.assertIsNone(sample_group.sequencing_platform)
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Unsupported sequencing platform", importer.warnings[0])
 
@@ -348,6 +362,7 @@ class VCFImporterTests(TestCase):
                 for warning in importer.warnings
             ),
         )
+        self.assertIsNone(sample_group.sequencing_platform)
 
     def test_import_collects_unknown_metadata_section(self) -> None:
         importer, sample_group = self._import(

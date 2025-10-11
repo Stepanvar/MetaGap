@@ -187,6 +187,13 @@ class VCFDatabaseWriter:
             if key is None:
                 continue
             raw_value = metadata[key]
+            if (
+                section == "sample_group"
+                and field_name == "sequencing_platform"
+                and str(raw_value) not in SampleGroup.SequencingPlatform.values
+            ):
+                consumed.add(key)
+                continue
             section_data[field_name] = self._coerce_model_value(model_field, raw_value)
             consumed.add(key)
 

@@ -103,8 +103,8 @@ METADATA_FIELD_ALIASES = {
         "additional_metrics": ["metrics", "additional_metrics"],
     },
     "reference_genome_build": {
-        "build_name": ["name", "reference", "build"],
-        "build_version": ["version", "build_version"],
+        "build_name": ["name", "reference", "build", "buildname"],
+        "build_version": ["version", "build_version", "buildversion"],
         "additional_info": ["additional", "additional_info"],
     },
     "genome_complexity": {
@@ -140,7 +140,7 @@ METADATA_FIELD_ALIASES = {
         "kit": ["library_kit", "kit_name"],
         "fragmentation": ["fragmentation_method"],
         "adapter_ligation_efficiency": ["adapter_efficiency"],
-        "pcr_cycles": ["pcr", "pcr_cycles"],
+        "pcr_cycles": ["pcr", "pcr_cycles", "pcrcycle", "pcrcycles", "pcrcyles"],
     },
     "illumina_seq": {
         "instrument": ["machine", "instrument"],

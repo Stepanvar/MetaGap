@@ -130,6 +130,25 @@ class VCFImporterTests(TestCase):
 3\t7777\tundef\tG\tA\t60\tPASS\tDP=.;MISSING=.;UNDECLARED=3\tGT:XY\t0/1:abc
 """
 
+    VCF_WITH_ALIAS_METADATA = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=AliasGroup,Description=Alias metadata>
+##REFERENCE_GENOME_BUILD=<BuildName=AliasRef,BuildVersion=v2>
+##LIBRARY_CONSTRUCTION=<Kit=AliasKit,PCRCyles=12>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t1010\trsAlias\tA\tG\t.\tPASS\t.\tGT\t0/1
+"""
+
+    VCF_WITH_PCR_CYCLE_ALIAS = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=CycleGroup,Description=PCR cycle alias>
+##LIBRARY_CONSTRUCTION=<Kit=CycleKit,PCRCycle=10>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t2020\trsCycle\tC\tT\t.\tPASS\t.\tGT\t0/1
+"""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = get_user_model().objects.create_user(
@@ -284,6 +303,44 @@ class VCFImporterTests(TestCase):
             float(additional_metadata["platform_independent_q30"]),
             92.5,
         )
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_handles_metadata_alias_variants(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_ALIAS_METADATA, filename="alias_metadata.vcf"
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build", "library_construction"
+        ).get(pk=sample_group.pk)
+
+        self.assertIsNotNone(sample_group.reference_genome_build)
+        assert sample_group.reference_genome_build is not None
+        self.assertEqual(
+            sample_group.reference_genome_build.build_name, "AliasRef"
+        )
+        self.assertEqual(
+            sample_group.reference_genome_build.build_version, "v2"
+        )
+        self.assertIsNotNone(sample_group.library_construction)
+        assert sample_group.library_construction is not None
+        self.assertEqual(sample_group.library_construction.kit, "AliasKit")
+        self.assertEqual(sample_group.library_construction.pcr_cycles, 12)
+        self.assertEqual(importer.warnings, [])
+
+    def test_import_handles_pcrcycle_alias_variant(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_PCR_CYCLE_ALIAS, filename="pcrcycle_metadata.vcf"
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "library_construction"
+        ).get(pk=sample_group.pk)
+
+        self.assertIsNotNone(sample_group.library_construction)
+        assert sample_group.library_construction is not None
+        self.assertEqual(sample_group.library_construction.kit, "CycleKit")
+        self.assertEqual(sample_group.library_construction.pcr_cycles, 10)
         self.assertEqual(importer.warnings, [])
 
     def test_import_serializes_unknown_format_fields(self) -> None:

@@ -1,3 +1,5 @@
+"""Connect post-save signal handlers that maintain user organization profiles."""
+
 from django.apps import apps
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save

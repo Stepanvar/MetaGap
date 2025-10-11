@@ -28,5 +28,42 @@
 			the details do not need to match any of your existing accounts.
 		</li>
 	</ol>
+
+
+    <h1>Metadata configuration workflow</h1>
+    <p>
+            MetaGap's importer is configured in <code>MetaGap/app/services/vcf_metadata.py</code>.
+            The module maps VCF header sections to Django models, declares alias lists, and
+            normalizes metadata keys before they are saved.
+    </p>
+
+    <h2>Alias mapping guidelines</h2>
+    <ul>
+            <li>Use descriptive canonical field names and capture legacy spellings as aliases.</li>
+            <li>Leave retired spellings in the alias list until upstream exports have migrated.</li>
+    </ul>
+
+    <h2>Adding or renaming metadata fields</h2>
+    <ol>
+            <li>Update the relevant section in <code>vcf_metadata.py</code> with the new field, aliases, and primary-field mapping.</li>
+            <li>Expose the attribute on the matching Django model (and add a migration if needed).</li>
+            <li>Refresh unit tests such as <code>app/tests/test_import_helpers.py</code> and <code>app/tests/test_vcf_importer.py</code> so the new metadata path is covered.</li>
+            <li>Adjust <code>app/tables.py</code> to surface the field via the <code>friendly_names</code> mapping or priority ordering when it should appear prominently.</li>
+    </ol>
+
+    <h2>Removing metadata fields</h2>
+    <ul>
+            <li>Delete the field and aliases from <code>vcf_metadata.py</code> and tidy the related model, migration, and tests.</li>
+            <li>Keep an alias temporarily if legacy imports still emit the value and allow it to fall back to <code>additional_metadata</code>.</li>
+    </ul>
+
+    <h2>Configuration loading and validation</h2>
+    <p>
+            The import pipeline instantiates <code>VCFMetadataParser</code> and <code>VCFDatabaseWriter</code>
+            for each upload, so configuration edits immediately affect new data. Run
+            <code>python manage.py test</code> after changes to exercise the importer, database writers,
+            and table rendering helpers.
+    </p>
+
 </body>
 </html>

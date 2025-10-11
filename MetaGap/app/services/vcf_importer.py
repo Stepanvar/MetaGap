@@ -17,6 +17,7 @@ from django.db import transaction
 
 from ..models import Format, Info, OrganizationProfile, SampleGroup
 from .import_exceptions import (
+    GENERIC_FALLBACK_VALIDATION_MESSAGE,
     ImporterConfigurationError,
     ImporterError,
     ImporterValidationError,
@@ -100,12 +101,16 @@ class VCFImporter:
                                 self.database_writer,
                                 warnings=self.warnings,
                             )
-                        except (UnicodeDecodeError, ValueError, TypeError) as fallback_exc:
+                        except (
+                            UnicodeDecodeError,
+                            ValueError,
+                            TypeError,
+                            ValidationError,
+                        ) as fallback_exc:
                             if sample_group is not None:
                                 sample_group.delete()
                             raise ValidationError(
-                                "The uploaded VCF file appears to be invalid or corrupted. "
-                                "Please verify the file contents and try again."
+                                GENERIC_FALLBACK_VALIDATION_MESSAGE
                             ) from fallback_exc
             except ImporterError:
                 raise

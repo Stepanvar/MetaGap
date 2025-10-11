@@ -1,4 +1,14 @@
-"""Reusable helpers for organization-aware views."""
+"""Reusable helpers for organization-aware views.
+
+This module bundles small mixins that encapsulate common organization
+resolution logic for class-based views.  In particular,
+``OrganizationSampleGroupMixin`` exposes convenience methods to fetch the
+requesting user's organization profile and to scope ``SampleGroup`` queryset
+lookups to records created by that organization.  Views that include the mixin
+can therefore rely on it for access control, ensuring that a user only sees
+``SampleGroup`` instances owned by their organization without having to repeat
+filtering logic.
+"""
 
 from __future__ import annotations
 

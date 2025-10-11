@@ -1,3 +1,5 @@
+from typing import Optional
+
 from django import forms
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
@@ -267,11 +269,25 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
+    PLATFORM_RELATION_CHOICES = (
+        ("illumina_seq", "Illumina"),
+        ("ont_seq", "Oxford Nanopore"),
+        ("pacbio_seq", "PacBio"),
+        ("iontorrent_seq", "Ion Torrent"),
+    )
+    PLATFORM_CHOICES = (("platform_independent", "Platform-independent"),) + (
+        PLATFORM_RELATION_CHOICES
+    )
+    PLATFORM_SELECTOR_ATTR = "data-platform-selector"
+
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
 
+        self._configure_sequencing_platform_field()
+
         self._enhance_creatable_metadata_fields()
+        self._apply_platform_scope_metadata()
 
         origin = getattr(self.instance, "sample_origin", None)
         if origin is not None:
@@ -307,6 +323,17 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
                     "SampleGroupForm.save() requires the user to have an organization profile."
                 ) from exc
             sample_group.created_by = organization_profile
+
+        selected_platform = self.cleaned_data.get("sequencing_platform") or None
+        if selected_platform:
+            sample_group.sequencing_platform = selected_platform
+        else:
+            sample_group.sequencing_platform = None
+
+        platform_fields = {key for key, _ in self.PLATFORM_RELATION_CHOICES}
+        for field_name in platform_fields:
+            if selected_platform != field_name and hasattr(sample_group, field_name):
+                setattr(sample_group, field_name, None)
 
         origin_payload = {
             "tissue": self._normalize_origin_value(
@@ -431,6 +458,58 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
                     initial_value = getattr(related, lookup_field, None)
                     if initial_value is not None:
                         self.fields[field_name].initial = initial_value
+
+    def _configure_sequencing_platform_field(self) -> None:
+        field = self.fields.get("sequencing_platform")
+        choices = list(self.PLATFORM_CHOICES)
+
+        if field is None:
+            field = forms.ChoiceField(
+                choices=choices,
+                required=False,
+                label="Sequencing platform",
+            )
+            self.fields["sequencing_platform"] = field
+        else:
+            field.choices = choices
+            field.required = False
+
+        widget = field.widget
+        widget.attrs.setdefault(self.PLATFORM_SELECTOR_ATTR, "true")
+
+        initial_platform = self._determine_initial_platform()
+        if not self.is_bound and initial_platform is not None:
+            field.initial = initial_platform
+            self.initial.setdefault("sequencing_platform", initial_platform)
+
+    def _apply_platform_scope_metadata(self) -> None:
+        selector_field = self.fields.get("sequencing_platform")
+        if selector_field is not None:
+            selector_field.widget.attrs.setdefault(self.PLATFORM_SELECTOR_ATTR, "true")
+
+        for key, _ in self.PLATFORM_RELATION_CHOICES:
+            field = self.fields.get(key)
+            if field is None:
+                continue
+            widget = field.widget
+            widget.attrs.setdefault("data-platform-scope", key)
+            setattr(widget, "platform_scope", key)
+
+    def _determine_initial_platform(self) -> Optional[str]:
+        explicit = getattr(self.instance, "sequencing_platform", None)
+        if explicit:
+            return explicit
+        inferred = self._infer_platform_from_relations()
+        if inferred:
+            return inferred
+        return "platform_independent"
+
+    def _infer_platform_from_relations(self) -> Optional[str]:
+        for field_name, _ in self.PLATFORM_RELATION_CHOICES:
+            related = getattr(self.instance, field_name, None)
+            if related is not None:
+                return field_name
+        return None
 
     def _build_metadata_datalist(self, field_name, queryset, lookup_field):
         values = []

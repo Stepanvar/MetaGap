@@ -1,20 +1,26 @@
 """Shared logging helpers for the VCF merging workflow.
 
-The module configures a dual logging setup that writes human-readable messages
-to both the console and ``script_execution.log`` by default. The
-:func:`configure_logging` helper exposes a small, well-documented entry point
-for customising that behaviour. Downstream tools can reuse the default
-configuration or redirect logs to a specific location::
+By default, the module wires the ``vcf_merger`` logger to emit informative
+messages both to stdout and to ``script_execution.log`` using a consistent
+timestamped format. Importing the module triggers :func:`configure_logging`,
+ensuring that merge scripts maintain a persistent file log while surfacing
+progress and warnings in the console.
+
+The :func:`configure_logging` helper provides an idempotent, well-documented
+entry point for customising logging behaviour. Call it with ``log_level`` to
+adjust verbosity, ``log_file`` to redirect output, disable either handler, or
+set ``create_dirs=True`` to create missing directories automatically. Repeated
+calls clear previous handlers, avoiding duplicate outputs. Example::
 
     from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
     configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
 
-The helper is idempotent and clears previously registered handlers so repeated
-configuration does not accumulate duplicate outputs. The module also documents
-the error surface that other code can rely on: :class:`MergeVCFError` and its
-more specific subclasses describe unrecoverable conditions, while
-``handle_critical_error`` and ``handle_non_critical_error`` wrap consistent
-logging and escalation semantics for fatal versus recoverable issues.
+For error handling, the module defines :class:`MergeVCFError` and specialised
+subclasses for validation and merge conflicts. Helpers such as
+:func:`handle_critical_error` and :func:`handle_non_critical_error` standardise
+logging of fatal versus recoverable issues—critical failures are logged at the
+``CRITICAL`` level and raised as exceptions, while non-critical conditions are
+logged as warnings.
 """
 from __future__ import annotations
 

@@ -1,4 +1,17 @@
-"""Validation routines for VCF shards and merged outputs."""
+"""Utilities that keep the VCF merge pipeline honest.
+
+This module is responsible for three tightly-related tasks:
+
+* Discovering every candidate shard beneath an input directory, re-encoding
+  plain ``.vcf`` files as BGZF-compressed ``.vcf.gz`` files, and generating the
+  companion Tabix index so that downstream tools can stream records efficiently.
+* Screening those inputs for gVCF-specific markers (``<NON_REF>`` alleles or
+  ``##GVCF`` header metadata) whenever ``--allow-gvcf`` has **not** been passed,
+  ensuring that only plain VCF shards participate in the merge by default.
+* Validating both individual shards and the consolidated output by checking
+  headers, sample sets, sort order, and other structural constraints before the
+  merge completes.
+"""
 
 from __future__ import annotations
 

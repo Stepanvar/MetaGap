@@ -146,6 +146,7 @@ class AlleleFrequencyTableBuilderTests(TestCase):
         self.assertEqual(list(table_class.Meta.fields[: len(expected_prefix)]), expected_prefix)
         self.assertNotIn("info__additional", table_class.Meta.fields)
         self.assertNotIn("format__payload", table_class.Meta.fields)
+        self.assertNotIn("sample_group__created_by", table_class.Meta.fields)
 
     def test_allows_view_specific_overrides(self) -> None:
         table_class = build_allele_frequency_table(

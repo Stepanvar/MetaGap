@@ -141,6 +141,7 @@ DEFAULT_ALLELE_PRIORITY_FIELDS: Sequence[str] = (
 DEFAULT_ALLELE_EXCLUDE_FIELDS: Sequence[str] = (
     "info__additional",
     "format__payload",
+    "sample_group__created_by",
 )
 
 

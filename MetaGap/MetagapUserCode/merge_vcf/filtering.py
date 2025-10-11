@@ -1,3 +1,11 @@
+"""Filtering helpers for the merge workflow.
+
+This module centralizes logic that interprets the ``FILTER`` field of VCF
+records.  ``DEFAULT_ALLOWED_FILTER_VALUES`` establishes the default whitelist,
+while helper functions such as :func:`prepare_allowed_filter_values` and
+:func:`prepare_allowed_filter_set` normalize caller-provided overrides.
+"""
+
 from __future__ import annotations
 
 from typing import Optional, Sequence, Set, Tuple

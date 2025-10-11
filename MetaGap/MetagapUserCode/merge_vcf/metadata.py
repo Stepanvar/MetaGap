@@ -5,6 +5,13 @@ metadata with auto-generated INFO definitions and helper utilities for reading
 and writing VCF text streams. The helpers centralize tricky logic such as
 escaping header descriptions and de-duplicating metadata contributed by
 multiple sources so that downstream workflows can reuse the same guarantees.
+
+In addition to shaping standalone header entries, the module manages metadata
+throughout the merge workflow. ``append_metadata_to_merged_vcf`` funnels
+collected metadata into the final artifact, while utilities for loading
+metadata templates and composing SAMPLE annotations (for example
+``_load_metadata_template`` and ``build_sample_metadata_line``) ensure those
+details are applied consistently across merged cohorts.
 """
 
 from __future__ import annotations

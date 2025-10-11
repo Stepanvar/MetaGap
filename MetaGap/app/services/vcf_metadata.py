@@ -21,6 +21,7 @@ from ..models import (
     OntSeq,
     PacBioSeq,
     ReferenceGenomeBuild,
+    SampleGroup,
     SampleOrigin,
 )
 
@@ -75,6 +76,13 @@ METADATA_MODEL_MAP = {
     "input_quality": InputQuality,
 }
 
+PLATFORM_SECTION_MAP = SampleGroup.PLATFORM_FIELD_MAP
+PLATFORM_SECTION_FIELDS = set(PLATFORM_SECTION_MAP.values())
+SECTION_PLATFORM_MAP = {
+    field_name: platform
+    for platform, field_name in PLATFORM_SECTION_MAP.items()
+}
+
 METADATA_FIELD_ALIASES = {
     "sample_group": {
         "name": ["group", "group_name", "dataset", "id"],
@@ -82,6 +90,7 @@ METADATA_FIELD_ALIASES = {
         "source_lab": ["lab", "lab_name", "source", "center"],
         "contact_email": ["email", "lab_email", "contact"],
         "contact_phone": ["phone", "lab_phone"],
+        "sequencing_platform": ["platform", "sequencing_platform"],
         "total_samples": [
             "samples",
             "sample_count",
@@ -210,6 +219,8 @@ class VCFMetadataParser:
 
     def __init__(self, warnings: Optional[list[str]] = None) -> None:
         self.warnings = warnings if warnings is not None else []
+        self._section_keys: dict[str, set[str]] = {}
+        self._active_platform_section: Optional[str] = None
 
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
@@ -258,6 +269,10 @@ class VCFMetadataParser:
                 break
 
         section = self._determine_platform_section(platform_value)
+        platform_choice = None
+        if section:
+            platform_choice = SECTION_PLATFORM_MAP.get(section)
+
         if not section:
             warning = (
                 "Unsupported sequencing platform "
@@ -267,7 +282,13 @@ class VCFMetadataParser:
             self.warnings.append(warning)
             section = "platform_independent"
 
-        restrict = section != "platform_independent"
+        if platform_choice is not None:
+            metadata["sequencing_platform"] = platform_choice.value
+            self._record_section_keys("sample_group", {"sequencing_platform"})
+            self._active_platform_section = section
+            self._prune_inactive_platform_sections(metadata)
+
+        restrict = section in PLATFORM_SECTION_FIELDS
         self._process_metadata_section(
             metadata, section, items, restrict_to_section=restrict
         )
@@ -319,6 +340,13 @@ class VCFMetadataParser:
         *,
         restrict_to_section: bool = False,
     ) -> None:
+        if (
+            section in PLATFORM_SECTION_FIELDS
+            and self._active_platform_section is not None
+            and section != self._active_platform_section
+        ):
+            return
+
         def normalize_alias_key(candidate: str) -> str:
             stripped = candidate.rstrip("?!.,;:")
             return normalize_metadata_key(stripped)
@@ -326,6 +354,7 @@ class VCFMetadataParser:
         alias_map = METADATA_FIELD_ALIASES.get(section, {})
         normalized_section = normalize_metadata_key(section)
         section_values: Dict[str, Any] = {}
+        section_keys: set[str] = set()
 
         if restrict_to_section and alias_map:
             alias_keys_to_remove = {
@@ -353,20 +382,44 @@ class VCFMetadataParser:
             qualified_key = f"{normalized_section}_{value_key}"
             if not restrict_to_section:
                 metadata[normalized_key] = value
+                section_keys.add(normalized_key)
             metadata[qualified_key] = value
+            section_keys.add(qualified_key)
 
         primary_field = SECTION_PRIMARY_FIELD.get(section)
         if primary_field:
             normalized_primary = normalize_metadata_key(primary_field)
             if normalized_primary in section_values:
                 metadata[section] = section_values[normalized_primary]
+                section_keys.add(section)
         elif not restrict_to_section and section not in metadata:
             primary_aliases: Iterable[str] = alias_map.get(section, [])
             for alias in primary_aliases:
                 alias_key = normalize_metadata_key(alias)
                 if alias_key in metadata:
                     metadata[section] = metadata[alias_key]
+                    section_keys.add(section)
                     break
+
+        if section_keys:
+            self._record_section_keys(section, section_keys)
+
+    def _record_section_keys(self, section: str, keys: set[str]) -> None:
+        if not keys:
+            return
+        recorded = self._section_keys.setdefault(section, set())
+        recorded.update(keys)
+
+    def _prune_inactive_platform_sections(self, metadata: Dict[str, Any]) -> None:
+        for section in PLATFORM_SECTION_FIELDS:
+            if section == self._active_platform_section:
+                continue
+            self._prune_section(metadata, section)
+
+    def _prune_section(self, metadata: Dict[str, Any], section: str) -> None:
+        keys = self._section_keys.pop(section, set())
+        for key in keys:
+            metadata.pop(key, None)
 
 
 def normalize_metadata_value(value: str) -> str:

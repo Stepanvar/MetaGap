@@ -1,24 +1,26 @@
 """Shared logging helpers for the VCF merging workflow.
 
-By default the module wires the ``vcf_merger`` logger to emit informative
+By default, the module wires the ``vcf_merger`` logger to emit informative
 messages both to stdout and to ``script_execution.log`` using a consistent
 timestamped format. Importing the module triggers :func:`configure_logging`,
-ensuring the merging scripts write a persistent file trail while also surfacing
+ensuring that merge scripts maintain a persistent file log while surfacing
 progress and warnings in the console.
 
-The :func:`configure_logging` helper offers an idempotent entry point for
-customising the behaviour: call it with ``log_level`` to adjust verbosity,
-``log_file`` to redirect output, disable either of the console or file handlers,
-or provide ``create_dirs`` when a destination directory needs to be created
-automatically. Repeated invocations clear previous handlers so no duplicate
-outputs are accumulated.
+The :func:`configure_logging` helper provides an idempotent, well-documented
+entry point for customising logging behaviour. Call it with ``log_level`` to
+adjust verbosity, ``log_file`` to redirect output, disable either handler, or
+set ``create_dirs=True`` to create missing directories automatically. Repeated
+calls clear previous handlers, avoiding duplicate outputs. Example::
 
-For error handling the module defines :class:`MergeVCFError` and specialised
-subclasses for validation issues and merge conflicts. Helpers such as
-:func:`handle_critical_error` and :func:`handle_non_critical_error` centralise
-how fatal and recoverable errors are logged, guaranteeing critical failures are
-recorded at ``CRITICAL`` level and raised as exceptions while non-critical
-conditions are logged as warnings.
+    from MetaGap.MetagapUserCode.merge_vcf.logging_utils import configure_logging
+    configure_logging(log_level="WARNING", log_file="/tmp/merge.log")
+
+For error handling, the module defines :class:`MergeVCFError` and specialised
+subclasses for validation and merge conflicts. Helpers such as
+:func:`handle_critical_error` and :func:`handle_non_critical_error` standardise
+logging of fatal versus recoverable issues—critical failures are logged at the
+``CRITICAL`` level and raised as exceptions, while non-critical conditions are
+logged as warnings.
 """
 from __future__ import annotations
 

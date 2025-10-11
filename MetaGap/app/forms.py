@@ -1,3 +1,11 @@
+"""Forms for search, registration, sample grouping, and profile updates.
+
+This module defines Bootstrap-styled forms for catalogue search, user
+registration, sample group management, and user profile maintenance. In
+addition to widget customization, the forms enforce validation such as the
+requirement for unique email addresses when creating new accounts.
+"""
+
 from typing import Optional
 
 from django import forms

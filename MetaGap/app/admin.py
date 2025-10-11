@@ -1,3 +1,10 @@
+"""Register all application models with the Django admin site.
+
+This module wires each model into Django admin and exposes the custom
+``FormatAdmin`` configuration that adds tailored behavior for the ``Format``
+model.
+"""
+
 from django.contrib import admin
 
 from .models import (

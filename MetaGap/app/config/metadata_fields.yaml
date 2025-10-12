@@ -82,6 +82,9 @@ metadata_field_aliases:
     comments:
       - description
       - notes
+    sequencing_platform:
+      - platform
+      - sequencing_platform
   input_quality:
     a260_a280:
       - a260_280
@@ -159,6 +162,9 @@ metadata_field_aliases:
     pcr_cycles:
       - pcr
       - pcr_cycles
+      - pcrcycle
+      - pcrcycles
+      - pcrcyles
   illumina_seq:
     instrument:
       - machine

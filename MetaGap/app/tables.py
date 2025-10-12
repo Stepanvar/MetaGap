@@ -129,7 +129,6 @@ def create_dynamic_table(
 DEFAULT_ALLELE_PRIORITY_FIELDS: Sequence[str] = (
     "chrom",
     "pos",
-    "variant_id",
     "ref",
     "alt",
     "qual",
@@ -163,7 +162,14 @@ def build_allele_frequency_table(
 
     priority_fields: List[str] = list(DEFAULT_ALLELE_PRIORITY_FIELDS)
     if priority_extra:
-        priority_fields.extend(priority_extra)
+        extra_without_variant = [
+            field_name
+            for field_name in priority_extra
+            if field_name != "variant_id"
+        ]
+        priority_fields.extend(extra_without_variant)
+        if "variant_id" in priority_extra:
+            priority_fields.append("variant_id")
 
     exclude_fields = list(DEFAULT_ALLELE_EXCLUDE_FIELDS)
     if exclude_extra:

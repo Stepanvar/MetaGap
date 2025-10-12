@@ -144,6 +144,15 @@ class VCFImporterTests(TestCase):
 1\t999\trsTypo\tA\tG\t60\tPASS\t.\tGT\t0/1
 """
 
+    VCF_WITH_LIBRARY_ADDITIONAL_FIELDS = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=DropGroup,Description=Library additional fields>
+##LIBRARY_CONSTRUCTION=<Kit=DropKit,PCRCycles=11,AdditionalFields=PCRCycles>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t909\trsDrop\tG\tA\t70\tPASS\t.\tGT\t0/1
+"""
+
     VCF_WITHOUT_EXPLICIT_NAME = """##fileformat=VCFv4.2
 ##contig=<ID=1>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -518,6 +527,36 @@ class VCFImporterTests(TestCase):
         self.assertEqual(
             sample_group.reference_genome_build.build_name, "AliasRef"
         )
+
+    def test_import_respects_additional_fields_override(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_LIBRARY_ADDITIONAL_FIELDS,
+            filename="library_additional_fields.vcf",
+        )
+
+        sample_group = SampleGroup.objects.select_related("library_construction").get(
+            pk=sample_group.pk
+        )
+
+        library = sample_group.library_construction
+        self.assertIsNotNone(library)
+        assert library is not None
+        self.assertEqual(library.kit, "DropKit")
+        self.assertIsNone(library.pcr_cycles)
+
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertIn("library_construction_pcr_cycles", additional_metadata)
+        self.assertEqual(additional_metadata["library_construction_pcr_cycles"], 11)
+        self.assertEqual(importer.warnings, [])
+
+        importer, sample_group = self._import(
+            self.VCF_WITH_ALIAS_METADATA, filename="alias_metadata.vcf"
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build", "library_construction"
+        ).get(pk=sample_group.pk)
+
         self.assertEqual(
             sample_group.reference_genome_build.build_version, "v2"
         )

@@ -375,9 +375,14 @@ class VCFMetadataParser:
     ) -> None:
         self.warnings = warnings if warnings is not None else []
         self.configuration = configuration or load_metadata_configuration()
+        self._consumed_keys: set[str] = set()
+        self._section_keys: dict[str, set[str]] = {}
+        self._active_platform_section: Optional[str] = None
 
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
+        self._section_keys.clear()
+        self._active_platform_section = None
         self._consumed_keys.clear()
         for record in vcf_in.header.records:
             items = self._collect_record_items(record)

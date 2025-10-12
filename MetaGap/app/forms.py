@@ -277,20 +277,35 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
-    PLATFORM_RELATION_CHOICES = (
+    SEQUENCING_PLATFORM_CHOICES = (
         ("illumina_seq", "Illumina"),
         ("ont_seq", "Oxford Nanopore"),
         ("pacbio_seq", "PacBio"),
+    )
+    PLATFORM_RELATION_CHOICES = SEQUENCING_PLATFORM_CHOICES + (
         ("iontorrent_seq", "Ion Torrent"),
     )
-    PLATFORM_CHOICES = (("platform_independent", "Platform-independent"),) + (
+    PLATFORM_INDEPENDENT_VALUE = "platform_independent"
+    PLATFORM_CHOICES = ((PLATFORM_INDEPENDENT_VALUE, "Platform-independent"),) + (
         PLATFORM_RELATION_CHOICES
     )
     PLATFORM_SELECTOR_ATTR = "data-platform-selector"
+    PLATFORM_SLUG_TO_LEGACY_VALUE = {
+        slug: platform_choice.value
+        for platform_choice, slug in SampleGroup.PLATFORM_FIELD_MAP.items()
+    }
+
+    sequencing_platform = forms.ChoiceField(
+        choices=SEQUENCING_PLATFORM_CHOICES,
+        required=False,
+        label="Sequencing platform",
+    )
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
+
+        self._normalized_platform_selection: Optional[str] = None
 
         self._configure_sequencing_platform_field()
 
@@ -312,7 +327,31 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = SampleGroup
-        exclude = ["created_by", "sample_origin"]  # Managed manually via form fields
+        fields = [
+            "name",
+            "doi",
+            "source_lab",
+            "contact_email",
+            "contact_phone",
+            "total_samples",
+            "inclusion_criteria",
+            "exclusion_criteria",
+            "input_quality",
+            "comments",
+            "additional_metadata",
+            "reference_genome_build",
+            "genome_complexity",
+            "material_type",
+            "library_construction",
+            "sequencing_platform",
+            "illumina_seq",
+            "ont_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+            "bioinfo_post_proc",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             # Add widgets for other fields as needed
@@ -332,15 +371,21 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
                 ) from exc
             sample_group.created_by = organization_profile
 
-        selected_platform = self.cleaned_data.get("sequencing_platform") or None
-        if selected_platform:
-            sample_group.sequencing_platform = selected_platform
+        selected_platform = self.cleaned_data.get("sequencing_platform")
+        normalized_platform = self._normalized_platform_selection
+        if normalized_platform is None:
+            normalized_platform = self._normalize_platform_slug(selected_platform)
+        if normalized_platform == self.PLATFORM_INDEPENDENT_VALUE:
+            normalized_platform = None
+
+        if normalized_platform:
+            sample_group.sequencing_platform = normalized_platform
         else:
             sample_group.sequencing_platform = None
 
         platform_fields = {key for key, _ in self.PLATFORM_RELATION_CHOICES}
         for field_name in platform_fields:
-            if selected_platform != field_name and hasattr(sample_group, field_name):
+            if normalized_platform != field_name and hasattr(sample_group, field_name):
                 setattr(sample_group, field_name, None)
 
         origin_payload = {
@@ -488,7 +533,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         initial_platform = self._determine_initial_platform()
         if not self.is_bound and initial_platform is not None:
             field.initial = initial_platform
-            self.initial.setdefault("sequencing_platform", initial_platform)
+            self.initial["sequencing_platform"] = initial_platform
 
     def _apply_platform_scope_metadata(self) -> None:
         selector_field = self.fields.get("sequencing_platform")
@@ -504,13 +549,64 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             setattr(widget, "platform_scope", key)
 
     def _determine_initial_platform(self) -> Optional[str]:
-        explicit = getattr(self.instance, "sequencing_platform", None)
+        explicit_value = getattr(self.instance, "sequencing_platform", None)
+        explicit = self._normalize_platform_slug(explicit_value)
         if explicit:
             return explicit
         inferred = self._infer_platform_from_relations()
         if inferred:
             return inferred
-        return "platform_independent"
+        return self.PLATFORM_INDEPENDENT_VALUE
+
+    def _post_clean(self) -> None:
+        normalized = self._normalize_platform_slug(
+            self.cleaned_data.get("sequencing_platform")
+        )
+        self._normalized_platform_selection = normalized
+
+        placeholder: Optional[str]
+        if normalized in (None, self.PLATFORM_INDEPENDENT_VALUE):
+            placeholder = None
+        else:
+            placeholder = self._map_slug_to_legacy_value(normalized)
+
+        if "sequencing_platform" in self.cleaned_data:
+            self.cleaned_data["sequencing_platform"] = placeholder
+
+        try:
+            super()._post_clean()
+        finally:
+            if "sequencing_platform" in self.cleaned_data:
+                self.cleaned_data["sequencing_platform"] = normalized
+
+    @classmethod
+    def _normalize_platform_slug(cls, value: Optional[str]) -> Optional[str]:
+        if not value or not isinstance(value, str):
+            return None
+
+        normalized = value.strip()
+        if not normalized:
+            return None
+
+        valid_slugs = {
+            cls.PLATFORM_INDEPENDENT_VALUE,
+            *[key for key, _ in cls.PLATFORM_RELATION_CHOICES],
+        }
+        if normalized in valid_slugs:
+            return normalized
+
+        try:
+            enum_value = SampleGroup.SequencingPlatform(normalized)
+        except ValueError:
+            return None
+
+        return SampleGroup.PLATFORM_FIELD_MAP.get(enum_value)
+
+    @classmethod
+    def _map_slug_to_legacy_value(cls, slug: Optional[str]) -> Optional[str]:
+        if not slug:
+            return None
+        return cls.PLATFORM_SLUG_TO_LEGACY_VALUE.get(slug)
 
     def _infer_platform_from_relations(self) -> Optional[str]:
         for field_name, _ in self.PLATFORM_RELATION_CHOICES:

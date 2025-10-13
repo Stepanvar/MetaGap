@@ -170,8 +170,12 @@ class AlleleFrequencyTableBuilderTests(TestCase):
             "info__mq",
         ]
         self.assertEqual(fields[: len(expected_prefix)], expected_prefix)
-        self.assertEqual(fields[len(expected_prefix)], "format__genotype")
-        self.assertEqual(fields[len(expected_prefix) + 1], "variant_id")
+        variant_index = fields.index("variant_id")
+        self.assertEqual(variant_index, len(expected_prefix))
+
+        additional_priority_index = fields.index("format__genotype")
+        self.assertGreater(additional_priority_index, variant_index)
+        self.assertEqual(additional_priority_index, variant_index + 1)
         self.assertNotIn("info__id", fields)
 
     def test_sample_group_header_uses_friendly_label(self) -> None:

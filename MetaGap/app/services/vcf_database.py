@@ -80,6 +80,8 @@ class VCFDatabaseWriter:
     ) -> SampleGroup:
         parser_consumed_raw = metadata.pop("_consumed_keys", None)
         parser_consumed = set(parser_consumed_raw or [])
+        if isinstance(metadata.get("_section_key_map"), dict):
+            parser_consumed.add("_section_key_map")
 
         group_data, group_consumed, group_additional = self._extract_section_data(
             metadata, "sample_group", SampleGroup
@@ -219,6 +221,37 @@ class VCFDatabaseWriter:
         consumed: set[str] = set()
         skip_set = set(skip_keys or [])
         normalized_section = normalize_metadata_key(section)
+        raw_section_key_map = metadata.get("_section_key_map")
+        normalized_key_sections: dict[str, set[str]] = {}
+        if isinstance(raw_section_key_map, dict):
+            for key, sections in raw_section_key_map.items():
+                normalized_key = normalize_metadata_key(key)
+                if not normalized_key:
+                    continue
+                normalized_sections: set[str] = set()
+                if isinstance(sections, (list, tuple, set)):
+                    candidates = sections
+                else:
+                    candidates = [sections]
+                for candidate in candidates:
+                    normalized_candidate = normalize_metadata_key(candidate)
+                    if normalized_candidate:
+                        normalized_sections.add(normalized_candidate)
+                if normalized_sections:
+                    normalized_key_sections[normalized_key] = normalized_sections
+
+        def key_matches_section(candidate: str) -> bool:
+            if not normalized_key_sections:
+                return True
+            normalized_key = normalize_metadata_key(candidate)
+            if not normalized_key:
+                return True
+            allowed_sections = normalized_key_sections.get(normalized_key)
+            if not allowed_sections:
+                return True
+            if not normalized_section:
+                return True
+            return normalized_section in allowed_sections
         drop_fields, instruction_consumed = self._collect_section_additional_fields(
             metadata, section, alias_map, skip_set
         )
@@ -244,7 +277,7 @@ class VCFDatabaseWriter:
                     aliases,
                     skip_keys=skip_set | consumed,
                 )
-                if key is None:
+                if key is None or not key_matches_section(key):
                     continue
                 raw_value = metadata[key]
                 self._store_dropped_field_value(
@@ -280,7 +313,7 @@ class VCFDatabaseWriter:
                 aliases,
                 skip_keys=skip_set | consumed,
             )
-            if key is None:
+            if key is None or not key_matches_section(key):
                 continue
             raw_value = metadata[key]
             if (
@@ -638,56 +671,54 @@ class VCFDatabaseWriter:
                     continue
                 skip_set.add(text)
 
-        def _dedupe_append(
-            collection: list[str], candidate: str, *, respect_skip: bool = True
-        ) -> None:
-            if not candidate:
+        def _append_candidate(collection: list[str], candidate: str, *, respect_skip: bool = True) -> None:
+            if not candidate or candidate in collection:
                 return
             if respect_skip and candidate in skip_set:
                 return
-            if candidate not in collection:
-                collection.append(candidate)
-
-        def _dedupe_append_raw(collection: list[str], candidate: str) -> None:
-            if candidate and candidate not in collection:
-                collection.append(candidate)
+            collection.append(candidate)
 
         normalized_section = normalize_metadata_key(section)
         normalized_field = normalize_metadata_key(field_name)
 
         raw_alias_candidates: list[str] = []
         for candidate in (str(field_name), normalized_field):
-            _dedupe_append(alias_candidates, candidate, respect_skip=False)
+            _append_candidate(alias_candidates, candidate)
 
         for alias in aliases:
             alias_text = str(alias)
             normalized_alias = normalize_metadata_key(alias_text)
-            _dedupe_append(alias_candidates, alias_text, respect_skip=False)
-            _dedupe_append(alias_candidates, normalized_alias, respect_skip=False)
+            _append_candidate(alias_candidates, alias_text)
+            _append_candidate(alias_candidates, normalized_alias)
+
+        prefixed_alias_candidates: list[str] = list(alias_candidates)
+        for candidate in (str(field_name), normalized_field):
+            candidate_text = str(candidate)
+            if candidate_text and candidate_text not in prefixed_alias_candidates:
+                prefixed_alias_candidates.append(candidate_text)
 
         candidate_order: list[str] = []
 
         section_variants: list[str] = []
         for section_variant in (section, normalized_section):
             if section_variant:
-                _dedupe_append(section_variants, section_variant)
+                _append_candidate(section_variants, section_variant)
 
         collapsed_variants: list[str] = []
         for section_variant in section_variants:
             collapsed = section_variant.replace("_", "")
             if collapsed and collapsed != section_variant:
-                _dedupe_append(collapsed_variants, collapsed)
+                _append_candidate(collapsed_variants, collapsed)
 
         section_variants.extend(collapsed_variants)
 
         for section_variant in section_variants:
-            for alias_candidate in section_alias_candidates:
-                _dedupe_append(
-                    candidate_order, f"{section_variant}_{alias_candidate}"
-                )
+            for alias_candidate in prefixed_alias_candidates:
+                candidate = f"{section_variant}_{alias_candidate}"
+                _append_candidate(candidate_order, candidate, respect_skip=False)
 
-        for alias_candidate in bare_alias_candidates:
-            _dedupe_append(candidate_order, alias_candidate)
+        for alias_candidate in alias_candidates:
+            _append_candidate(candidate_order, alias_candidate)
 
         return candidate_order
 

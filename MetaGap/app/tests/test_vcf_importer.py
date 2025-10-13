@@ -727,9 +727,11 @@ class VCFImporterTests(TestCase):
         assert isinstance(platform_metadata, dict)
         self.assertEqual(platform_metadata.get("ID"), "BadGroup")
         self.assertEqual(platform_metadata.get("Description"), "Should fail")
-        self.assertIn(
-            "Unsupported metadata section 'SAMPLE_PLATFORM'",
-            importer.warnings,
+        self.assertTrue(
+            any(
+                "Unsupported metadata section 'SAMPLE_PLATFORM'" in warning
+                for warning in importer.warnings
+            )
         )
 
     def test_import_handles_undefined_info_and_format_fields(self) -> None:

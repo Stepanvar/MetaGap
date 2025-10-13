@@ -409,11 +409,11 @@ class VCFMetadataParser:
         section = self.configuration.section_map.get(normalized_key)
         if not section:
             if self._is_metadata_section_candidate(normalized_key):
-                log_message = (
-                    f"Unsupported metadata section '{key}' encountered in the VCF header."
+                warning = (
+                    f"Unsupported metadata section '{key}' encountered in the VCF header; "
+                    "storing raw values in additional metadata."
                 )
-                logger.warning("%s", log_message)
-                warning = f"Unsupported metadata section '{key}'"
+                logger.warning("%s", warning)
                 self.warnings.append(warning)
                 additional = metadata.setdefault("additional_metadata", {})
                 additional_key = normalize_metadata_key(key)

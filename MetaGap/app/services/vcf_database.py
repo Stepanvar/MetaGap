@@ -229,6 +229,8 @@ class VCFDatabaseWriter:
         if instruction_consumed:
             consumed.update(instruction_consumed)
 
+        preserve_suffixes: set[str] = set()
+
         for field_name, aliases in alias_map.items():
             model_field = self._get_model_field(model_cls, field_name)
             if model_field is None:
@@ -294,8 +296,18 @@ class VCFDatabaseWriter:
 
             # Consume the original key and normalized variants
             consumed.add(key)
-            consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
-            consumed.add(normalize_metadata_key(field_name))
+
+            matched_is_section_specific = self._is_section_prefixed_key(section, key)
+            skip_canonical_alias = (
+                matched_is_section_specific and normalized_field == "version"
+            )
+
+            if skip_canonical_alias:
+                if normalized_field:
+                    preserve_suffixes.add(normalized_field)
+            else:
+                consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
+                consumed.add(normalized_field)
 
             normalized_key = normalize_metadata_key(key)
             for prefix in (
@@ -306,7 +318,13 @@ class VCFDatabaseWriter:
                 if normalized_key.startswith(prefix):
                     suffix = normalized_key[len(prefix) :]
                     if suffix:
-                        consumed.add(suffix)
+                        normalized_suffix = normalize_metadata_key(suffix)
+                        if not (
+                            skip_canonical_alias
+                            and normalized_suffix
+                            and normalized_suffix == normalized_field
+                        ):
+                            consumed.add(suffix)
                     break
 
             # Also consume equivalent/aliased keys (from codex branch)
@@ -331,7 +349,7 @@ class VCFDatabaseWriter:
                 consumed.add(section)
 
         additional, additional_consumed = self._build_additional_payload(
-            metadata, section, consumed | skip_set
+            metadata, section, consumed | skip_set, preserve_suffixes=preserve_suffixes
         )
         consumed.update(additional_consumed)
         return section_data, consumed, additional
@@ -630,10 +648,14 @@ class VCFDatabaseWriter:
             if candidate not in collection:
                 collection.append(candidate)
 
+        def _dedupe_append_raw(collection: list[str], candidate: str) -> None:
+            if candidate and candidate not in collection:
+                collection.append(candidate)
+
         normalized_section = normalize_metadata_key(section)
         normalized_field = normalize_metadata_key(field_name)
 
-        alias_candidates: list[str] = []
+        raw_alias_candidates: list[str] = []
         for candidate in (str(field_name), normalized_field):
             _dedupe_append(alias_candidates, candidate, respect_skip=False)
 
@@ -659,12 +681,12 @@ class VCFDatabaseWriter:
         section_variants.extend(collapsed_variants)
 
         for section_variant in section_variants:
-            for alias_candidate in alias_candidates:
+            for alias_candidate in section_alias_candidates:
                 _dedupe_append(
                     candidate_order, f"{section_variant}_{alias_candidate}"
                 )
 
-        for alias_candidate in alias_candidates:
+        for alias_candidate in bare_alias_candidates:
             _dedupe_append(candidate_order, alias_candidate)
 
         return candidate_order
@@ -688,6 +710,29 @@ class VCFDatabaseWriter:
                 _append_lookup(collapsed_key, original_key)
 
         return lookup
+
+    @staticmethod
+    def _is_section_prefixed_key(section: str, candidate: str) -> bool:
+        normalized_section = normalize_metadata_key(section)
+        normalized_candidate = normalize_metadata_key(candidate)
+        if not normalized_section or not normalized_candidate:
+            return False
+
+        prefixes = [
+            normalized_section,
+            f"{normalized_section}_",
+            f"{normalized_section}.",
+            f"{normalized_section}-",
+        ]
+        collapsed_section = normalized_section.replace("_", "")
+        if collapsed_section and collapsed_section not in prefixes:
+            prefixes.append(collapsed_section)
+
+        return any(
+            normalized_candidate.startswith(prefix)
+            for prefix in prefixes
+            if prefix
+        )
 
     def _resolve_equivalent_metadata_keys(
         self,
@@ -717,6 +762,16 @@ class VCFDatabaseWriter:
             if collapsed_candidate != normalized_candidate:
                 for mapped_key in normalized_lookup.get(collapsed_candidate, []):
                     equivalents.add(mapped_key)
+
+        if self._is_section_prefixed_key(section, matched_key):
+            normalized_field = normalize_metadata_key(field_name)
+            equivalents = {
+                key
+                for key in equivalents
+                if self._is_section_prefixed_key(section, key)
+                or normalize_metadata_key(key) != normalized_field
+            }
+            equivalents.add(matched_key)
 
         return equivalents
 
@@ -754,6 +809,8 @@ class VCFDatabaseWriter:
         metadata: Dict[str, Any],
         section: str,
         consumed: Iterable[str],
+        *,
+        preserve_suffixes: Optional[Iterable[str]] = None,
     ) -> Tuple[Optional[Dict[str, Any]], set[str]]:
         consumed_set = set(consumed)
         normalized_section = normalize_metadata_key(section)
@@ -772,6 +829,11 @@ class VCFDatabaseWriter:
         normalized_consumed = {
             normalize_metadata_key(entry) for entry in consumed_set if entry
         }
+        preserved_suffixes = {
+            normalize_metadata_key(entry)
+            for entry in (preserve_suffixes or [])
+            if entry
+        }
         consumed_suffixes: set[str] = set()
         for entry in consumed_set:
             normalized_entry = normalize_metadata_key(entry)
@@ -783,6 +845,9 @@ class VCFDatabaseWriter:
                 if normalized_entry.startswith(prefix):
                     suffix = normalized_entry[len(prefix) :]
                     if suffix:
+                        normalized_suffix = normalize_metadata_key(suffix)
+                        if normalized_suffix in preserved_suffixes:
+                            continue
                         consumed_suffixes.add(suffix)
                     break
 

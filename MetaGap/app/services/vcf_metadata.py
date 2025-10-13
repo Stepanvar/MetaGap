@@ -388,6 +388,24 @@ class VCFMetadataParser:
             items = self._collect_record_items(record)
             self.ingest_metadata_items(metadata, record.key, items)
 
+        if self._section_keys:
+            section_key_map: dict[str, set[str]] = {}
+            for section, keys in self._section_keys.items():
+                normalized_section = normalize_metadata_key(section)
+                if not normalized_section:
+                    continue
+                for key in keys:
+                    normalized_key = normalize_metadata_key(key)
+                    if not normalized_key:
+                        continue
+                    bucket = section_key_map.setdefault(normalized_key, set())
+                    bucket.add(normalized_section)
+
+            if section_key_map:
+                metadata["_section_key_map"] = {
+                    key: sorted(values) for key, values in section_key_map.items()
+                }
+
         if "name" not in metadata and "sample_group_name" in metadata:
             metadata["name"] = metadata["sample_group_name"]
 

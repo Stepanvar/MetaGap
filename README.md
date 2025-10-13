@@ -29,6 +29,20 @@ After loading the data you can sign in with either demo account and visit the pr
   server logs so developers can diagnose issues without exposing Django's debug
   pages to end users.
 
+## Internationalisation
+
+MetaGap ships with English and Russian interface translations.  To switch the
+active language at runtime, submit a POST request to Django's built-in language
+selection view at `/i18n/setlang/` with a `language` parameter set to either
+`en` or `ru`.  For example, to switch to Russian while preserving the current
+page, send the request with `language=ru` and `next={{ request.path }}`.
+Successful requests update the `metagap_language` cookie so subsequent page
+loads render using the selected locale.
+
+The repository stores editable `.po` message catalogs; compile them locally with
+`django-admin compilemessages` (after setting `DJANGO_SETTINGS_MODULE=MetaGap.settings`)
+whenever translations change so Django can serve the generated `.mo` binaries.
+
 ## Metadata configuration workflow
 
 MetaGap's VCF importer is driven by a configuration module at

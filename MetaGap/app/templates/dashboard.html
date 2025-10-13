@@ -1,19 +1,26 @@
 {% extends "base.html" %}
 {% load static %}
+{% load i18n %}
 
-{% block title %}Dashboard · MetaGaP{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Dashboard · {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block body %}
 <div class="container py-5">
     <header class="mb-5">
-        <h1 class="h3 mb-1">Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}!</h1>
-        <p class="text-muted mb-0">Track your datasets and latest activity across the MetaGaP platform.</p>
+        <h1 class="h3 mb-1">
+            {% if user.first_name %}
+                {% blocktrans with first_name=user.first_name %}Welcome back, {{ first_name }}!{% endblocktrans %}
+            {% else %}
+                {% trans "Welcome back!" %}
+            {% endif %}
+        </h1>
+        <p class="text-muted mb-0">{% trans "Track your datasets and latest activity across the MetaGaP platform." %}</p>
     </header>
 
     <section class="mb-5">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Recent datasets</h2>
-            <a class="btn btn-sm btn-outline-primary" href="{% url 'profile' %}">Manage all</a>
+            <h2 class="h5 mb-0">{% trans "Recent datasets" %}</h2>
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'profile' %}">{% trans "Manage all" %}</a>
         </div>
         {% if recent_datasets %}
             <div class="row row-cols-lg-3 row-cols-md-2 row-cols-1 g-4">
@@ -40,20 +47,20 @@
                                     {% if dataset.comments %}
                                         {{ dataset.comments|truncatechars:120 }}
                                     {% elif dataset.total_samples %}
-                                        Contains {{ dataset.total_samples }} samples across uploaded sequencing runs.
+                                        {% blocktrans with sample_count=dataset.total_samples %}Contains {{ sample_count }} samples across uploaded sequencing runs.{% endblocktrans %}
                                     {% else %}
-                                        Recently curated dataset ready for further analysis.
+                                        {% trans "Recently curated dataset ready for further analysis." %}
                                     {% endif %}
                                 </p>
                                 <div class="d-flex justify-content-between align-items-center mt-auto">
                                     <span class="badge bg-body-secondary text-body">
                                         {% if dataset.total_samples %}
-                                            {{ dataset.total_samples }} samples
+                                            {% blocktrans with sample_count=dataset.total_samples %}{{ sample_count }} samples{% endblocktrans %}
                                         {% else %}
-                                            Sample count pending
+                                            {% trans "Sample count pending" %}
                                         {% endif %}
                                     </span>
-                                    <a class="btn btn-sm btn-primary" href="{% url 'sample_group_edit' dataset.pk %}">Open</a>
+                                    <a class="btn btn-sm btn-primary" href="{% url 'sample_group_edit' dataset.pk %}">{% trans "Open" %}</a>
                                 </div>
                             </div>
                         </article>
@@ -61,15 +68,16 @@
                 {% endfor %}
             </div>
         {% else %}
+            {% url 'import_data' as import_url %}
             <div class="alert alert-info" role="alert">
-                No datasets available yet. Start by <a class="alert-link" href="{% url 'import_data' %}">importing your first dataset</a>.
+                {% blocktrans with import_url=import_url %}No datasets available yet. Start by <a class="alert-link" href="{{ import_url }}">importing your first dataset</a>.{% endblocktrans %}
             </div>
         {% endif %}
     </section>
 
     <section>
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Recent actions</h2>
+            <h2 class="h5 mb-0">{% trans "Recent actions" %}</h2>
         </div>
         {% if recent_actions %}
             <div class="row row-cols-lg-3 row-cols-md-2 row-cols-1 g-4">
@@ -94,23 +102,23 @@
                                 </div>
                                 <p class="text-muted flex-grow-1 mb-4">
                                     {% if action.sample_group %}
-                                        Linked to <strong>{{ action.sample_group.name }}</strong>.
+                                        {% blocktrans with group_name=action.sample_group.name %}Linked to <strong>{{ group_name }}</strong>.{% endblocktrans %}
                                     {% else %}
-                                        Variant record awaiting dataset assignment.
+                                        {% trans "Variant record awaiting dataset assignment." %}
                                     {% endif %}
                                 </p>
                                 <div class="d-flex justify-content-between align-items-center mt-auto">
                                     <span class="badge bg-body-secondary text-body">
                                         {% if action.qual %}
-                                            Quality {{ action.qual|floatformat:1 }}
+                                            {% blocktrans with quality=action.qual|floatformat:1 %}Quality {{ quality }}{% endblocktrans %}
                                         {% else %}
-                                            QC pending
+                                            {% trans "QC pending" %}
                                         {% endif %}
                                     </span>
                                     {% if action.sample_group %}
-                                        <a class="btn btn-sm btn-outline-success" href="{% url 'sample_group_edit' action.sample_group.pk %}">Review</a>
+                                        <a class="btn btn-sm btn-outline-success" href="{% url 'sample_group_edit' action.sample_group.pk %}">{% trans "Review" %}</a>
                                     {% else %}
-                                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'profile' %}">View profile</a>
+                                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'profile' %}">{% trans "View profile" %}</a>
                                     {% endif %}
                                 </div>
                             </div>
@@ -120,7 +128,7 @@
             </div>
         {% else %}
             <div class="alert alert-info" role="alert">
-                No recent actions recorded. Import new sequencing data to start tracking activity.
+                {% trans "No recent actions recorded. Import new sequencing data to start tracking activity." %}
             </div>
         {% endif %}
     </section>

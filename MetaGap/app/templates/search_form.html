@@ -1,6 +1,7 @@
+{% load i18n %}
 <form method="get" action="{% url 'search_results' %}" novalidate>
-	<div class="input-group mb-3">
-		{{ form.query }}
-		<button class="btn btn-primary" type="submit">Search</button>
-	</div>
+        <div class="input-group mb-3">
+                {{ form.query }}
+                <button class="btn btn-primary" type="submit">{% trans "Search" %}</button>
+        </div>
 </form>

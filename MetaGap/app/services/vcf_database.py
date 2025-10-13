@@ -638,8 +638,14 @@ class VCFDatabaseWriter:
                     continue
                 skip_set.add(text)
 
-        def _dedupe_append(collection: list[str], candidate: str) -> None:
-            if candidate and candidate not in collection and candidate not in skip_set:
+        def _dedupe_append(
+            collection: list[str], candidate: str, *, respect_skip: bool = True
+        ) -> None:
+            if not candidate:
+                return
+            if respect_skip and candidate in skip_set:
+                return
+            if candidate not in collection:
                 collection.append(candidate)
 
         def _dedupe_append_raw(collection: list[str], candidate: str) -> None:
@@ -651,23 +657,13 @@ class VCFDatabaseWriter:
 
         raw_alias_candidates: list[str] = []
         for candidate in (str(field_name), normalized_field):
-            _dedupe_append_raw(raw_alias_candidates, candidate)
+            _dedupe_append(alias_candidates, candidate, respect_skip=False)
 
         for alias in aliases:
             alias_text = str(alias)
             normalized_alias = normalize_metadata_key(alias_text)
-            _dedupe_append_raw(raw_alias_candidates, alias_text)
-            _dedupe_append_raw(raw_alias_candidates, normalized_alias)
-
-        section_alias_candidates: list[str] = []
-        bare_alias_candidates: list[str] = []
-        for candidate in raw_alias_candidates:
-            if not candidate:
-                continue
-            if candidate not in section_alias_candidates:
-                section_alias_candidates.append(candidate)
-            if candidate not in skip_set and candidate not in bare_alias_candidates:
-                bare_alias_candidates.append(candidate)
+            _dedupe_append(alias_candidates, alias_text, respect_skip=False)
+            _dedupe_append(alias_candidates, normalized_alias, respect_skip=False)
 
         candidate_order: list[str] = []
 

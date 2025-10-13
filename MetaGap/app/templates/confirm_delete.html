@@ -1,13 +1,17 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Delete Account - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Delete Account - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Delete Account' %}
+{% trans "Delete Account" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-        {% include 'partials/form.html' with form=form form_title="Are you sure you want to delete your account?" submit_button_label="Yes, Delete My Account" submit_button_class="btn btn-danger" extra_actions=form_extra_actions wrapper_class='mt-4' %}
+        {% trans "Are you sure you want to delete your account?" as form_title %}
+        {% trans "Yes, Delete My Account" as submit_label %}
+        {% include 'partials/form.html' with form=form form_title=form_title submit_button_label=submit_label submit_button_class="btn btn-danger" extra_actions=form_extra_actions wrapper_class='mt-4' %}
 </div>
 {% endblock %}

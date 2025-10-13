@@ -1,10 +1,12 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Sign Up - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Sign Up - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-        <h2>Sign Up</h2>
-        {% include 'partials/form.html' with form=form submit_button_label="Create Account" extra_actions=form_extra_actions|default:'' %}
+        <h2>{% trans "Sign Up" %}</h2>
+        {% trans "Create Account" as submit_label %}
+        {% include 'partials/form.html' with form=form submit_button_label=submit_label extra_actions=form_extra_actions|default:'' %}
 </div>
 {% endblock %}

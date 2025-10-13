@@ -1,0 +1,767 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-10-12 21:05+0000\n"
+"PO-Revision-Date: 2025-10-12 21:45+0000\n"
+"Last-Translator: AI Assistant <noreply@example.com>\n"
+"Language-Team: Russian <LL@li.org>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n%100>=11 && n%100<=14)? 2 : 3);\n"
+
+#: app/filters.py:28 app/filters.py:409
+msgid "Search"
+msgstr "Поиск"
+
+#: app/filters.py:29
+msgid "Chrom"
+msgstr "Хром"
+
+#: app/filters.py:31
+msgid "Position (min)"
+msgstr "Позиция (мин.)"
+
+#: app/filters.py:34
+msgid "Position (max)"
+msgstr "Позиция (макс.)"
+
+#: app/filters.py:37
+msgid "Position"
+msgstr "Позиция"
+
+#: app/filters.py:40 app/filters.py:255
+msgid "Reference"
+msgstr "Референс"
+
+#: app/filters.py:43 app/filters.py:260
+msgid "Alternate"
+msgstr "Альтернативный"
+
+#: app/filters.py:46
+msgid "Filter is PASS"
+msgstr "Фильтр — PASS"
+
+#: app/filters.py:49
+msgid "QUAL (min)"
+msgstr "QUAL (мин.)"
+
+#: app/filters.py:52
+msgid "QUAL (max)"
+msgstr "QUAL (макс.)"
+
+#: app/filters.py:55
+msgid "AF (min)"
+msgstr "AF (мин.)"
+
+#: app/filters.py:58
+msgid "AF (max)"
+msgstr "AF (макс.)"
+
+#: app/filters.py:61
+msgid "DP (min)"
+msgstr "DP (мин.)"
+
+#: app/filters.py:64
+msgid "DP (max)"
+msgstr "DP (макс.)"
+
+#: app/filters.py:67
+msgid "MQ (min)"
+msgstr "MQ (мин.)"
+
+#: app/filters.py:70
+msgid "MQ (max)"
+msgstr "MQ (макс.)"
+
+#: app/filters.py:73
+msgid "QD (min)"
+msgstr "QD (мин.)"
+
+#: app/filters.py:76
+msgid "QD (max)"
+msgstr "QD (макс.)"
+
+#: app/filters.py:79
+msgid "FS (min)"
+msgstr "FS (мин.)"
+
+#: app/filters.py:82
+msgid "FS (max)"
+msgstr "FS (макс.)"
+
+#: app/filters.py:85
+msgid "SOR (min)"
+msgstr "SOR (мин.)"
+
+#: app/filters.py:88
+msgid "SOR (max)"
+msgstr "SOR (макс.)"
+
+#: app/filters.py:94 app/filters.py:305 app/views.py:584
+msgid "Source lab"
+msgstr "Лаборатория-источник"
+
+#: app/filters.py:99 app/tables.py:220
+msgid "Sample tissue"
+msgstr "Ткань образца"
+
+#: app/filters.py:104 app/tables.py:254
+msgid "Variant calling tool"
+msgstr "Инструмент вызова вариантов"
+
+#: app/filters.py:109
+msgid "Variant calling version"
+msgstr "Версия вызова вариантов"
+
+#: app/filters.py:114 app/tables.py:250
+msgid "Alignment tool"
+msgstr "Инструмент выравнивания"
+
+#: app/filters.py:119
+msgid "Alignment reference genome"
+msgstr "Референсный геном для выравнивания"
+
+#: app/filters.py:124
+msgid "Alignment recalibration"
+msgstr "Перекалибровка выравнивания"
+
+#: app/filters.py:235
+msgid "Keyword"
+msgstr "Ключевое слово"
+
+#: app/filters.py:240 app/tables.py:188
+msgid "Chromosome"
+msgstr "Хромосома"
+
+#: app/filters.py:245
+msgid "Position ≥"
+msgstr "Позиция ≥"
+
+#: app/filters.py:250
+msgid "Position ≤"
+msgstr "Позиция ≤"
+
+#: app/filters.py:264
+msgid "PASS only"
+msgstr "Только PASS"
+
+#: app/filters.py:270
+msgid "Quality ≥"
+msgstr "Качество ≥"
+
+#: app/filters.py:275
+msgid "AF ≥"
+msgstr "AF ≥"
+
+#: app/filters.py:280
+msgid "AC ≥"
+msgstr "AC ≥"
+
+#: app/filters.py:285
+msgid "AN ≥"
+msgstr "AN ≥"
+
+#: app/filters.py:290
+msgid "DP ≥"
+msgstr "DP ≥"
+
+#: app/filters.py:295
+msgid "MQ ≥"
+msgstr "MQ ≥"
+
+#: app/filters.py:300 app/tables.py:206
+msgid "Sample group"
+msgstr "Группа образцов"
+
+#: app/filters.py:310 app/forms.py:263
+msgid "Tissue"
+msgstr "Ткань"
+
+#: app/filters.py:315
+msgid "Variant caller"
+msgstr "Программа вызова вариантов"
+
+#: app/forms.py:141
+msgid "Search the catalogue"
+msgstr "Поиск по каталогу"
+
+#: app/forms.py:144
+msgid "Variant ID, coordinate, or keyword"
+msgstr "Идентификатор варианта, координата или ключевое слово"
+
+#: app/forms.py:153
+msgid "Email address"
+msgstr "Адрес электронной почты"
+
+#: app/forms.py:159
+msgid "Username"
+msgstr "Имя пользователя"
+
+#: app/forms.py:164 app/forms.py:716
+msgid "Organization name"
+msgstr "Название организации"
+
+#: app/forms.py:166 app/forms.py:718
+msgid "Organization"
+msgstr "Организация"
+
+#: app/forms.py:170 app/forms.py:172
+msgid "Password"
+msgstr "Пароль"
+
+#: app/forms.py:176 app/forms.py:178
+msgid "Confirm password"
+msgstr "Подтвердите пароль"
+
+#: app/forms.py:189
+msgid "Please provide an email address so we can contact you."
+msgstr "Укажите адрес электронной почты, чтобы мы могли связаться с вами."
+
+#: app/forms.py:191
+msgid "An account with this email address already exists."
+msgstr "Учетная запись с таким адресом электронной почты уже существует."
+
+#: app/forms.py:268 app/tables.py:221
+msgid "Collection method"
+msgstr "Метод сбора"
+
+#: app/forms.py:273 app/tables.py:222
+msgid "Storage conditions"
+msgstr "Условия хранения"
+
+#: app/forms.py:278 app/tables.py:223
+msgid "Time stored"
+msgstr "Время хранения"
+
+#: app/forms.py:283
+msgid "Illumina"
+msgstr "Illumina"
+
+#: app/forms.py:284
+msgid "Oxford Nanopore"
+msgstr "Oxford Nanopore"
+
+#: app/forms.py:285
+msgid "PacBio"
+msgstr "PacBio"
+
+#: app/forms.py:288
+msgid "Ion Torrent"
+msgstr "Ion Torrent"
+
+#: app/forms.py:291
+msgid "Platform-independent"
+msgstr "Независимая от платформы"
+
+#: app/forms.py:303 app/forms.py:534 app/views.py:568
+msgid "Sequencing platform"
+msgstr "Платформа секвенирования"
+
+#: app/forms.py:448
+msgid "Total samples must be a positive integer."
+msgstr "Количество образцов должно быть положительным целым числом."
+
+#: app/forms.py:464
+msgid ""
+"Use digits and common separators (spaces, dashes, parentheses) for the phone"
+" number."
+msgstr ""
+"Используйте цифры и привычные разделители (пробелы, дефисы, скобки) для "
+"номера телефона."
+
+#: app/forms.py:468
+msgid "Enter a phone number with at least six digits."
+msgstr "Введите номер телефона минимум из шести цифр."
+
+#: app/forms.py:497
+msgid "Enter or select a value"
+msgstr "Введите или выберите значение"
+
+#: app/forms.py:502
+msgid "Start typing to select an existing value or enter a new one."
+msgstr "Начните ввод, чтобы выбрать существующее значение или создать новое."
+
+#: app/forms.py:660
+msgid ""
+"Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants "
+"you want to ingest."
+msgstr ""
+"Загрузите файл VCF (.vcf, .vcf.gz, .vcf.bgz) или BCF с вариантами для "
+"импорта."
+
+#: app/forms.py:673
+#, python-format
+msgid ""
+"Files up to %(limit)s MB are accepted. Ensure the header includes metadata "
+"sections for your sample group."
+msgstr ""
+"Принимаются файлы размером до %(limit)s МБ. Убедитесь, что заголовок "
+"содержит разделы метаданных вашей группы образцов."
+
+#: app/forms.py:682
+msgid "Select a VCF or BCF file to import."
+msgstr "Выберите файл VCF или BCF для импорта."
+
+#: app/forms.py:689
+#, python-format
+msgid "Unsupported file type. Please upload a file ending in %(extensions)s."
+msgstr ""
+"Неподдерживаемый тип файла. Загрузите файл с расширением %(extensions)s."
+
+#: app/forms.py:698
+#, python-format
+msgid "Files larger than %(limit)s MB cannot be imported."
+msgstr "Файлы размером более %(limit)s МБ не могут быть импортированы."
+
+#: app/forms.py:706
+msgid ""
+"The uploaded file does not look like a VCF/BCF file. Please check the format"
+" and try again."
+msgstr ""
+"Загруженный файл не похож на VCF/BCF. Проверьте формат и повторите попытку."
+
+#: app/forms.py:743
+msgid "Please provide a valid email address."
+msgstr "Укажите корректный адрес электронной почты."
+
+#: app/forms.py:748
+msgid "Another user is already using this email address."
+msgstr "Этот адрес электронной почты уже используется другим пользователем."
+
+#: app/forms.py:766
+msgid "I confirm that I want to delete my account."
+msgstr "Я подтверждаю, что хочу удалить свою учетную запись."
+
+#: app/services/vcf_importer.py:200
+msgid "The uploaded file is not valid."
+msgstr "Загруженный файл недействителен."
+
+#: app/tables.py:189
+msgid "Position (bp)"
+msgstr "Позиция (п.н.)"
+
+#: app/tables.py:190
+msgid "Reference allele"
+msgstr "Референсный аллель"
+
+#: app/tables.py:191
+msgid "Alternate allele"
+msgstr "Альтернативный аллель"
+
+#: app/tables.py:192
+msgid "QUAL"
+msgstr "QUAL"
+
+#: app/tables.py:193
+msgid "Filter status"
+msgstr "Состояние фильтра"
+
+#: app/tables.py:194
+msgid "Allele frequency (AF)"
+msgstr "Частота аллеля (AF)"
+
+#: app/tables.py:195
+msgid "Allele count (AC)"
+msgstr "Число аллелей (AC)"
+
+#: app/tables.py:196
+msgid "Alleles analysed (AN)"
+msgstr "Проанализированные аллели (AN)"
+
+#: app/tables.py:197
+msgid "Read depth (DP)"
+msgstr "Глубина чтения (DP)"
+
+#: app/tables.py:198
+msgid "Mapping quality (MQ)"
+msgstr "Качество выравнивания (MQ)"
+
+#: app/tables.py:199
+msgid "Quality by depth (QD)"
+msgstr "Качество на глубину (QD)"
+
+#: app/tables.py:200
+msgid "Fisher strand (FS)"
+msgstr "Fisher strand (FS)"
+
+#: app/tables.py:201
+msgid "Strand odds ratio (SOR)"
+msgstr "Отношение шансов по цепям (SOR)"
+
+#: app/tables.py:202
+msgid "Samples counted (NS)"
+msgstr "Подсчитанные образцы (NS)"
+
+#: app/tables.py:203
+msgid "Strand bias (SB)"
+msgstr "Смещение по цепям (SB)"
+
+#: app/tables.py:204
+msgid "Variant ID"
+msgstr "Идентификатор варианта"
+
+#: app/tables.py:205
+msgid "Variant comments"
+msgstr "Комментарии к варианту"
+
+#: app/tables.py:207
+msgid "Source laboratory"
+msgstr "Лаборатория-источник"
+
+#: app/tables.py:208 app/views.py:583
+msgid "DOI"
+msgstr "DOI"
+
+#: app/tables.py:209 app/views.py:586
+msgid "Contact email"
+msgstr "Контактный e-mail"
+
+#: app/tables.py:210 app/views.py:587
+msgid "Contact phone"
+msgstr "Контактный телефон"
+
+#: app/tables.py:211 app/views.py:585
+msgid "Total samples"
+msgstr "Всего образцов"
+
+#: app/tables.py:212
+msgid "Inclusion criteria"
+msgstr "Критерии включения"
+
+#: app/tables.py:213
+msgid "Exclusion criteria"
+msgstr "Критерии исключения"
+
+#: app/tables.py:214
+msgid "Group comments"
+msgstr "Комментарии группы"
+
+#: app/tables.py:215
+msgid "Reference build"
+msgstr "Референсная сборка"
+
+#: app/tables.py:216
+msgid "Reference build version"
+msgstr "Версия референсной сборки"
+
+#: app/tables.py:217
+msgid "Genome size"
+msgstr "Размер генома"
+
+#: app/tables.py:218
+msgid "Genome ploidy"
+msgstr "Плоидность генома"
+
+#: app/tables.py:219
+msgid "Genome GC content"
+msgstr "GC-содержание генома"
+
+#: app/tables.py:224 app/views.py:626
+msgid "Material type"
+msgstr "Тип материала"
+
+#: app/tables.py:225
+msgid "Integrity number"
+msgstr "Индекс целостности"
+
+#: app/tables.py:226
+msgid "Library kit"
+msgstr "Набор для библиотеки"
+
+#: app/tables.py:227
+msgid "Fragmentation"
+msgstr "Фрагментация"
+
+#: app/tables.py:228
+msgid "Adapter ligation efficiency"
+msgstr "Эффективность лигирования адаптеров"
+
+#: app/tables.py:229
+msgid "PCR cycles"
+msgstr "Циклы ПЦР"
+
+#: app/tables.py:230
+msgid "Illumina instrument"
+msgstr "Прибор Illumina"
+
+#: app/tables.py:231
+msgid "Illumina flow cell"
+msgstr "Flowcell Illumina"
+
+#: app/tables.py:232
+msgid "Illumina channel method"
+msgstr "Метод каналов Illumina"
+
+#: app/tables.py:233
+msgid "Illumina cluster density"
+msgstr "Плотность кластеров Illumina"
+
+#: app/tables.py:234
+msgid "Illumina QC software"
+msgstr "ПО контроля качества Illumina"
+
+#: app/tables.py:235
+msgid "ONT instrument"
+msgstr "Прибор ONT"
+
+#: app/tables.py:236
+msgid "ONT flow cell"
+msgstr "Flowcell ONT"
+
+#: app/tables.py:237
+msgid "ONT flow cell version"
+msgstr "Версия flowcell ONT"
+
+#: app/tables.py:238
+msgid "ONT pore type"
+msgstr "Тип пор ONT"
+
+#: app/tables.py:239
+msgid "ONT bias voltage"
+msgstr "Напряжение смещения ONT"
+
+#: app/tables.py:240
+msgid "PacBio instrument"
+msgstr "Прибор PacBio"
+
+#: app/tables.py:241
+msgid "PacBio flow cell"
+msgstr "Flowcell PacBio"
+
+#: app/tables.py:242
+msgid "PacBio SMRT cell type"
+msgstr "Тип SMRT-ячейки PacBio"
+
+#: app/tables.py:243
+msgid "PacBio ZMW density"
+msgstr "Плотность ZMW PacBio"
+
+#: app/tables.py:244
+msgid "Ion Torrent instrument"
+msgstr "Прибор Ion Torrent"
+
+#: app/tables.py:245
+msgid "Ion Torrent flow cell"
+msgstr "Flowcell Ion Torrent"
+
+#: app/tables.py:246
+msgid "Ion Torrent chip type"
+msgstr "Тип чипа Ion Torrent"
+
+#: app/tables.py:247
+msgid "Ion Torrent pH calibration"
+msgstr "Калибровка pH Ion Torrent"
+
+#: app/tables.py:248
+msgid "Ion Torrent flow order"
+msgstr "Порядок потоков Ion Torrent"
+
+#: app/tables.py:249
+msgid "Ion Sphere metrics"
+msgstr "Показатели Ion Sphere"
+
+#: app/tables.py:251
+msgid "Alignment parameters"
+msgstr "Параметры выравнивания"
+
+#: app/tables.py:252
+msgid "Reference genome version"
+msgstr "Версия референсного генома"
+
+#: app/tables.py:253
+msgid "Recalibration settings"
+msgstr "Параметры перекалибровки"
+
+#: app/tables.py:255
+msgid "Variant caller version"
+msgstr "Версия программы вызова вариантов"
+
+#: app/tables.py:256
+msgid "Variant filtering thresholds"
+msgstr "Пороговые значения фильтрации вариантов"
+
+#: app/tables.py:257
+msgid "Duplicate handling"
+msgstr "Обработка дубликатов"
+
+#: app/tables.py:258
+msgid "Variant caller MQ"
+msgstr "MQ программы вызова вариантов"
+
+#: app/tables.py:259
+msgid "Post-processing normalization"
+msgstr "Нормализация после обработки"
+
+#: app/tables.py:260
+msgid "Post-processing harmonization"
+msgstr "Гармонизация после обработки"
+
+#: app/tables.py:261
+msgid "Input A260/A280"
+msgstr "Исходное A260/A280"
+
+#: app/tables.py:262
+msgid "Input A260/A230"
+msgstr "Исходное A260/A230"
+
+#: app/tables.py:263 app/views.py:653
+msgid "DNA concentration"
+msgstr "Концентрация ДНК"
+
+#: app/tables.py:264 app/views.py:658
+msgid "RNA concentration"
+msgstr "Концентрация РНК"
+
+#: app/tables.py:265
+msgid "Input quality notes"
+msgstr "Примечания о качестве исходного материала"
+
+#: app/views.py:242
+msgid "Sample group not found."
+msgstr "Группа образцов не найдена."
+
+#: app/views.py:376
+msgid "Your profile has been updated."
+msgstr "Ваш профиль обновлён."
+
+#: app/views.py:389
+msgid "Your account has been deleted."
+msgstr "Ваша учетная запись удалена."
+
+#: app/views.py:400 app/views.py:401 app/views.py:455 app/views.py:456
+msgid "Cancel"
+msgstr "Отмена"
+
+#: app/views.py:443
+msgid "Sample group metadata updated successfully."
+msgstr "Метаданные группы образцов успешно обновлены."
+
+#: app/views.py:489
+#, python-format
+msgid "Deleted %(group)s successfully."
+msgstr "Группа %(group)s успешно удалена."
+
+#: app/views.py:580
+msgid "Summary"
+msgstr "Сводка"
+
+#: app/views.py:582
+msgid "Name"
+msgstr "Название"
+
+#: app/views.py:589
+msgid "Created by"
+msgstr "Создатель"
+
+#: app/views.py:597
+msgid "Criteria"
+msgstr "Критерии"
+
+#: app/views.py:599
+msgid "Inclusion"
+msgstr "Включение"
+
+#: app/views.py:600
+msgid "Exclusion"
+msgstr "Исключение"
+
+#: app/views.py:601
+msgid "Comments"
+msgstr "Комментарии"
+
+#: app/views.py:605
+msgid "Sample & Material"
+msgstr "Образец и материал"
+
+#: app/views.py:608
+msgid "Reference genome build"
+msgstr "Сборка референсного генома"
+
+#: app/views.py:617
+msgid "Genome complexity"
+msgstr "Сложность генома"
+
+#: app/views.py:625
+msgid "Sample origin"
+msgstr "Источник образца"
+
+#: app/views.py:627
+msgid "Library construction"
+msgstr "Подготовка библиотеки"
+
+#: app/views.py:631
+msgid "Sequencing & Bioinformatics"
+msgstr "Секвенирование и биоинформатика"
+
+#: app/views.py:634
+msgid "Alignment"
+msgstr "Выравнивание"
+
+#: app/views.py:635
+msgid "Variant calling"
+msgstr "Вызов вариантов"
+
+#: app/views.py:636
+msgid "Post-processing"
+msgstr "Постобработка"
+
+#: app/views.py:640
+msgid "Input Quality"
+msgstr "Качество исходного материала"
+
+#: app/views.py:643
+msgid "A260/A280"
+msgstr "A260/A280"
+
+#: app/views.py:648
+msgid "A260/A230"
+msgstr "A260/A230"
+
+#: app/views.py:663
+msgid "Notes"
+msgstr "Заметки"
+
+#: app/views.py:675
+msgid "Custom metadata"
+msgstr "Пользовательские метаданные"
+
+#: app/views.py:728 app/views.py:788
+msgid ""
+"We could not import the file because some required metadata was missing or "
+"invalid."
+msgstr ""
+"Не удалось импортировать файл, потому что часть обязательных метаданных "
+"отсутствует или недействительна."
+
+#: app/views.py:742
+msgid ""
+"An unexpected error occurred while importing the file. Please review the "
+"file and try again."
+msgstr ""
+"При импорте файла произошла непредвиденная ошибка. Проверьте файл и "
+"повторите попытку."
+
+#: app/views.py:748
+msgid ""
+"Something went wrong while processing the upload. Check the error above for "
+"details."
+msgstr ""
+"При обработке загрузки что-то пошло не так. Подробности см. в сообщении об "
+"ошибке выше."
+
+#: app/views.py:764
+#, python-format
+msgid "Imported %(group)s successfully."
+msgstr "Группа %(group)s успешно импортирована."
+
+#: app/views.py:779
+msgid "An error occurred while importing the provided file."
+msgstr "Произошла ошибка при импорте предоставленного файла."

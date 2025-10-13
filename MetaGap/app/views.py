@@ -38,6 +38,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -238,7 +239,7 @@ def export_sample_group_variants(request, pk: int) -> HttpResponse:
     organization_profile = getattr(request.user, "organization_profile", None)
 
     if organization_profile is None or sample_group.created_by != organization_profile:
-        raise Http404("Sample group not found.")
+        raise Http404(_("Sample group not found."))
 
     export_format = request.GET.get("format", "csv").lower()
     if export_format == "tsv":
@@ -372,7 +373,7 @@ class EditProfileView(LoginRequiredMixin, FormView):
 
     def form_valid(self, form):
         form.save()
-        messages.success(self.request, "Your profile has been updated.")
+        messages.success(self.request, _("Your profile has been updated."))
         return super().form_valid(form)
 
 
@@ -385,7 +386,7 @@ class DeleteAccountView(LoginRequiredMixin, FormView):
         user = self.request.user
         logout(self.request)
         user.delete()
-        messages.success(self.request, "Your account has been deleted.")
+        messages.success(self.request, _("Your account has been deleted."))
         return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
@@ -396,8 +397,8 @@ class DeleteAccountView(LoginRequiredMixin, FormView):
                 {
                     "url": reverse_lazy("profile"),
                     "class": "btn btn-secondary",
-                    "label": "Cancel",
-                    "text": "Cancel",
+                    "label": _("Cancel"),
+                    "text": _("Cancel"),
                 }
             ],
         )
@@ -438,7 +439,9 @@ class SampleGroupUpdateView(
         return kwargs
 
     def form_valid(self, form):
-        messages.success(self.request, "Sample group metadata updated successfully.")
+        messages.success(
+            self.request, _("Sample group metadata updated successfully.")
+        )
         return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
@@ -449,8 +452,8 @@ class SampleGroupUpdateView(
                 {
                     "url": reverse_lazy("profile"),
                     "class": "btn btn-outline-secondary",
-                    "label": "Cancel",
-                    "text": "Cancel",
+                    "label": _("Cancel"),
+                    "text": _("Cancel"),
                 }
             ],
         )
@@ -481,7 +484,10 @@ class SampleGroupDeleteView(
         self.object = self.get_object()
         group_name = self.object.name
         response = super().delete(request, *args, **kwargs)
-        messages.success(request, f"Deleted {group_name} successfully.")
+        messages.success(
+            request,
+            _("Deleted %(group)s successfully.") % {"group": group_name},
+        )
         return response
 
 
@@ -559,27 +565,28 @@ class SampleGroupDetailView(
             return section
 
         platform_label, platform_instance = sample_group.get_active_sequencing_platform()
+        default_platform_label = _("Sequencing platform")
         if platform_instance is None:
-            sequencing_platform_row = ("Sequencing platform", None, None)
+            sequencing_platform_row = (default_platform_label, None, None)
         else:
             sequencing_platform_row = (
-                platform_label or "Sequencing platform",
+                platform_label or default_platform_label,
                 str(platform_instance),
                 None,
             )
 
         metadata_sections = [
             build_section(
-                "Summary",
+                _("Summary"),
                 [
-                    ("Name", sample_group.name, None),
-                    ("DOI", sample_group.doi, None),
-                    ("Source lab", sample_group.source_lab, None),
-                    ("Total samples", sample_group.total_samples, None),
-                    ("Contact email", sample_group.contact_email, "email"),
-                    ("Contact phone", sample_group.contact_phone, None),
+                    (_("Name"), sample_group.name, None),
+                    (_("DOI"), sample_group.doi, None),
+                    (_("Source lab"), sample_group.source_lab, None),
+                    (_("Total samples"), sample_group.total_samples, None),
+                    (_("Contact email"), sample_group.contact_email, "email"),
+                    (_("Contact phone"), sample_group.contact_phone, None),
                     (
-                        "Created by",
+                        _("Created by"),
                         getattr(sample_group.created_by, "organization_name", None)
                         or sample_group.created_by,
                         None,
@@ -587,18 +594,18 @@ class SampleGroupDetailView(
                 ],
             ),
             build_section(
-                "Criteria",
+                _("Criteria"),
                 [
-                    ("Inclusion", sample_group.inclusion_criteria, None),
-                    ("Exclusion", sample_group.exclusion_criteria, None),
-                    ("Comments", sample_group.comments, None),
+                    (_("Inclusion"), sample_group.inclusion_criteria, None),
+                    (_("Exclusion"), sample_group.exclusion_criteria, None),
+                    (_("Comments"), sample_group.comments, None),
                 ],
             ),
             build_section(
-                "Sample & Material",
+                _("Sample & Material"),
                 [
                     (
-                        "Reference genome build",
+                        _("Reference genome build"),
                         getattr(
                             sample_group.reference_genome_build,
                             "build_name",
@@ -607,7 +614,7 @@ class SampleGroupDetailView(
                         None,
                     ),
                     (
-                        "Genome complexity",
+                        _("Genome complexity"),
                         getattr(
                             sample_group.genome_complexity,
                             "size",
@@ -615,36 +622,48 @@ class SampleGroupDetailView(
                         ),
                         None,
                     ),
-                    ("Sample origin", sample_group.sample_origin, None),
-                    ("Material type", sample_group.material_type, None),
-                    ("Library construction", sample_group.library_construction, None),
+                    (_("Sample origin"), sample_group.sample_origin, None),
+                    (_("Material type"), sample_group.material_type, None),
+                    (_("Library construction"), sample_group.library_construction, None),
                 ],
             ),
             build_section(
-                "Sequencing & Bioinformatics",
+                _("Sequencing & Bioinformatics"),
                 [
                     sequencing_platform_row,
-                    ("Alignment", sample_group.bioinfo_alignment, None),
-                    ("Variant calling", sample_group.bioinfo_variant_calling, None),
-                    ("Post-processing", sample_group.bioinfo_post_proc, None),
+                    (_("Alignment"), sample_group.bioinfo_alignment, None),
+                    (_("Variant calling"), sample_group.bioinfo_variant_calling, None),
+                    (_("Post-processing"), sample_group.bioinfo_post_proc, None),
                 ],
             ),
             build_section(
-                "Input Quality",
+                _("Input Quality"),
                 [
-                    ("A260/A280", getattr(sample_group.input_quality, "a260_a280", None), None),
-                    ("A260/A230", getattr(sample_group.input_quality, "a260_a230", None), None),
                     (
-                        "DNA concentration",
+                        _("A260/A280"),
+                        getattr(sample_group.input_quality, "a260_a280", None),
+                        None,
+                    ),
+                    (
+                        _("A260/A230"),
+                        getattr(sample_group.input_quality, "a260_a230", None),
+                        None,
+                    ),
+                    (
+                        _("DNA concentration"),
                         getattr(sample_group.input_quality, "dna_concentration", None),
                         None,
                     ),
                     (
-                        "RNA concentration",
+                        _("RNA concentration"),
                         getattr(sample_group.input_quality, "rna_concentration", None),
                         None,
                     ),
-                    ("Notes", getattr(sample_group.input_quality, "notes", None), None),
+                    (
+                        _("Notes"),
+                        getattr(sample_group.input_quality, "notes", None),
+                        None,
+                    ),
                 ],
             ),
         ]
@@ -653,7 +672,7 @@ class SampleGroupDetailView(
         if isinstance(additional_metadata, dict) and additional_metadata:
             metadata_sections.append(
                 build_section(
-                    "Custom metadata",
+                    _("Custom metadata"),
                     [
                         (key, value, None)
                         for key, value in additional_metadata.items()
@@ -705,7 +724,9 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             form.add_error("data_file", exc)
             messages.error(
                 self.request,
-                "We could not import the file because some required metadata was missing or invalid.",
+                _(
+                    "We could not import the file because some required metadata was missing or invalid."
+                ),
             )
             return self.form_invalid(form)
         except Exception as exc:  # pragma: no cover - defensive feedback channel
@@ -717,11 +738,15 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
 
             form.add_error(
                 "data_file",
-                "An unexpected error occurred while importing the file. Please review the file and try again.",
+                _(
+                    "An unexpected error occurred while importing the file. Please review the file and try again."
+                ),
             )
             messages.error(
                 self.request,
-                "Something went wrong while processing the upload. Check the error above for details.",
+                _(
+                    "Something went wrong while processing the upload. Check the error above for details."
+                ),
             )
             return self.form_invalid(form)
         finally:
@@ -736,7 +761,8 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
 
         messages.success(
             self.request,
-            f"Imported {created_group.name} successfully.",
+            _("Imported %(group)s successfully.")
+            % {"group": created_group.name},
         )
         for warning in importer.warnings:
             messages.warning(self.request, warning)
@@ -750,13 +776,15 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
     ) -> None:
         message = getattr(exc, "user_message", str(exc)).strip()
         if not message:
-            message = "An error occurred while importing the provided file."
+            message = _("An error occurred while importing the provided file.")
         form.add_error("data_file", message)
         for warning in getattr(exc, "warnings", []) or []:
             messages.warning(self.request, warning)
         messages.error(self.request, message)
-        if message == GENERIC_FALLBACK_VALIDATION_MESSAGE:
+        if str(message) == GENERIC_FALLBACK_VALIDATION_MESSAGE:
             messages.error(
                 self.request,
-                "We could not import the file because some required metadata was missing or invalid.",
+                _(
+                    "We could not import the file because some required metadata was missing or invalid."
+                ),
             )

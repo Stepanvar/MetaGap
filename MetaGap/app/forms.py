@@ -13,6 +13,8 @@ from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html, format_html_join
+from django.utils.text import format_lazy
+from django.utils.translation import gettext_lazy as _
 
 from django.conf import settings
 
@@ -136,10 +138,10 @@ class SearchForm(BootstrapFormMixin, forms.Form):
 
     query = forms.CharField(
         required=False,
-        label="Search the catalogue",
+        label=_("Search the catalogue"),
         widget=forms.TextInput(
             attrs={
-                "placeholder": "Variant ID, coordinate, or keyword",
+                "placeholder": _("Variant ID, coordinate, or keyword"),
             }
         ),
     )
@@ -148,32 +150,32 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(
-            attrs={"class": "form-control", "placeholder": "Email Address"}
+            attrs={"class": "form-control", "placeholder": _("Email address")}
         ),
     )
     username = forms.CharField(
         required=True,
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Username"}
+            attrs={"class": "form-control", "placeholder": _("Username")}
         ),
     )
     organization_name = forms.CharField(
         required=False,
-        label="Organization Name",
+        label=_("Organization name"),
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Organization"}
+            attrs={"class": "form-control", "placeholder": _("Organization")}
         ),
     )
     password1 = forms.CharField(
-        label="Password",
+        label=_("Password"),
         widget=forms.PasswordInput(
-            attrs={"class": "form-control", "placeholder": "Password"}
+            attrs={"class": "form-control", "placeholder": _("Password")}
         ),
     )
     password2 = forms.CharField(
-        label="Confirm Password",
+        label=_("Confirm password"),
         widget=forms.PasswordInput(
-            attrs={"class": "form-control", "placeholder": "Confirm Password"}
+            attrs={"class": "form-control", "placeholder": _("Confirm password")}
         ),
     )
 
@@ -184,9 +186,9 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if not email:
-            raise ValidationError("Please provide an email address so we can contact you.")
+            raise ValidationError(_("Please provide an email address so we can contact you."))
         if User.objects.filter(email__iexact=email).exists():
-            raise ValidationError("An account with this email address already exists.")
+            raise ValidationError(_("An account with this email address already exists."))
         return email
 
     def save(self, commit=True):
@@ -258,35 +260,35 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
 
     sample_origin_tissue = forms.CharField(
         required=False,
-        label="Tissue",
+        label=_("Tissue"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     sample_origin_collection_method = forms.CharField(
         required=False,
-        label="Collection method",
+        label=_("Collection method"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     sample_origin_storage_conditions = forms.CharField(
         required=False,
-        label="Storage conditions",
+        label=_("Storage conditions"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     sample_origin_time_stored = forms.CharField(
         required=False,
-        label="Time stored",
+        label=_("Time stored"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
     SEQUENCING_PLATFORM_CHOICES = (
-        ("illumina_seq", "Illumina"),
-        ("ont_seq", "Oxford Nanopore"),
-        ("pacbio_seq", "PacBio"),
+        ("illumina_seq", _("Illumina")),
+        ("ont_seq", _("Oxford Nanopore")),
+        ("pacbio_seq", _("PacBio")),
     )
     PLATFORM_RELATION_CHOICES = SEQUENCING_PLATFORM_CHOICES + (
-        ("iontorrent_seq", "Ion Torrent"),
+        ("iontorrent_seq", _("Ion Torrent")),
     )
     PLATFORM_INDEPENDENT_VALUE = "platform_independent"
-    PLATFORM_CHOICES = ((PLATFORM_INDEPENDENT_VALUE, "Platform-independent"),) + (
+    PLATFORM_CHOICES = ((PLATFORM_INDEPENDENT_VALUE, _("Platform-independent")),) + (
         PLATFORM_RELATION_CHOICES
     )
     PLATFORM_SELECTOR_ATTR = "data-platform-selector"
@@ -298,7 +300,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
     sequencing_platform = forms.ChoiceField(
         choices=SEQUENCING_PLATFORM_CHOICES,
         required=False,
-        label="Sequencing platform",
+        label=_("Sequencing platform"),
     )
 
     def __init__(self, *args, **kwargs):
@@ -443,7 +445,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         if total_samples is None:
             return total_samples
         if total_samples <= 0:
-            raise ValidationError("Total samples must be a positive integer.")
+            raise ValidationError(_("Total samples must be a positive integer."))
         return total_samples
 
     def clean_contact_phone(self):
@@ -458,10 +460,12 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         allowed_chars = set("0123456789+-.() extEXT ")
         if any(char not in allowed_chars for char in cleaned):
             raise ValidationError(
-                "Use digits and common separators (spaces, dashes, parentheses) for the phone number."
+                _(
+                    "Use digits and common separators (spaces, dashes, parentheses) for the phone number."
+                )
             )
         if sum(char.isdigit() for char in cleaned) < 6:
-            raise ValidationError("Enter a phone number with at least six digits.")
+            raise ValidationError(_("Enter a phone number with at least six digits."))
         return cleaned
 
     CREATABLE_METADATA_FIELDS = {
@@ -488,12 +492,19 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             datalist_options = self._build_metadata_datalist(field_name, queryset, lookup_field)
             widget = self.DatalistTextInput(
                 datalist=datalist_options,
-                attrs={"class": self.bootstrap_input_class, "placeholder": "Enter or select a value"},
+                attrs={
+                    "class": self.bootstrap_input_class,
+                    "placeholder": _("Enter or select a value"),
+                },
             )
 
-            help_text = original_field.help_text or ""
-            helper_suffix = "Start typing to select an existing value or enter a new one."
-            help_text = f"{help_text} {helper_suffix}".strip()
+            helper_suffix = _(
+                "Start typing to select an existing value or enter a new one."
+            )
+            if original_field.help_text:
+                help_text = format_lazy("{} {}", original_field.help_text, helper_suffix)
+            else:
+                help_text = helper_suffix
 
             self.fields[field_name] = self.CreatableModelChoiceField(
                 queryset=queryset,
@@ -520,7 +531,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             field = forms.ChoiceField(
                 choices=choices,
                 required=False,
-                label="Sequencing platform",
+                label=_("Sequencing platform"),
             )
             self.fields["sequencing_platform"] = field
         else:
@@ -645,7 +656,7 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
     data_file = forms.FileField(
         required=True,
         widget=forms.ClearableFileInput(attrs={"class": "form-control"}),
-        help_text=(
+        help_text=_(
             "Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants you want to ingest."
         ),
     )
@@ -658,23 +669,25 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
         configured_limit = getattr(settings, "METAGAP_MAX_UPLOAD_SIZE_MB", None)
         self.max_upload_size_mb = configured_limit or self.DEFAULT_MAX_SIZE_MB
         self.max_upload_size_bytes = int(self.max_upload_size_mb * 1024 * 1024)
-        help_text = (
-            "Files up to %(limit)s&nbsp;MB are accepted. Ensure the header includes metadata"
-            " sections for your sample group." % {"limit": self.max_upload_size_mb}
+        help_text = _(
+            "Files up to %(limit)s MB are accepted. Ensure the header includes metadata sections for your sample group."
+        ) % {"limit": self.max_upload_size_mb}
+        self.fields["data_file"].help_text = format_html(
+            "{}<br>{}", self.fields["data_file"].help_text, help_text
         )
-        self.fields["data_file"].help_text = format_html("{}<br>{}", self.fields["data_file"].help_text, help_text)
 
     def clean_data_file(self):
         uploaded = self.cleaned_data.get("data_file")
         if not uploaded:
-            raise ValidationError("Select a VCF or BCF file to import.")
+            raise ValidationError(_("Select a VCF or BCF file to import."))
 
         name = uploaded.name or ""
         normalized_name = name.lower()
         is_supported = any(normalized_name.endswith(ext) for ext in self.SUPPORTED_EXTENSIONS)
         if not is_supported:
             raise ValidationError(
-                "Unsupported file type. Please upload a file ending in %s." % ", ".join(sorted(self.SUPPORTED_EXTENSIONS))
+                _("Unsupported file type. Please upload a file ending in %(extensions)s.")
+                % {"extensions": ", ".join(sorted(self.SUPPORTED_EXTENSIONS))}
             )
 
         file_size = getattr(uploaded, "size", None)
@@ -682,13 +695,16 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
             file_size = uploaded.file.size if hasattr(uploaded, "file") else None
         if file_size is not None and file_size > self.max_upload_size_bytes:
             raise ValidationError(
-                f"Files larger than {self.max_upload_size_mb} MB cannot be imported."
+                _("Files larger than %(limit)s MB cannot be imported.")
+                % {"limit": self.max_upload_size_mb}
             )
 
         content_type = getattr(uploaded, "content_type", "")
         if content_type and content_type not in self.SUPPORTED_CONTENT_TYPES:
             raise ValidationError(
-                "The uploaded file does not look like a VCF/BCF file. Please check the format and try again."
+                _(
+                    "The uploaded file does not look like a VCF/BCF file. Please check the format and try again."
+                )
             )
 
         return uploaded
@@ -697,9 +713,9 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
     password = None  # Exclude password field
     organization_name = forms.CharField(
         required=False,
-        label="Organization Name",
+        label=_("Organization name"),
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Organization"}
+            attrs={"class": "form-control", "placeholder": _("Organization")}
         ),
     )
 
@@ -724,12 +740,12 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if not email:
-            raise ValidationError("Please provide a valid email address.")
+            raise ValidationError(_("Please provide a valid email address."))
         queryset = User.objects.filter(email__iexact=email)
         if self.instance.pk:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
-            raise ValidationError("Another user is already using this email address.")
+            raise ValidationError(_("Another user is already using this email address."))
         return email
 
     def save(self, commit=True):
@@ -747,6 +763,6 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
 class DeleteAccountForm(BootstrapFormMixin, forms.Form):
     confirm = forms.BooleanField(
         required=True,
-        label="I confirm that I want to delete my account.",
+        label=_("I confirm that I want to delete my account."),
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )

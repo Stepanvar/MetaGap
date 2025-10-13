@@ -19,108 +19,109 @@ from django.db.models import (
 )
 from django.db.models.functions import Cast, NullIf
 from django.db.models.fields.json import KeyTextTransform
+from django.utils.translation import gettext_lazy as _
 
 from .models import AlleleFrequency, SampleGroup
 
 
 class AlleleFrequencyFilter(django_filters.FilterSet):
-    query = django_filters.CharFilter(method="universal_search", label="Search")
-    chrom = django_filters.CharFilter(method="filter_chrom", label="Chrom")
+    query = django_filters.CharFilter(method="universal_search", label=_("Search"))
+    chrom = django_filters.CharFilter(method="filter_chrom", label=_("Chrom"))
     pos_min = django_filters.NumberFilter(
-        field_name="pos", lookup_expr="gte", label="Position (min)"
+        field_name="pos", lookup_expr="gte", label=_("Position (min)")
     )
     pos_max = django_filters.NumberFilter(
-        field_name="pos", lookup_expr="lte", label="Position (max)"
+        field_name="pos", lookup_expr="lte", label=_("Position (max)")
     )
     pos = django_filters.NumberFilter(
-        field_name="pos", lookup_expr="exact", label="Position"
+        field_name="pos", lookup_expr="exact", label=_("Position")
     )
     ref = django_filters.CharFilter(
-        field_name="ref", lookup_expr="iexact", label="Reference"
+        field_name="ref", lookup_expr="iexact", label=_("Reference")
     )
     alt = django_filters.CharFilter(
-        field_name="alt", lookup_expr="iexact", label="Alternate"
+        field_name="alt", lookup_expr="iexact", label=_("Alternate")
     )
     filter_pass = django_filters.BooleanFilter(
-        method="filter_pass_status", label="Filter is PASS"
+        method="filter_pass_status", label=_("Filter is PASS")
     )
     qual_min = django_filters.NumberFilter(
-        field_name="qual", lookup_expr="gte", label="QUAL (min)"
+        field_name="qual", lookup_expr="gte", label=_("QUAL (min)")
     )
     qual_max = django_filters.NumberFilter(
-        field_name="qual", lookup_expr="lte", label="QUAL (max)"
+        field_name="qual", lookup_expr="lte", label=_("QUAL (max)")
     )
     af_min = django_filters.NumberFilter(
-        method="filter_info_numeric", label="AF (min)"
+        method="filter_info_numeric", label=_("AF (min)")
     )
     af_max = django_filters.NumberFilter(
-        method="filter_info_numeric", label="AF (max)"
+        method="filter_info_numeric", label=_("AF (max)")
     )
     dp_min = django_filters.NumberFilter(
-        method="filter_info_numeric", label="DP (min)"
+        method="filter_info_numeric", label=_("DP (min)")
     )
     dp_max = django_filters.NumberFilter(
-        method="filter_info_numeric", label="DP (max)"
+        method="filter_info_numeric", label=_("DP (max)")
     )
     mq_min = django_filters.NumberFilter(
-        method="filter_info_numeric", label="MQ (min)"
+        method="filter_info_numeric", label=_("MQ (min)")
     )
     mq_max = django_filters.NumberFilter(
-        method="filter_info_numeric", label="MQ (max)"
+        method="filter_info_numeric", label=_("MQ (max)")
     )
     qd_min = django_filters.NumberFilter(
-        method="filter_info_numeric", label="QD (min)"
+        method="filter_info_numeric", label=_("QD (min)")
     )
     qd_max = django_filters.NumberFilter(
-        method="filter_info_numeric", label="QD (max)"
+        method="filter_info_numeric", label=_("QD (max)")
     )
     fs_min = django_filters.NumberFilter(
-        method="filter_info_numeric", label="FS (min)"
+        method="filter_info_numeric", label=_("FS (min)")
     )
     fs_max = django_filters.NumberFilter(
-        method="filter_info_numeric", label="FS (max)"
+        method="filter_info_numeric", label=_("FS (max)")
     )
     sor_min = django_filters.NumberFilter(
-        method="filter_info_numeric", label="SOR (min)"
+        method="filter_info_numeric", label=_("SOR (min)")
     )
     sor_max = django_filters.NumberFilter(
-        method="filter_info_numeric", label="SOR (max)"
+        method="filter_info_numeric", label=_("SOR (max)")
     )
 
     sample_group_source_lab = django_filters.CharFilter(
         field_name="sample_group__source_lab",
         lookup_expr="icontains",
-        label="Source lab",
+        label=_("Source lab"),
     )
     sample_group_sample_origin_tissue = django_filters.CharFilter(
         field_name="sample_group__sample_origin__tissue",
         lookup_expr="icontains",
-        label="Sample tissue",
+        label=_("Sample tissue"),
     )
     sample_group_bioinfo_variant_calling_tool = django_filters.CharFilter(
         field_name="sample_group__bioinfo_variant_calling__tool",
         lookup_expr="icontains",
-        label="Variant calling tool",
+        label=_("Variant calling tool"),
     )
     sample_group_bioinfo_variant_calling_version = django_filters.CharFilter(
         field_name="sample_group__bioinfo_variant_calling__version",
         lookup_expr="icontains",
-        label="Variant calling version",
+        label=_("Variant calling version"),
     )
     sample_group_bioinfo_alignment_tool = django_filters.CharFilter(
         field_name="sample_group__bioinfo_alignment__tool",
         lookup_expr="icontains",
-        label="Alignment tool",
+        label=_("Alignment tool"),
     )
     sample_group_bioinfo_alignment_ref_genome = django_filters.CharFilter(
         field_name="sample_group__bioinfo_alignment__ref_genome_version",
         lookup_expr="icontains",
-        label="Alignment reference genome",
+        label=_("Alignment reference genome"),
     )
     sample_group_bioinfo_alignment_recalibration = django_filters.CharFilter(
         field_name="sample_group__bioinfo_alignment__recalibration_settings",
         lookup_expr="icontains",
-        label="Alignment recalibration",
+        label=_("Alignment recalibration"),
     )
 
     field_order = [
@@ -231,87 +232,87 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
 
     query = django_filters.CharFilter(
         method="filter_query",
-        label="Keyword",
+        label=_("Keyword"),
     )
     chrom = django_filters.CharFilter(
         field_name="chrom",
         lookup_expr="icontains",
-        label="Chromosome",
+        label=_("Chromosome"),
     )
     pos_min = django_filters.NumberFilter(
         field_name="pos",
         lookup_expr="gte",
-        label="Position ≥",
+        label=_("Position ≥"),
     )
     pos_max = django_filters.NumberFilter(
         field_name="pos",
         lookup_expr="lte",
-        label="Position ≤",
+        label=_("Position ≤"),
     )
     ref = django_filters.CharFilter(
         field_name="ref",
         lookup_expr="iexact",
-        label="Reference",
+        label=_("Reference"),
     )
     alt = django_filters.CharFilter(
         field_name="alt",
         lookup_expr="iexact",
-        label="Alternate",
+        label=_("Alternate"),
     )
     pass_only = django_filters.BooleanFilter(
         method="filter_pass_only",
-        label="PASS only",
+        label=_("PASS only"),
         widget=forms.CheckboxInput,
     )
     qual_min = django_filters.NumberFilter(
         field_name="qual",
         lookup_expr="gte",
-        label="Quality ≥",
+        label=_("Quality ≥"),
     )
     af_min = django_filters.NumberFilter(
         field_name="info__af",
         method="filter_info_float",
-        label="AF ≥",
+        label=_("AF ≥"),
     )
     ac_min = django_filters.NumberFilter(
         field_name="info__ac",
         method="filter_info_int",
-        label="AC ≥",
+        label=_("AC ≥"),
     )
     an_min = django_filters.NumberFilter(
         field_name="info__an",
         method="filter_info_int",
-        label="AN ≥",
+        label=_("AN ≥"),
     )
     dp_min = django_filters.NumberFilter(
         field_name="info__dp",
         method="filter_info_int",
-        label="DP ≥",
+        label=_("DP ≥"),
     )
     mq_min = django_filters.NumberFilter(
         field_name="info__mq",
         method="filter_info_float",
-        label="MQ ≥",
+        label=_("MQ ≥"),
     )
     sample_group_name = django_filters.CharFilter(
         field_name="sample_group__name",
         lookup_expr="icontains",
-        label="Sample group",
+        label=_("Sample group"),
     )
     sample_group_source_lab = django_filters.CharFilter(
         field_name="sample_group__source_lab",
         lookup_expr="icontains",
-        label="Source lab",
+        label=_("Source lab"),
     )
     sample_origin_tissue = django_filters.CharFilter(
         field_name="sample_group__sample_origin__tissue",
         lookup_expr="icontains",
-        label="Tissue",
+        label=_("Tissue"),
     )
     variant_calling_tool = django_filters.CharFilter(
         field_name="sample_group__bioinfo_variant_calling__tool",
         lookup_expr="icontains",
-        label="Variant caller",
+        label=_("Variant caller"),
     )
 
     class Meta:
@@ -405,7 +406,7 @@ class AlleleFrequencySearchFilter(django_filters.FilterSet):
 
 
 class SampleGroupFilter(django_filters.FilterSet):
-    query = django_filters.CharFilter(method='universal_search', label='Search')
+    query = django_filters.CharFilter(method='universal_search', label=_('Search'))
 
     class Meta:
         model = SampleGroup

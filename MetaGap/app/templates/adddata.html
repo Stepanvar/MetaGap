@@ -1,17 +1,19 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Add Data - MetaGaP{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Add Data - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Add Data' %}
+{% trans "Add Data" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Add Data</h2>
+<h2 class="mb-4">{% trans "Add Data" %}</h2>
 <form method="post" class="form">
         {% csrf_token %}
         {{ form.as_p }}
         {{ form2.as_p }}
-        <button type="submit" class="btn btn-primary">Submit</button>
+        <button type="submit" class="btn btn-primary">{% trans "Submit" %}</button>
 </form>
 {% endblock %}

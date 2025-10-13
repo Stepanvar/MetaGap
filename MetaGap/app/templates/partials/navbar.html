@@ -1,41 +1,54 @@
-<nav class="navbar navbar-expand-lg app-navbar shadow-sm fixed-top" aria-label="Main navigation">
+{% load i18n %}
+<nav class="navbar navbar-expand-lg app-navbar shadow-sm fixed-top" aria-label="{% trans "Main navigation" %}">
   <div class="container">
     <a class="navbar-brand fw-semibold" href="{% url 'home' %}">{{ SITE_NAME }}</a>
 
     <button class="navbar-toggler" type="button"
             data-bs-toggle="collapse" data-bs-target="#primaryNavbar"
-            aria-controls="primaryNavbar" aria-expanded="false" aria-label="Toggle navigation">
+            aria-controls="primaryNavbar" aria-expanded="false" aria-label="{% trans "Toggle navigation" %}">
       <span class="navbar-toggler-icon"></span>
     </button>
 
     <div class="collapse navbar-collapse" id="primaryNavbar">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link" href="{% url 'about' %}">About</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">Contact</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'about' %}">{% trans "About" %}</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">{% trans "Contact" %}</a></li>
         {% if user.is_authenticated %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'search_results' %}">Search</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'import_data' %}">Import Data</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'search_results' %}">{% trans "Search" %}</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'import_data' %}">{% trans "Import Data" %}</a></li>
         {% endif %}
         {% if user.is_superuser %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}">Admin</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}">{% trans "Admin" %}</a></li>
         {% endif %}
       </ul>
 
       <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
         {% if user.is_authenticated %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'profile' %}">Profile</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'profile' %}">{% trans "Profile" %}</a></li>
           <li class="nav-item">
             <form method="post" action="{% url 'logout' %}" class="d-inline">{% csrf_token %}
-              <button type="submit" class="btn btn-outline-danger nav-logout-button">Logout</button>
+              <button type="submit" class="btn btn-outline-danger nav-logout-button">{% trans "Logout" %}</button>
             </form>
           </li>
         {% else %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">Login</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'signup' %}">Sign Up</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">{% trans "Login" %}</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'signup' %}">{% trans "Sign Up" %}</a></li>
         {% endif %}
       </ul>
 
       <div class="d-flex align-items-center gap-2 ms-lg-3">
+        <form action="{% url 'set_language' %}" method="post" class="language-switcher d-flex align-items-center">
+          {% csrf_token %}
+          <input name="next" type="hidden" value="{{ request.path }}">
+          <label for="language-select" class="visually-hidden">{% trans "Select language" %}</label>
+          <select id="language-select" name="language" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% get_current_language as LANGUAGE_CODE %}
+            {% get_available_languages as LANGUAGES %}
+            {% for code, name in LANGUAGES %}
+              <option value="{{ code }}" {% if code == LANGUAGE_CODE %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </form>
         {% include "partials/theme-toggle.html" %}
       </div>
     </div>

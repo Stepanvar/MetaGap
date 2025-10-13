@@ -1,0 +1,947 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-10-13 08:11+0000\n"
+"PO-Revision-Date: 2025-10-12 00:00+0000\n"
+"Last-Translator: OpenAI Assistant <noreply@example.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || "
+"(n%100>=11 && n%100<=14)? 2 : 3);\n"
+
+#: app/templates/about.html:4
+#, python-format
+msgid "About - %(site_name)s"
+msgstr "О проекте — %(site_name)s"
+
+#: app/templates/about.html:7 app/templates/partials/navbar.html:14
+msgid "About"
+msgstr "О проекте"
+
+#: app/templates/about.html:15
+#, python-format
+msgid ""
+"%(site_name)s is a web platform for unifying, aggregating, and visualising "
+"variant data from VCF/gVCF files."
+msgstr ""
+"%(site_name)s — веб-платформа для объединения, агрегирования и визуализации "
+"данных о вариантах из файлов VCF/gVCF."
+
+#: app/templates/about.html:16
+msgid ""
+"MetaGaP is an open platform for exploring cohort-level variant frequencies."
+msgstr ""
+"MetaGaP — открытая платформа для изучения частот вариантов на уровне когорт."
+
+#: app/templates/about.html:20
+msgid "Platform capabilities"
+msgstr "Возможности платформы"
+
+#: app/templates/about.html:22
+msgid ""
+"Import and basic validation of VCF/gVCF files with support for GRCh37 and "
+"GRCh38 assemblies."
+msgstr ""
+"Импорт и базовая валидация файлов VCF/gVCF с поддержкой сборок GRCh37 и "
+"GRCh38."
+
+#: app/templates/about.html:23
+msgid ""
+"Merge multiple VCFs into a cohort-level file and recalculate AC/AN/AF tags "
+"using <code>bcftools +fill-tags</code>."
+msgstr ""
+"Объединение нескольких VCF в когортный файл и пересчёт тегов AC/AN/AF с "
+"помощью <code>bcftools +fill-tags</code>."
+
+#: app/templates/about.html:24
+msgid ""
+"Apply filters (QUAL, PASS, and more) and remove genotype columns during "
+"export to support de-identification."
+msgstr ""
+"Применение фильтров (QUAL, PASS и др.) и удаление колонок генотипов при "
+"экспорте для деперсонификации."
+
+#: app/templates/about.html:25
+msgid ""
+"Leverage tables and filters (django-tables2, django-filter) for streamlined "
+"browsing and navigation."
+msgstr ""
+"Таблицы и фильтры (django-tables2, django-filter) для удобного просмотра и "
+"навигации."
+
+#: app/templates/about.html:30
+msgid "How it works"
+msgstr "Как это работает"
+
+#: app/templates/about.html:32
+msgid ""
+"Each input VCF is normalised with <code>bgzip + tabix</code> and validated "
+"for readability and a compliant header."
+msgstr ""
+"Каждый входной VCF приводится к формату <code>bgzip + tabix</code> и "
+"проверяется на читаемость и корректность заголовка."
+
+#: app/templates/about.html:33
+msgid ""
+"Cohort merging runs via <code>bcftools merge -m all</code> followed by "
+"recalculation of summary tags (AC/AN/AF)."
+msgstr ""
+"Когортное объединение выполняется командой <code>bcftools merge -m all</"
+"code> с последующим пересчётом сводных тегов (AC/AN/AF)."
+
+#: app/templates/about.html:34
+msgid ""
+"Configured filters are applied; genotype data can be stripped with "
+"<code>bcftools view -G</code>. The final VCF and index are then produced."
+msgstr ""
+"Применяются настроенные фильтры; генотипы при необходимости удаляются с "
+"помощью <code>bcftools view -G</code>. После этого формируется итоговый VCF "
+"и индекс."
+
+#: app/templates/about.html:39
+msgid "Reliability and quality control"
+msgstr "Надёжность и контроль качества"
+
+#: app/templates/about.html:41
+msgid ""
+"Format validation and error logging for external tools (bcftools, bgzip, "
+"tabix)."
+msgstr ""
+"Проверка форматов и логирование ошибок внешних инструментов (bcftools, "
+"bgzip, tabix)."
+
+#: app/templates/about.html:42
+msgid ""
+"Automated tests cover key merge and import scenarios, and community "
+"regression suites are welcome."
+msgstr ""
+"Автотесты покрывают ключевые сценарии объединения и импорта; приветствуются "
+"регрессионные наборы от сообщества."
+
+#: app/templates/about.html:47
+msgid "Limitations and disclaimer"
+msgstr "Ограничения и отказ от ответственности"
+
+#: app/templates/about.html:48
+msgid ""
+"The platform is intended for research use only and is not a medical device. "
+"Do not upload personal or clinical genomic data; use synthetic examples or "
+"de-identified metadata."
+msgstr ""
+"Платформа предназначена только для исследовательских целей и не является "
+"медицинским изделием. Не загружайте персональные или клинические геномные "
+"данные; используйте синтетические примеры или деперсонифицированные "
+"метаданные."
+
+#: app/templates/about.html:52
+msgid "Technology stack"
+msgstr "Технологический стек"
+
+#: app/templates/about.html:53
+msgid ""
+"Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-"
+"bootstrap5, django-tables2, django-filter, backed by SQLite or PostgreSQL."
+msgstr ""
+"Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-"
+"bootstrap5, django-tables2, django-filter; база данных — SQLite или "
+"PostgreSQL."
+
+#: app/templates/about.html:57
+msgid "Community and feedback"
+msgstr "Сообщество и обратная связь"
+
+#: app/templates/about.html:58
+msgid ""
+"Repository: <a href=\"https://github.com/Stepanvar/MetaGap\" "
+"target=\"_blank\" rel=\"noopener\">github.com/Stepanvar/MetaGap</a>. "
+"Contributions that improve the pipeline, add tests, or enhance the interface "
+"are welcome."
+msgstr ""
+"Репозиторий: <a href=\"https://github.com/Stepanvar/MetaGap\" "
+"target=\"_blank\" rel=\"noopener\">github.com/Stepanvar/MetaGap</a>. "
+"Приветствуются улучшения пайплайна, новые тесты и доработки интерфейса."
+
+#: app/templates/adddata.html:4
+#, python-format
+msgid "Add Data - %(site_name)s"
+msgstr "Добавление данных — %(site_name)s"
+
+#: app/templates/adddata.html:7 app/templates/adddata.html:12
+msgid "Add Data"
+msgstr "Добавление данных"
+
+#: app/templates/adddata.html:17 app/templates/form_template.html:37
+#: app/templates/partials/form.html:80
+msgid "Submit"
+msgstr "Отправить"
+
+#: app/templates/base.html:34 app/templates/partials/breadcrumbs.html:2
+#: app/templates/sample_group_confirm_delete.html:7
+#: app/templates/sample_group_form.html:8
+msgid "Breadcrumb"
+msgstr "Навигационная цепочка"
+
+#: app/templates/base.html:37 app/templates/partials/breadcrumbs.html:4
+#: app/templates/sample_group_confirm_delete.html:9
+#: app/templates/sample_group_form.html:10
+msgid "Home"
+msgstr "Главная"
+
+#: app/templates/base.html:62
+msgid "Empowering genomic data management with confidence."
+msgstr "Укрепляем управление геномными данными с уверенностью."
+
+#: app/templates/confirm_delete.html:4
+#, python-format
+msgid "Delete Account - %(site_name)s"
+msgstr "Удаление учётной записи — %(site_name)s"
+
+#: app/templates/confirm_delete.html:7 app/templates/profile.html:69
+msgid "Delete Account"
+msgstr "Удаление учётной записи"
+
+#: app/templates/confirm_delete.html:13
+msgid "Are you sure you want to delete your account?"
+msgstr "Вы уверены, что хотите удалить свою учётную запись?"
+
+#: app/templates/confirm_delete.html:14
+msgid "Yes, Delete My Account"
+msgstr "Да, удалить мою учётную запись"
+
+#: app/templates/contact.html:4
+#, python-format
+msgid "Contact — %(site_name)s"
+msgstr "Контакты — %(site_name)s"
+
+#: app/templates/contact.html:7 app/templates/contact.html:33
+#: app/templates/partials/navbar.html:15
+msgid "Contact"
+msgstr "Контакты"
+
+#: app/templates/contact.html:14
+msgid "What to include in your request"
+msgstr "Что приложить к обращению"
+
+#: app/templates/contact.html:16
+msgid "A concise description of the issue and the behaviour you expected."
+msgstr "Краткое описание проблемы и ожидаемого поведения."
+
+#: app/templates/contact.html:17
+msgid ""
+"A minimal reproducible example such as a small VCF sample (or link), command "
+"parameters, and relevant log excerpts."
+msgstr ""
+"Минимально воспроизводимый пример: небольшой VCF (или ссылка), параметры "
+"команды и релевантные фрагменты логов."
+
+#: app/templates/contact.html:18
+#, python-format
+msgid ""
+"Environment versions: Python, bcftools/htslib, operating system, and "
+"%(site_name)s release (commit or tag)."
+msgstr ""
+"Версии окружения: Python, bcftools/htslib, операционная система и релиз "
+"%(site_name)s (коммит или тег)."
+
+#: app/templates/contact.html:23
+msgid "Responsible data handling"
+msgstr "Ответственное обращение с данными"
+
+#: app/templates/contact.html:24
+msgid ""
+"Do not share personal genomic data or PHI. When troubleshooting, provide "
+"synthetic files or de-identified header and metadata excerpts."
+msgstr ""
+"Не отправляйте персональные геномные данные и PHI. Для диагностики "
+"используйте синтетические файлы или деперсонифицированные выдержки "
+"заголовков и метаданных."
+
+#: app/templates/contact.html:28
+msgid "Collaboration"
+msgstr "Сотрудничество"
+
+#: app/templates/contact.html:29
+msgid ""
+"We welcome research collaborations and pipeline integrations. Use the "
+"subject line 'Collaboration' and describe your idea or request in a few "
+"sentences."
+msgstr ""
+"Мы открыты к научному сотрудничеству и интеграциям пайплайнов. Укажите тему "
+"письма «Collaboration» и кратко опишите идею или запрос."
+
+#: app/templates/contact.html:34
+msgid ""
+"For all enquiries email <a href=\"mailto:zsteve2911@gmail."
+"com\">zsteve2911@gmail.com</a>."
+msgstr ""
+"По всем вопросам пишите на <a href=\"mailto:zsteve2911@gmail."
+"com\">zsteve2911@gmail.com</a>."
+
+#: app/templates/contact.html:35
+msgid ""
+"You can also reach us at <a href=\"mailto:support@metagap."
+"org\">support@metagap.org</a>."
+msgstr ""
+"Также можно написать на <a href=\"mailto:support@metagap."
+"org\">support@metagap.org</a>."
+
+#: app/templates/contact.html:36
+msgid ""
+"Join the conversation on <a href=\"https://github.com/Stepanvar/MetaGap/"
+"discussions\" target=\"_blank\" rel=\"noopener\">GitHub Discussions</a>."
+msgstr ""
+"Присоединяйтесь к обсуждениям в <a href=\"https://github.com/Stepanvar/"
+"MetaGap/discussions\" target=\"_blank\" rel=\"noopener\">GitHub Discussions</"
+"a>."
+
+#: app/templates/dashboard.html:5
+#, python-format
+msgid "Dashboard · %(site_name)s"
+msgstr "Панель · %(site_name)s"
+
+#: app/templates/dashboard.html:12
+#, python-format
+msgid "Welcome back, %(first_name)s!"
+msgstr "С возвращением, %(first_name)s!"
+
+#: app/templates/dashboard.html:14
+msgid "Welcome back!"
+msgstr "С возвращением!"
+
+#: app/templates/dashboard.html:17
+msgid "Track your datasets and latest activity across the MetaGaP platform."
+msgstr "Отслеживайте свои наборы данных и активность на платформе MetaGaP."
+
+#: app/templates/dashboard.html:22
+msgid "Recent datasets"
+msgstr "Недавние наборы данных"
+
+#: app/templates/dashboard.html:23
+msgid "Manage all"
+msgstr "Управлять всеми"
+
+#: app/templates/dashboard.html:50
+#, python-format
+msgid "Contains %(sample_count)s samples across uploaded sequencing runs."
+msgstr "Содержит %(sample_count)s образцов из загруженных секвенирований."
+
+#: app/templates/dashboard.html:52
+msgid "Recently curated dataset ready for further analysis."
+msgstr "Недавно подготовленный набор данных готов к дальнейшему анализу."
+
+#: app/templates/dashboard.html:58
+#, python-format
+msgid "%(sample_count)s samples"
+msgstr "%(sample_count)s образцов"
+
+#: app/templates/dashboard.html:60 app/templates/import_data.html:59
+msgid "Sample count pending"
+msgstr "Количество образцов уточняется"
+
+#: app/templates/dashboard.html:63
+msgid "Open"
+msgstr "Открыть"
+
+#: app/templates/dashboard.html:73
+#, python-format
+msgid ""
+"No datasets available yet. Start by <a class=\"alert-link\" "
+"href=\"%(import_url)s\">importing your first dataset</a>."
+msgstr ""
+"Наборы данных пока отсутствуют. Начните с <a class=\"alert-link\" "
+"href=\"%(import_url)s\">импорта первого набора</a>."
+
+#: app/templates/dashboard.html:80
+msgid "Recent actions"
+msgstr "Недавние действия"
+
+#: app/templates/dashboard.html:105
+#, python-format
+msgid "Linked to <strong>%(group_name)s</strong>."
+msgstr "Связано с <strong>%(group_name)s</strong>."
+
+#: app/templates/dashboard.html:107
+msgid "Variant record awaiting dataset assignment."
+msgstr "Запись варианта ожидает привязки к набору данных."
+
+#: app/templates/dashboard.html:113
+#, python-format
+msgid "Quality %(quality)s"
+msgstr "Качество %(quality)s"
+
+#: app/templates/dashboard.html:115
+msgid "QC pending"
+msgstr "Проверка качества ожидается"
+
+#: app/templates/dashboard.html:119
+msgid "Review"
+msgstr "Проверить"
+
+#: app/templates/dashboard.html:121
+msgid "View profile"
+msgstr "Просмотреть профиль"
+
+#: app/templates/dashboard.html:131
+msgid ""
+"No recent actions recorded. Import new sequencing data to start tracking "
+"activity."
+msgstr ""
+"Недавних действий не зафиксировано. Импортируйте данные секвенирования, "
+"чтобы начать отслеживание."
+
+#: app/templates/edit_profile.html:4
+#, python-format
+msgid "Edit Profile - %(site_name)s"
+msgstr "Редактирование профиля — %(site_name)s"
+
+#: app/templates/edit_profile.html:7 app/templates/edit_profile.html:13
+#: app/templates/profile.html:68
+msgid "Edit Profile"
+msgstr "Редактировать профиль"
+
+#: app/templates/edit_profile.html:14 app/templates/sample_group_form.html:21
+msgid "Save Changes"
+msgstr "Сохранить изменения"
+
+#: app/templates/import_data.html:4
+#, python-format
+msgid "Import Data - %(site_name)s"
+msgstr "Импорт данных — %(site_name)s"
+
+#: app/templates/import_data.html:7 app/templates/partials/navbar.html:18
+#: app/templates/profile.html:20
+msgid "Import Data"
+msgstr "Импорт данных"
+
+#: app/templates/import_data.html:14
+msgid "Import sequencing cohorts"
+msgstr "Импортировать когорты секвенирования"
+
+#: app/templates/import_data.html:15
+msgid ""
+"Upload VCF or BCF files and MetaGaP will validate the metadata, populate "
+"sample groups, and surface any issues that require your attention."
+msgstr ""
+"Загрузите файлы VCF или BCF, и MetaGaP проверит метаданные, создаст группы "
+"образцов и покажет потенциальные проблемы."
+
+#: app/templates/import_data.html:22
+msgid "Upload and import"
+msgstr "Загрузить и импортировать"
+
+#: app/templates/import_data.html:30
+msgid "Upload checklist"
+msgstr "Памятка по загрузке"
+
+#: app/templates/import_data.html:32
+#, python-format
+msgid ""
+"Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</"
+"code>, <code>.bcf</code> up to %(max_size)s&nbsp;MB."
+msgstr ""
+"Поддерживаемые форматы: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf."
+"bgz</code>, <code>.bcf</code> размером до %(max_size)s&nbsp;МБ."
+
+#: app/templates/import_data.html:33
+msgid ""
+"Include <code>SAMPLE_GROUP</code> metadata in the header so we can build "
+"cohort profiles automatically."
+msgstr ""
+"Добавьте метаданные <code>SAMPLE_GROUP</code> в заголовок, чтобы мы "
+"автоматически сформировали профили когорт."
+
+#: app/templates/import_data.html:34
+msgid ""
+"Warnings highlight unsupported keys—resubmit after updating your header "
+"comments."
+msgstr ""
+"Предупреждения подсветят неподдерживаемые ключи — загрузите файл повторно "
+"после обновления комментариев заголовка."
+
+#: app/templates/import_data.html:35
+msgid ""
+"Your upload is stored temporarily for processing and removed immediately "
+"after import."
+msgstr ""
+"Загруженный файл временно хранится для обработки и удаляется сразу после "
+"импорта."
+
+#: app/templates/import_data.html:37
+msgid ""
+"Need a template? Download the demo VCF from your profile to view a fully "
+"annotated header."
+msgstr ""
+"Нужен шаблон? Скачайте демонстрационный VCF в профиле, чтобы увидеть "
+"полностью аннотированный заголовок."
+
+#: app/templates/import_data.html:45
+msgid "Imported sample groups"
+msgstr "Импортированные группы образцов"
+
+#: app/templates/import_data.html:46
+#, python-format
+msgid "%(total)s total"
+msgstr "Всего: %(total)s"
+
+#: app/templates/import_data.html:57
+#, python-format
+msgid "%(total)s samples"
+msgstr "%(total)s образцов"
+
+#: app/templates/import_data.html:61
+msgid "Owner:"
+msgstr "Владелец:"
+
+#: app/templates/import_data.html:65 app/templates/profile.html:33
+msgid "View"
+msgstr "Просмотр"
+
+#: app/templates/import_data.html:66 app/templates/profile.html:35
+msgid "Edit"
+msgstr "Редактировать"
+
+#: app/templates/import_data.html:67 app/templates/profile.html:37
+msgid "Delete"
+msgstr "Удалить"
+
+#: app/templates/import_data.html:74
+msgid "No cohorts imported yet. Upload your first VCF to populate this list."
+msgstr ""
+"Когорты ещё не импортированы. Загрузите первый VCF, чтобы заполнить список."
+
+#: app/templates/index.html:4
+#, python-format
+msgid "Home - %(site_name)s"
+msgstr "Главная — %(site_name)s"
+
+#: app/templates/index.html:12
+msgid "A unified workspace for variant frequency data"
+msgstr "Единое пространство для данных о частотах вариантов"
+
+#: app/templates/index.html:13
+#, python-format
+msgid ""
+"%(site_name)s helps laboratories curate sample metadata, compare allele "
+"frequencies across cohorts, and keep sequencing provenance transparent."
+msgstr ""
+"%(site_name)s помогает лабораториям курировать метаданные образцов, "
+"сравнивать частоты аллелей между когортами и сохранять прозрачность "
+"происхождения данных."
+
+#: app/templates/index.html:15
+msgid "Import your VCF"
+msgstr "Импортировать VCF"
+
+#: app/templates/index.html:16
+msgid "Learn more"
+msgstr "Узнать больше"
+
+#: app/templates/index.html:22
+msgid "Search the catalogue"
+msgstr "Поиск по каталогу"
+
+#: app/templates/index.html:23
+msgid ""
+"Query by variant ID, genomic coordinates, or metadata keywords to surface "
+"relevant cohorts instantly."
+msgstr ""
+"Ищите по идентификатору варианта, координатам или ключевым словам "
+"метаданных, чтобы мгновенно находить нужные когорты."
+
+#: app/templates/index.html:44
+#, python-format
+msgid ""
+"Need advanced filters? Open the <a href=\"%(results_url)s\">results page</a> "
+"to refine by position, quality, or sample metadata."
+msgstr ""
+"Нужны расширенные фильтры? Откройте <a href=\"%(results_url)s\">страницу "
+"результатов</a>, чтобы уточнить поиск по позиции, качеству или метаданным "
+"образцов."
+
+#: app/templates/index.html:46 app/templates/partials/navbar.html:17
+#: app/templates/search_form.html:5
+msgid "Search"
+msgstr "Поиск"
+
+#: app/templates/index.html:47
+msgid "View full catalogue"
+msgstr "Просмотреть весь каталог"
+
+#: app/templates/index.html:59
+msgid "Guided imports"
+msgstr "Пошаговый импорт"
+
+#: app/templates/index.html:60
+msgid ""
+"Upload compressed or uncompressed VCF files with immediate validation. "
+"MetaGaP surfaces unsupported metadata keys and highlights missing fields so "
+"you can fix issues before data is published."
+msgstr ""
+"Загружайте сжатые или несжатые VCF с моментальной проверкой. MetaGaP покажет "
+"неподдерживаемые ключи и пропущенные поля, чтобы вы исправили их до "
+"публикации данных."
+
+#: app/templates/index.html:67
+msgid "Rich sample context"
+msgstr "Контекст образцов"
+
+#: app/templates/index.html:68
+msgid ""
+"Track tissue origin, extraction quality metrics, sequencing instruments, and "
+"downstream pipelines for every dataset in one dashboard."
+msgstr ""
+"Отслеживайте происхождение тканей, метрики качества выделения, оборудование "
+"секвенирования и последующие пайплайны по каждому набору данных в одной "
+"панели."
+
+#: app/templates/index.html:75
+msgid "Actionable results"
+msgstr "Практичные результаты"
+
+#: app/templates/index.html:76
+msgid ""
+"Interactive tables expose allele frequencies, counts, and QC statistics with "
+"filtering, pagination, and export options tailored for cross-study "
+"comparisons."
+msgstr ""
+"Интерактивные таблицы показывают частоты аллелей, количества и QC-статистику "
+"с фильтрацией, пагинацией и экспортом для кросс-исследовательских сравнений."
+
+#: app/templates/index.html:86
+msgid "Import data in three easy steps"
+msgstr "Импортируйте данные в три простых шага"
+
+#: app/templates/index.html:88
+msgid ""
+"Generate a VCF/BCF file with complete header metadata describing your cohort."
+msgstr ""
+"Подготовьте файл VCF/BCF с полным набором метаданных в заголовке, "
+"описывающих вашу когорту."
+
+#: app/templates/index.html:90
+#, python-format
+msgid ""
+"Upload the file via the <a href=\"%(import_url)s\">Import Data</a> page and "
+"review any warnings."
+msgstr ""
+"Загрузите файл на страницу <a href=\"%(import_url)s\">Импорт данных</a> и "
+"изучите предупреждения."
+
+#: app/templates/index.html:91
+msgid ""
+"Explore new variants immediately in the dashboard and share curated sample "
+"groups with collaborators."
+msgstr ""
+"Исследуйте новые варианты в панели и делитесь подготовленными группами "
+"образцов с коллегами."
+
+#: app/templates/index.html:97
+msgid ""
+"Need an example dataset? Import the bundled demo VCF from your profile page "
+"to see the workflow end to end."
+msgstr ""
+"Нужен пример? Импортируйте демонстрационный VCF из профиля и посмотрите весь "
+"процесс от начала до конца."
+
+#: app/templates/index.html:105
+msgid "Ready to get started?"
+msgstr "Готовы начать?"
+
+#: app/templates/index.html:106
+msgid ""
+"Create an account, upload your first dataset, and uncover insights across "
+"your cohorts."
+msgstr ""
+"Создайте учётную запись, загрузите первый набор данных и получите новые "
+"инсайты по своим когортам."
+
+#: app/templates/index.html:107
+msgid "Create an account"
+msgstr "Создать учётную запись"
+
+#: app/templates/login.html:4
+#, python-format
+msgid "Login - %(site_name)s"
+msgstr "Вход — %(site_name)s"
+
+#: app/templates/login.html:7 app/templates/login.html:14
+#: app/templates/loginpartial.html:15 app/templates/partials/navbar.html:34
+msgid "Login"
+msgstr "Войти"
+
+#: app/templates/login.html:15
+msgid "Log in"
+msgstr "Войти"
+
+#: app/templates/loginpartial.html:5 app/templates/partials/navbar.html:27
+#: app/templates/profile.html:7
+#: app/templates/sample_group_confirm_delete.html:10
+#: app/templates/sample_group_form.html:11
+msgid "Profile"
+msgstr "Профиль"
+
+#: app/templates/loginpartial.html:10 app/templates/partials/navbar.html:30
+msgid "Logout"
+msgstr "Выйти"
+
+#: app/templates/loginpartial.html:18 app/templates/partials/navbar.html:35
+#: app/templates/signup.html:8
+msgid "Sign Up"
+msgstr "Регистрация"
+
+#: app/templates/partials/alerts.html:7
+msgid "Close"
+msgstr "Закрыть"
+
+#: app/templates/partials/footer.html:5
+#, python-format
+msgid "© %(year)s %(site_name)s"
+msgstr "© %(year)s %(site_name)s"
+
+#: app/templates/partials/navbar.html:2
+msgid "Main navigation"
+msgstr "Основная навигация"
+
+#: app/templates/partials/navbar.html:8
+msgid "Toggle navigation"
+msgstr "Переключить навигацию"
+
+#: app/templates/partials/navbar.html:21
+msgid "Admin"
+msgstr "Админ"
+
+#: app/templates/partials/navbar.html:43
+msgid "Select language"
+msgstr "Выберите язык"
+
+#: app/templates/partials/theme-toggle.html:6
+msgid "Toggle color theme"
+msgstr "Переключить цветовую тему"
+
+#: app/templates/partials/theme-toggle.html:7
+#: app/templates/partials/theme-toggle.html:11
+msgid "Light"
+msgstr "Светлая"
+
+#: app/templates/partials/theme-toggle.html:8
+msgid "Dark"
+msgstr "Тёмная"
+
+#: app/templates/profile.html:4
+#, python-format
+msgid "Profile - %(site_name)s"
+msgstr "Профиль — %(site_name)s"
+
+#: app/templates/profile.html:13
+msgid "Your Profile"
+msgstr "Ваш профиль"
+
+#: app/templates/profile.html:14
+msgid "Username:"
+msgstr "Имя пользователя:"
+
+#: app/templates/profile.html:15
+msgid "Email:"
+msgstr "Email:"
+
+#: app/templates/profile.html:17
+msgid "Organization:"
+msgstr "Организация:"
+
+#: app/templates/profile.html:17 app/templates/sample_group_detail.html:31
+msgid "Not provided"
+msgstr "Не указано"
+
+#: app/templates/profile.html:21
+msgid "Import"
+msgstr "Импортировать"
+
+#: app/templates/profile.html:24 app/templates/sample_group_table.html:8
+#: app/templates/sample_group_table.html:14
+msgid "Sample Groups"
+msgstr "Группы образцов"
+
+#: app/templates/profile.html:43
+msgid "You haven't added any sample groups yet."
+msgstr "Вы ещё не добавили группы образцов."
+
+#: app/templates/profile.html:46
+msgid "Export Data"
+msgstr "Экспорт данных"
+
+#: app/templates/profile.html:55
+#, python-format
+msgid "Export options for %(group_name)s"
+msgstr "Варианты экспорта для %(group_name)s"
+
+#: app/templates/profile.html:56
+msgid "Download CSV"
+msgstr "Скачать CSV"
+
+#: app/templates/profile.html:57
+msgid "Download TSV"
+msgstr "Скачать TSV"
+
+#: app/templates/profile.html:64
+msgid "Export options will appear once you add sample groups."
+msgstr "Варианты экспорта появятся после добавления групп образцов."
+
+#: app/templates/profile.html:67
+msgid "Account Settings"
+msgstr "Настройки учётной записи"
+
+#: app/templates/results.html:5
+#, python-format
+msgid "Search Results - %(site_name)s"
+msgstr "Результаты поиска — %(site_name)s"
+
+#: app/templates/results.html:17
+msgid "All"
+msgstr "Все"
+
+#: app/templates/results.html:18
+#, python-format
+msgid "Column %(number)s"
+msgstr "Столбец %(number)s"
+
+#: app/templates/results.html:19 app/templates/results.html:21
+#, python-format
+msgid "Filter %(column)s"
+msgstr "Фильтр: %(column)s"
+
+#: app/templates/results.html:20
+#, python-format
+msgid "Filter %(column)s column"
+msgstr "Фильтр по столбцу %(column)s"
+
+#: app/templates/results.html:158 app/templates/results.html:164
+msgid "Search Results"
+msgstr "Результаты поиска"
+
+#: app/templates/results.html:179
+msgid "Advanced filters"
+msgstr "Расширенные фильтры"
+
+#: app/templates/results.html:182
+msgid "Apply filters"
+msgstr "Применить фильтры"
+
+#: app/templates/results.html:183
+msgid "Clear"
+msgstr "Сбросить"
+
+#: app/templates/results.html:201
+msgid "Variant filters"
+msgstr "Фильтры по вариантам"
+
+#: app/templates/results.html:296
+msgid "Metadata filters"
+msgstr "Фильтры по метаданным"
+
+#: app/templates/results.html:337
+#, python-format
+msgid "Showing results for \"%(query)s\""
+msgstr "Показаны результаты для «%(query)s»"
+
+#: app/templates/results.html:340
+msgid ""
+"Use the column filters below to narrow results. Clear a filter by removing "
+"its text or selecting \"All\" in dropdowns."
+msgstr ""
+"Используйте фильтры столбцов ниже, чтобы сузить результаты. Очистите фильтр, "
+"удалив текст или выбрав \"Все\" в выпадающем списке."
+
+#: app/templates/sample_group_confirm_delete.html:4
+#, python-format
+msgid "Delete Sample Group - %(site_name)s"
+msgstr "Удаление группы образцов — %(site_name)s"
+
+#: app/templates/sample_group_confirm_delete.html:11
+#: app/templates/sample_group_confirm_delete.html:18
+msgid "Delete Sample Group"
+msgstr "Удалить группу образцов"
+
+#: app/templates/sample_group_confirm_delete.html:19
+#, python-format
+msgid ""
+"This action will remove <strong>%(group_name)s</strong> and its imported "
+"variant data."
+msgstr ""
+"Это действие удалит <strong>%(group_name)s</strong> и импортированные данные "
+"о вариантах."
+
+#: app/templates/sample_group_confirm_delete.html:23
+msgid "Yes, delete this group"
+msgstr "Да, удалить эту группу"
+
+#: app/templates/sample_group_confirm_delete.html:24
+msgid "Cancel"
+msgstr "Отмена"
+
+#: app/templates/sample_group_detail.html:5
+#, python-format
+msgid "Sample Group - %(group_name)s | %(site_name)s"
+msgstr "Группа образцов — %(group_name)s | %(site_name)s"
+
+#: app/templates/sample_group_detail.html:15
+msgid "Back to profile"
+msgstr "Назад к профилю"
+
+#: app/templates/sample_group_detail.html:45
+msgid "Allele frequencies"
+msgstr "Частоты аллелей"
+
+#: app/templates/sample_group_detail.html:46
+#, python-format
+msgid "%(count)s variants"
+msgstr "Вариантов: %(count)s"
+
+#: app/templates/sample_group_detail.html:53
+msgid "No variant data has been imported for this sample group yet."
+msgstr "Для этой группы образцов пока не импортировано данных о вариантах."
+
+#: app/templates/sample_group_form.html:5
+#, python-format
+msgid "Edit Sample Group - %(site_name)s"
+msgstr "Редактирование группы образцов — %(site_name)s"
+
+#: app/templates/sample_group_form.html:12
+#: app/templates/sample_group_form.html:19
+msgid "Edit Sample Group"
+msgstr "Редактировать группу образцов"
+
+#: app/templates/sample_group_form.html:20
+msgid ""
+"Update the descriptive metadata for this cohort. Changes will be immediately "
+"reflected in search results."
+msgstr ""
+"Обновите описательные метаданные когорты. Изменения сразу появятся в "
+"результатах поиска."
+
+#: app/templates/sample_group_table.html:5
+#, python-format
+msgid "Sample Groups - %(site_name)s"
+msgstr "Группы образцов — %(site_name)s"
+
+#: app/templates/sample_group_table.html:20
+msgid "No sample groups are available."
+msgstr "Групп образцов нет."
+
+#: app/templates/signup.html:4
+#, python-format
+msgid "Sign Up - %(site_name)s"
+msgstr "Регистрация — %(site_name)s"
+
+#: app/templates/signup.html:9
+msgid "Create Account"
+msgstr "Создать учётную запись"

@@ -74,6 +74,15 @@ def extract_metadata_text_fallback(
                             metadata[normalized_raw] = value
         if "name" not in metadata and "sample_group_name" in metadata:
             metadata["name"] = metadata["sample_group_name"]
+
+        if "id" not in metadata:
+            if "name" in metadata and metadata["name"]:
+                metadata["id"] = metadata["name"]
+            elif "sample_group_name" in metadata and metadata["sample_group_name"]:
+                metadata["id"] = metadata["sample_group_name"]
+
+        if "description" not in metadata and metadata.get("comments"):
+            metadata["description"] = metadata["comments"]
     except UnicodeDecodeError as exc:  # pragma: no cover - defensive fallback
         raise ValidationError(
             "The uploaded VCF file could not be decoded using UTF-8. "

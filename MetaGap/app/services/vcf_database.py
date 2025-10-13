@@ -536,9 +536,35 @@ class VCFDatabaseWriter:
         *,
         skip_keys: Optional[Iterable[str]] = None,
     ) -> Optional[str]:
-        candidate_order = self._enumerate_metadata_candidates(section, field_name, aliases)
+        skip_exact: set[str] = set()
+        skip_normalized: set[str] = set()
+
+        for entry in skip_keys or []:
+            if entry is None:
+                continue
+            text = str(entry)
+            if not text:
+                continue
+            skip_exact.add(text)
+            normalized = normalize_metadata_key(text)
+            if normalized:
+                skip_normalized.add(normalized)
+                collapsed = normalized.replace("_", "")
+                if collapsed:
+                    skip_normalized.add(collapsed)
+
+        combined_skip = skip_exact | skip_normalized
+
+        candidate_order = self._enumerate_metadata_candidates(
+            section,
+            field_name,
+            aliases,
+            skip_keys=combined_skip,
+        )
 
         for candidate in candidate_order:
+            if candidate in skip_exact:
+                continue
             if candidate in metadata:
                 return candidate
 
@@ -548,16 +574,32 @@ class VCFDatabaseWriter:
             normalized_candidate = normalize_metadata_key(candidate)
             if not normalized_candidate:
                 continue
+            if normalized_candidate in skip_normalized:
+                continue
 
             mapped_keys = normalized_lookup.get(normalized_candidate)
             if mapped_keys:
-                return mapped_keys[0]
+                for mapped_key in mapped_keys:
+                    if mapped_key in skip_exact:
+                        continue
+                    normalized_mapped = normalize_metadata_key(mapped_key)
+                    if normalized_mapped and normalized_mapped in skip_normalized:
+                        continue
+                    return mapped_key
 
             collapsed_candidate = normalized_candidate.replace("_", "")
             if collapsed_candidate != normalized_candidate:
+                if collapsed_candidate in skip_normalized:
+                    continue
                 mapped_keys = normalized_lookup.get(collapsed_candidate)
                 if mapped_keys:
-                    return mapped_keys[0]
+                    for mapped_key in mapped_keys:
+                        if mapped_key in skip_exact:
+                            continue
+                        normalized_mapped = normalize_metadata_key(mapped_key)
+                        if normalized_mapped and normalized_mapped in skip_normalized:
+                            continue
+                        return mapped_key
 
         return None
 
@@ -566,9 +608,20 @@ class VCFDatabaseWriter:
         section: str,
         field_name: str,
         aliases: Iterable[str],
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> list[str]:
+        skip_set: set[str] = set()
+        if skip_keys:
+            for entry in skip_keys:
+                if entry is None:
+                    continue
+                text = str(entry)
+                if not text:
+                    continue
+                skip_set.add(text)
+
         def _dedupe_append(collection: list[str], candidate: str) -> None:
-            if candidate and candidate not in collection:
+            if candidate and candidate not in collection and candidate not in skip_set:
                 collection.append(candidate)
 
         normalized_section = normalize_metadata_key(section)

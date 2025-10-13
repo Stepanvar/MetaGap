@@ -87,8 +87,7 @@ class VCFImporter:
                             f"Could not parse VCF metadata with pysam: {retry_exc}. "
                             "Falling back to a text parser."
                         )
-                        logger.warning("%s", warning)
-                        self.warnings.append(warning)
+                        self._add_warning_once(warning)
                         if sample_group is not None:
                             sample_group.delete()
                         try:
@@ -179,6 +178,15 @@ class VCFImporter:
 
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         return extract_metadata_text_fallback(file_path, warnings=self.warnings)
+
+    def _add_warning_once(self, message: str) -> None:
+        """Append a warning and emit a log entry only if it is new for this import."""
+
+        if message in self.warnings:
+            return
+
+        logger.warning("%s", message)
+        self.warnings.append(message)
 
     @staticmethod
     def _render_validation_error(exc: ValidationError) -> str:

@@ -1,8 +1,9 @@
 {% load static %}
 {% load django_bootstrap5 %}
 {% load i18n %}
+{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="{% get_current_language %}" data-bs-theme="light">
+<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="light">
 <head>
         {% load static %}
         {% load django_bootstrap5 %}

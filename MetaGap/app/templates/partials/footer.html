@@ -1,5 +1,7 @@
+{% load i18n %}
 <footer class="app-footer text-center text-lg-start mt-auto py-4 border-top">
         <div class="container text-muted small">
-                © {% now "Y" %} MetaGaP
+                {% now "Y" as current_year %}
+                {% blocktrans with site_name=SITE_NAME year=current_year %}© {{ year }} {{ site_name }}{% endblocktrans %}
         </div>
 </footer>

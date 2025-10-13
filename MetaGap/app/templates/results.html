@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% load django_tables2 %}
+{% load i18n %}
 
-{% block title %}Search Results - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Search Results - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block datatable_head %}
     {{ block.super }}
@@ -13,6 +14,11 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
     <script>
+    const allLabel = "{{ _('All')|escapejs }}";
+    const columnFallbackTemplate = "{{ _('Column %(number)s')|escapejs }}";
+    const filterPlaceholderTemplate = "{{ _('Filter %(column)s')|escapejs }}";
+    const filterAriaTemplate = "{{ _('Filter %(column)s column')|escapejs }}";
+    const filterLabelTemplate = "{{ _('Filter %(column)s')|escapejs }}";
     (function () {
         function initialiseDataTable() {
             if (!window.jQuery || !$.fn || !$.fn.DataTable) {
@@ -48,7 +54,10 @@
                     api.columns().every(function (index) {
                         var column = this;
                         var $headerCell = $(column.header());
-                        var columnTitle = $headerCell.text().trim() || ('Column ' + (index + 1));
+                    var columnTitle = $headerCell.text().trim();
+                    if (!columnTitle) {
+                        columnTitle = columnFallbackTemplate.replace('%(number)s', index + 1);
+                    }
                         var filterId = 'column-filter-' + index;
                         var $cell = $('<th scope="col"></th>');
                         var uniqueValues = [];
@@ -83,7 +92,7 @@
 
                         if (useSelect) {
                             $control = $('<select class="form-select form-select-sm"></select>');
-                            $control.append('<option value="">All</option>');
+                            $control.append($('<option></option>').val('').text(allLabel));
 
                             uniqueValues.forEach(function (optionValue) {
                                 var escapedValue = $('<div>').text(optionValue).html();
@@ -100,7 +109,7 @@
                             });
                         } else {
                             $control = $('<input type="search" class="form-control form-control-sm">');
-                            $control.attr('placeholder', 'Filter ' + columnTitle);
+                            $control.attr('placeholder', filterPlaceholderTemplate.replace('%(column)s', columnTitle));
 
                             $control.on('input', function () {
                                 column.search(this.value).draw();
@@ -109,10 +118,10 @@
 
                         $control.attr({
                             id: filterId,
-                            'aria-label': 'Filter ' + columnTitle + ' column'
+                            'aria-label': filterAriaTemplate.replace('%(column)s', columnTitle)
                         });
 
-                        var $label = $('<label class="visually-hidden" for="' + filterId + '"></label>').text('Filter ' + columnTitle);
+                        var $label = $('<label class="visually-hidden" for="' + filterId + '"></label>').text(filterLabelTemplate.replace('%(column)s', columnTitle));
 
                         $cell.append($label).append($control);
                         $filterRow.append($cell);
@@ -146,12 +155,13 @@
 {% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Search Results' %}
+{% trans "Search Results" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-    <h2 class="mb-4">Search Results</h2>
+    <h2 class="mb-4">{% trans "Search Results" %}</h2>
 
     {% if filter_form %}
         <form method="get" action="{% url 'search_results' %}" class="mb-4" novalidate>
@@ -166,11 +176,11 @@
                     aria-expanded="false"
                     aria-controls="advancedFiltersCollapse"
                 >
-                    Advanced filters
+                    {% trans "Advanced filters" %}
                 </button>
                 <div class="ms-auto d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Apply filters</button>
-                    <a href="{% url 'search_results' %}" class="btn btn-outline-secondary">Clear</a>
+                    <button type="submit" class="btn btn-primary">{% trans "Apply filters" %}</button>
+                    <a href="{% url 'search_results' %}" class="btn btn-outline-secondary">{% trans "Clear" %}</a>
                 </div>
             </div>
 
@@ -188,7 +198,7 @@
                                 aria-expanded="true"
                                 aria-controls="variantFilters"
                             >
-                                Variant filters
+                                {% trans "Variant filters" %}
                             </button>
                         </h2>
                         <div
@@ -283,7 +293,7 @@
                                 aria-expanded="false"
                                 aria-controls="metadataFilters"
                             >
-                                Metadata filters
+                                {% trans "Metadata filters" %}
                             </button>
                         </h2>
                         <div
@@ -324,10 +334,10 @@
     {% endif %}
 
     {% if request.GET.query %}
-        <p class="text-muted">Showing results for "{{ request.GET.query }}"</p>
+        <p class="text-muted">{% blocktrans with query=request.GET.query %}Showing results for "{{ query }}"{% endblocktrans %}</p>
     {% endif %}
 
-    <p class="text-muted small" id="column-filter-help">Use the column filters below to narrow results. Clear a filter by removing its text or selecting "All" in dropdowns.</p>
+    <p class="text-muted small" id="column-filter-help">{% trans 'Use the column filters below to narrow results. Clear a filter by removing its text or selecting "All" in dropdowns.' %}</p>
 
     <div class="table-responsive">
         {# Render the full dataset so DataTables can provide client-side pagination/filtering. #}

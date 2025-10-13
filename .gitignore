@@ -118,6 +118,9 @@ ipch/
 *.vspx
 *.sap
 
+# Django compiled message catalogs
+*.mo
+
 # Visual Studio Trace Files
 *.e2e
 

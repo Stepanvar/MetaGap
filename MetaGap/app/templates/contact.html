@@ -1,37 +1,39 @@
 {% extends "base.html" %}
+{% load i18n %}
 
-{% block title %}Контакты — {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Contact — {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-  {% include 'partials/breadcrumbs.html' with breadcrumb_title='Контакты' %}
+  {% trans "Contact" as breadcrumb_label %}
+  {% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container py-5">
   <section class="mb-5">
-    <h2>Что приложить к обращению</h2>
+    <h2>{% trans "What to include in your request" %}</h2>
     <ul class="ps-3">
-      <li>Краткое описание проблемы и ожидаемого поведения.</li>
-      <li>Минимально воспроизводимый пример: небольшая выборка VCF (или ссылка), команда/параметры, фрагмент лога.</li>
-      <li>Версии окружения: Python, bcftools/htslib, ОС/дистрибутив, версия {{ SITE_NAME }} (коммит или тег).</li>
+      <li>{% trans "A concise description of the issue and the behaviour you expected." %}</li>
+      <li>{% trans "A minimal reproducible example such as a small VCF sample (or link), command parameters, and relevant log excerpts." %}</li>
+      <li>{% blocktrans with site_name=SITE_NAME %}Environment versions: Python, bcftools/htslib, operating system, and {{ site_name }} release (commit or tag).{% endblocktrans %}</li>
     </ul>
   </section>
 
   <section class="mb-5">
-    <h2>Ответственное обращение с данными</h2>
-    <p>Не отправляйте персональные геномные данные и PHI. Для диагностики прикладывайте синтетические файлы или деперсонифицированные выдержки заголовков и метаданных.</p>
+    <h2>{% trans "Responsible data handling" %}</h2>
+    <p>{% trans "Do not share personal genomic data or PHI. When troubleshooting, provide synthetic files or de-identified header and metadata excerpts." %}</p>
   </section>
 
   <section class="mb-5">
-    <h2>Сотрудничество</h2>
-    <p>Открыты к научному сотрудничеству и интеграциям пайплайнов. Пишите тему письма «Collaboration» и кратко опишите вашу идею или запрос.</p>
+    <h2>{% trans "Collaboration" %}</h2>
+    <p>{% trans "We welcome research collaborations and pipeline integrations. Use the subject line 'Collaboration' and describe your idea or request in a few sentences." %}</p>
   </section>
 
   <header class="text-center mb-4">
-    <h1 class="display-5">Контакты</h1>
-    <p class="lead">По всем вопросам пишите на <a href="mailto:zsteve2911@gmail.com">zsteve2911@gmail.com</a></p>
-    <p class="mb-1">Или свяжитесь с нами по адресу <a href="mailto:support@metagap.org">support@metagap.org</a>.</p>
-    <p class="text-muted">Присоединяйтесь к обсуждениям в <a href="https://github.com/Stepanvar/MetaGap/discussions" target="_blank" rel="noopener">GitHub Discussions</a>.</p>
+    <h1 class="display-5">{% trans "Contact" %}</h1>
+    <p class="lead">{% blocktrans %}For all enquiries email <a href="mailto:zsteve2911@gmail.com">zsteve2911@gmail.com</a>.{% endblocktrans %}</p>
+    <p class="mb-1">{% blocktrans %}You can also reach us at <a href="mailto:support@metagap.org">support@metagap.org</a>.{% endblocktrans %}</p>
+    <p class="text-muted">{% blocktrans %}Join the conversation on <a href="https://github.com/Stepanvar/MetaGap/discussions" target="_blank" rel="noopener">GitHub Discussions</a>.{% endblocktrans %}</p>
   </header>
 </div>
 {% endblock %}

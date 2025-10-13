@@ -14,6 +14,7 @@ from app.models import (
     Format,
     GenomeComplexity,
     Info,
+    ReferenceGenomeBuild,
     SampleGroup,
 )
 from app.services.vcf_importer import VCFImporter
@@ -250,6 +251,34 @@ class ImportHelpersTests(TestCase):
         self.assertIn("bioinfoalignment_tool", alignment_consumed)
         self.assertIn("bioinfoalignment_params", alignment_consumed)
         self.assertIn("bioinfovariantcalling_tool", variant_consumed)
+
+    def test_extract_section_data_handles_version_alias_conflicts(self):
+        """Section-qualified version keys remain available when bare aliases are used elsewhere."""
+
+        metadata = {
+            "version": "p14",
+            "bioinfo_variant_calling_version": "4.2",
+        }
+
+        reference_data, reference_consumed, _ = self.importer._extract_section_data(
+            metadata,
+            "reference_genome_build",
+            ReferenceGenomeBuild,
+        )
+
+        self.assertEqual(reference_data["build_version"], "p14")
+        self.assertIn("version", reference_consumed)
+
+        variant_data, variant_consumed, _ = self.importer._extract_section_data(
+            metadata,
+            "bioinfo_variant_calling",
+            BioinfoVariantCalling,
+            skip_keys=reference_consumed,
+        )
+
+        self.assertEqual(variant_data["version"], "4.2")
+        self.assertIn("bioinfo_variant_calling_version", variant_consumed)
+        self.assertNotIn("version", variant_consumed)
 
     def test_extract_section_data_falls_back_to_section_value(self):
         """Section-level metadata populates the configured primary field when needed."""

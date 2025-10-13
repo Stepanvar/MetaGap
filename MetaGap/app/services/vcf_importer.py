@@ -13,6 +13,7 @@ import pysam
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils.encoding import force_str
+from django.utils.translation import gettext_lazy as _
 from django.db import transaction
 
 from ..models import Format, Info, OrganizationProfile, SampleGroup
@@ -196,7 +197,7 @@ class VCFImporter:
             messages.append(force_str(exc))
 
         if not messages:
-            messages.append("The uploaded file is not valid.")
+            messages.append(_("The uploaded file is not valid."))
         return "; ".join(messages)
 
     @staticmethod

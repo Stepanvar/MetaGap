@@ -1,14 +1,17 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Edit Profile - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Edit Profile - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Edit Profile' %}
+{% trans "Edit Profile" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-        <h2>Edit Profile</h2>
-        {% include 'partials/form.html' with form=form submit_button_label="Save Changes" extra_actions=form_extra_actions|default:'' %}
+        <h2>{% trans "Edit Profile" %}</h2>
+        {% trans "Save Changes" as submit_label %}
+        {% include 'partials/form.html' with form=form submit_button_label=submit_label extra_actions=form_extra_actions|default:'' %}
 </div>
 {% endblock %}

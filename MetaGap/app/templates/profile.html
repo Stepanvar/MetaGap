@@ -1,24 +1,27 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Profile - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Profile - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Profile' %}
+{% trans "Profile" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-        <h2>Your Profile</h2>
-        <p><strong>Username:</strong> {{ user.username }}</p>
-        <p><strong>Email:</strong> {{ user.email }}</p>
+        <h2>{% trans "Your Profile" %}</h2>
+        <p><strong>{% trans "Username:" %}</strong> {{ user.username }}</p>
+        <p><strong>{% trans "Email:" %}</strong> {{ user.email }}</p>
         {% if organization_profile %}
-        <p><strong>Organization:</strong> {{ organization_profile.organization_name|default:"Not provided" }}</p>
+        <p><strong>{% trans "Organization:" %}</strong> {{ organization_profile.organization_name|default:_("Not provided") }}</p>
         {% endif %}
         <hr>
-        <h3>Import Data</h3>
-        {% include 'partials/form.html' with form=import_form submit_button_label="Import" form_action=import_form_action form_enctype=import_form_enctype extra_actions=form_extra_actions|default:'' %}
+        <h3>{% trans "Import Data" %}</h3>
+        {% trans "Import" as submit_label %}
+        {% include 'partials/form.html' with form=import_form submit_button_label=submit_label form_action=import_form_action form_enctype=import_form_enctype extra_actions=form_extra_actions|default:'' %}
         <hr>
-        <h3>Sample Groups</h3>
+        <h3>{% trans "Sample Groups" %}</h3>
         {% if sample_groups %}
         <ul class="list-group mb-4">
                 {% for group in sample_groups %}
@@ -27,20 +30,20 @@
                            href="{% url 'sample_group_detail' group.pk %}">{{ group.name }}</a>
                         <div class="btn-group btn-group-sm" role="group">
                                 <a class="btn btn-outline-secondary"
-                                   href="{% url 'sample_group_detail' group.pk %}">View</a>
+                                   href="{% url 'sample_group_detail' group.pk %}">{% trans "View" %}</a>
                                 <a class="btn btn-outline-primary"
-                                   href="{% url 'sample_group_edit' group.pk %}">Edit</a>
+                                   href="{% url 'sample_group_edit' group.pk %}">{% trans "Edit" %}</a>
                                 <a class="btn btn-outline-danger"
-                                   href="{% url 'sample_group_delete' group.pk %}">Delete</a>
+                                   href="{% url 'sample_group_delete' group.pk %}">{% trans "Delete" %}</a>
                         </div>
                 </li>
                 {% endfor %}
         </ul>
         {% else %}
-        <p class="text-muted">You haven't added any sample groups yet.</p>
+        <p class="text-muted">{% trans "You haven't added any sample groups yet." %}</p>
         {% endif %}
         <hr>
-        <h3>Export Data</h3>
+        <h3>{% trans "Export Data" %}</h3>
         {% if sample_groups %}
         <div class="list-group mb-4">
                 {% for group in sample_groups %}
@@ -49,20 +52,20 @@
                                 <div>
                                         <strong>{{ group.name }}</strong>
                                 </div>
-                                <div class="btn-group" role="group" aria-label="Export options for {{ group.name }}">
-                                        <a class="btn btn-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=csv">Download CSV</a>
-                                        <a class="btn btn-outline-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=tsv">Download TSV</a>
+                                <div class="btn-group" role="group" aria-label="{% blocktrans with group_name=group.name %}Export options for {{ group_name }}{% endblocktrans %}">
+                                        <a class="btn btn-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=csv">{% trans "Download CSV" %}</a>
+                                        <a class="btn btn-outline-success btn-sm" href="{% url 'sample_group_export' group.pk %}?format=tsv">{% trans "Download TSV" %}</a>
                                 </div>
                         </div>
                 </div>
                 {% endfor %}
         </div>
         {% else %}
-        <p class="text-muted">Export options will appear once you add sample groups.</p>
+        <p class="text-muted">{% trans "Export options will appear once you add sample groups." %}</p>
         {% endif %}
         <hr>
-        <h3>Account Settings</h3>
-        <a href="{% url 'edit_profile' %}" class="btn btn-primary me-2">Edit Profile</a>
-        <a href="{% url 'delete_account' %}" class="btn btn-danger">Delete Account</a>
+        <h3>{% trans "Account Settings" %}</h3>
+        <a href="{% url 'edit_profile' %}" class="btn btn-primary me-2">{% trans "Edit Profile" %}</a>
+        <a href="{% url 'delete_account' %}" class="btn btn-danger">{% trans "Delete Account" %}</a>
 </div>
 {% endblock %}

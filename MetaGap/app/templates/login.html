@@ -1,15 +1,19 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Login - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Login - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Login' %}
+{% trans "Login" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-	{% url 'login' as login_action %}
-        {% with form_title="Login" form_method="post" form_action=login_action submit_button_label="Log in" extra_actions=form_extra_actions|default:'' %}
+        {% url 'login' as login_action %}
+        {% trans "Login" as form_title %}
+        {% trans "Log in" as submit_label %}
+        {% with form_title=form_title form_method="post" form_action=login_action submit_button_label=submit_label extra_actions=form_extra_actions|default:'' %}
         {% include 'partials/form.html' %}
         {% endwith %}
 </div>

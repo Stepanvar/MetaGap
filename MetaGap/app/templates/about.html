@@ -1,59 +1,61 @@
 {% extends "base.html" %}
+{% load i18n %}
 
-{% block title %}About - MetaGaP{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}About - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='About' %}
+{% trans "About" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container py-5">
   <header class="text-center mb-4">
     <h1 class="display-5">{{ SITE_NAME }}</h1>
-    <p class="lead">MetaGaP — веб-платформа для объединения, агрегирования и просмотра вариативности из VCF/gVCF.</p>
-    <p class="text-muted">MetaGaP is an open platform for exploring cohort-level variant frequencies.</p>
+    <p class="lead">{% blocktrans with site_name=SITE_NAME %}{{ site_name }} is a web platform for unifying, aggregating, and visualising variant data from VCF/gVCF files.{% endblocktrans %}</p>
+    <p class="text-muted">{% trans "MetaGaP is an open platform for exploring cohort-level variant frequencies." %}</p>
   </header>
 
   <section class="mb-5">
-    <h2>Что умеет платформа</h2>
+    <h2>{% trans "Platform capabilities" %}</h2>
     <ul class="list-unstyled ps-3">
-      <li>Импорт и базовая валидация VCF/gVCF; поддержка сборок GRCh37 и GRCh38.</li>
-      <li>Объединение нескольких VCF в когортный файл и пересчёт AC/AN/AF через <code>bcftools +fill-tags</code>.</li>
-      <li>Фильтрация (QUAL, PASS и др.) и деидентификация при экспорте (удаление столбцов генотипов).</li>
-      <li>Таблицы и фильтры (django-tables2, django-filter) для удобного просмотра и навигации.</li>
+      <li>{% trans "Import and basic validation of VCF/gVCF files with support for GRCh37 and GRCh38 assemblies." %}</li>
+      <li>{% blocktrans %}Merge multiple VCFs into a cohort-level file and recalculate AC/AN/AF tags using <code>bcftools +fill-tags</code>.{% endblocktrans %}</li>
+      <li>{% blocktrans %}Apply filters (QUAL, PASS, and more) and remove genotype columns during export to support de-identification.{% endblocktrans %}</li>
+      <li>{% trans "Leverage tables and filters (django-tables2, django-filter) for streamlined browsing and navigation." %}</li>
     </ul>
   </section>
 
   <section class="mb-5">
-    <h2>Как это работает</h2>
+    <h2>{% trans "How it works" %}</h2>
     <ol class="ps-3">
-      <li>Все входные VCF приводятся к <code>bgzip + tabix</code> и проверяются на читаемость и корректный заголовок.</li>
-      <li>Когортное объединение выполняется командой <code>bcftools merge -m all</code>, затем пересчитываются теги сводной информации (AC/AN/AF).</li>
-      <li>Применяются заданные фильтры; при необходимости генотипы удаляются (<code>bcftools view -G</code>). Формируется итоговый VCF и индекс.</li>
+      <li>{% blocktrans %}Each input VCF is normalised with <code>bgzip + tabix</code> and validated for readability and a compliant header.{% endblocktrans %}</li>
+      <li>{% blocktrans %}Cohort merging runs via <code>bcftools merge -m all</code> followed by recalculation of summary tags (AC/AN/AF).{% endblocktrans %}</li>
+      <li>{% blocktrans %}Configured filters are applied; genotype data can be stripped with <code>bcftools view -G</code>. The final VCF and index are then produced.{% endblocktrans %}</li>
     </ol>
   </section>
 
   <section class="mb-5">
-    <h2>Надёжность и контроль качества</h2>
+    <h2>{% trans "Reliability and quality control" %}</h2>
     <ul class="list-unstyled ps-3">
-      <li>Проверки форматов и логирование ошибок внешних инструментов (bcftools, bgzip, tabix).</li>
-      <li>Автоматические тесты покрывают ключевые сценарии объединения и импорта; принимаются регрессионные тесты от сообщества.</li>
+      <li>{% blocktrans %}Format validation and error logging for external tools (bcftools, bgzip, tabix).{% endblocktrans %}</li>
+      <li>{% trans "Automated tests cover key merge and import scenarios, and community regression suites are welcome." %}</li>
     </ul>
   </section>
 
   <section class="mb-5">
-    <h2>Ограничения и отказ от ответственности</h2>
-    <p>Платформа предназначена только для исследовательского использования и не является медицинским устройством. Не загружайте персональные или клинические геномные данные; используйте синтетические примеры или деперсонифицированные метаданные.</p>
+    <h2>{% trans "Limitations and disclaimer" %}</h2>
+    <p>{% trans "The platform is intended for research use only and is not a medical device. Do not upload personal or clinical genomic data; use synthetic examples or de-identified metadata." %}</p>
   </section>
 
   <section class="mb-5">
-    <h2>Технологический стек</h2>
-    <p>Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-bootstrap5, django-tables2, django-filter; БД — SQLite / PostgreSQL.</p>
+    <h2>{% trans "Technology stack" %}</h2>
+    <p>{% trans "Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-bootstrap5, django-tables2, django-filter, backed by SQLite or PostgreSQL." %}</p>
   </section>
 
   <section>
-    <h2>Участие и обратная связь</h2>
-    <p>Репозиторий: <a href="https://github.com/Stepanvar/MetaGap" target="_blank" rel="noopener">github.com/Stepanvar/MetaGap</a>. Принимаются pull-request’ы с улучшениями пайплайна, тестами и доработками интерфейса.</p>
+    <h2>{% trans "Community and feedback" %}</h2>
+    <p>{% blocktrans %}Repository: <a href="https://github.com/Stepanvar/MetaGap" target="_blank" rel="noopener">github.com/Stepanvar/MetaGap</a>. Contributions that improve the pipeline, add tests, or enhance the interface are welcome.{% endblocktrans %}</p>
   </section>
 </div>
 {% endblock %}

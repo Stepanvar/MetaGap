@@ -11,6 +11,9 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
 import os, dj_database_url
+from pathlib import Path
+
+from django.utils.translation import gettext_lazy as _
 
 
 def _split_env_list(name: str, default: str) -> list[str]:
@@ -19,7 +22,7 @@ def _split_env_list(name: str, default: str) -> list[str]:
     return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
@@ -71,8 +74,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
 	"django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-	"django.contrib.sessions.middleware.SessionMiddleware",
-	"django.middleware.common.CommonMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "django.middleware.locale.LocaleMiddleware",
+        "django.middleware.common.CommonMiddleware",
 	"django.middleware.csrf.CsrfViewMiddleware",
 	"django.contrib.auth.middleware.AuthenticationMiddleware",
 	"django.contrib.messages.middleware.MessageMiddleware",
@@ -124,11 +128,17 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/2.1/topics/i18n/
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "en"
+LANGUAGES = [
+    ("en", _("English")),
+    ("ru", _("Russian")),
+]
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
+LOCALE_PATHS = [BASE_DIR / "locale"]
+LANGUAGE_COOKIE_NAME = "metagap_language"
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/2.1/howto/static-files/

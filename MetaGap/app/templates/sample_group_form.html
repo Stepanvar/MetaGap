@@ -1,23 +1,25 @@
 {% extends "base.html" %}
 {% load static %}
+{% load i18n %}
 
-{% block title %}Edit Sample Group - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Edit Sample Group - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-<nav aria-label="breadcrumb" class="mt-2">
+<nav aria-label="{% trans "Breadcrumb" %}" class="mt-2">
         <ol class="breadcrumb bg-transparent px-0 mb-4">
-                <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-                <li class="breadcrumb-item"><a href="{% url 'profile' %}">Profile</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Edit Sample Group</li>
+                <li class="breadcrumb-item"><a href="{% url 'home' %}">{% trans "Home" %}</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'profile' %}">{% trans "Profile" %}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{% trans "Edit Sample Group" %}</li>
         </ol>
 </nav>
 {% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-        <h2 class="mb-3">Edit Sample Group</h2>
-        <p class="text-muted">Update the descriptive metadata for this cohort. Changes will be immediately reflected in search results.</p>
-        {% include 'partials/form.html' with form=form submit_button_label="Save Changes" extra_actions=form_extra_actions wrapper_class='mt-3' %}
+        <h2 class="mb-3">{% trans "Edit Sample Group" %}</h2>
+        <p class="text-muted">{% trans "Update the descriptive metadata for this cohort. Changes will be immediately reflected in search results." %}</p>
+        {% trans "Save Changes" as submit_label %}
+        {% include 'partials/form.html' with form=form submit_button_label=submit_label extra_actions=form_extra_actions wrapper_class='mt-3' %}
 </div>
 {% endblock %}
 

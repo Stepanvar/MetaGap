@@ -671,54 +671,88 @@ class VCFDatabaseWriter:
                     continue
                 skip_set.add(text)
 
-        def _append_candidate(collection: list[str], candidate: str, *, respect_skip: bool = True) -> None:
-            if not candidate or candidate in collection:
+        def _coerce_candidate(value: Any) -> Optional[str]:
+            if value is None:
+                return None
+            text = str(value)
+            if not text.strip():
+                return None
+            return text
+
+        def _dedupe_append(
+            collection: list[str],
+            candidate: Any,
+            *,
+            respect_skip: bool = True,
+        ) -> None:
+            text = _coerce_candidate(candidate)
+            if not text or text in collection:
                 return
-            if respect_skip and candidate in skip_set:
+            if respect_skip and text in skip_set:
                 return
-            collection.append(candidate)
+            collection.append(text)
+
+        def _dedupe_append_raw(collection: list[str], candidate: Any) -> None:
+            text = _coerce_candidate(candidate)
+            if not text or text in collection:
+                return
+            collection.append(text)
 
         normalized_section = normalize_metadata_key(section)
         normalized_field = normalize_metadata_key(field_name)
 
         raw_alias_candidates: list[str] = []
-        for candidate in (str(field_name), normalized_field):
-            _append_candidate(alias_candidates, candidate)
+        bare_alias_candidates: list[str] = []
+        section_alias_candidates: list[str] = []
+
+        def _collect_raw(candidate: Any) -> None:
+            _dedupe_append_raw(raw_alias_candidates, candidate)
+
+        _collect_raw(field_name)
+        _collect_raw(normalized_field)
 
         for alias in aliases:
-            alias_text = str(alias)
-            normalized_alias = normalize_metadata_key(alias_text)
-            _append_candidate(alias_candidates, alias_text)
-            _append_candidate(alias_candidates, normalized_alias)
+            alias_text = _coerce_candidate(alias)
+            if alias_text:
+                _collect_raw(alias_text)
+                normalized_alias = normalize_metadata_key(alias_text)
+                _collect_raw(normalized_alias)
 
-        prefixed_alias_candidates: list[str] = list(alias_candidates)
-        for candidate in (str(field_name), normalized_field):
-            candidate_text = str(candidate)
-            if candidate_text and candidate_text not in prefixed_alias_candidates:
-                prefixed_alias_candidates.append(candidate_text)
+        for candidate in list(raw_alias_candidates):
+            collapsed = candidate.replace("_", "")
+            if collapsed:
+                _collect_raw(collapsed)
+
+        for candidate in raw_alias_candidates:
+            _dedupe_append(bare_alias_candidates, candidate)
+
+        for candidate in raw_alias_candidates:
+            _dedupe_append(section_alias_candidates, candidate, respect_skip=False)
+        _dedupe_append(section_alias_candidates, field_name, respect_skip=False)
+        _dedupe_append(section_alias_candidates, normalized_field, respect_skip=False)
 
         candidate_order: list[str] = []
 
         section_variants: list[str] = []
         for section_variant in (section, normalized_section):
             if section_variant:
-                _append_candidate(section_variants, section_variant)
+                _dedupe_append(section_variants, section_variant, respect_skip=False)
 
         collapsed_variants: list[str] = []
         for section_variant in section_variants:
             collapsed = section_variant.replace("_", "")
             if collapsed and collapsed != section_variant:
-                _append_candidate(collapsed_variants, collapsed)
+                _dedupe_append(collapsed_variants, collapsed, respect_skip=False)
 
         section_variants.extend(collapsed_variants)
 
         for section_variant in section_variants:
-            for alias_candidate in prefixed_alias_candidates:
+            for alias_candidate in section_alias_candidates:
                 candidate = f"{section_variant}_{alias_candidate}"
-                _append_candidate(candidate_order, candidate, respect_skip=False)
+                _dedupe_append(candidate_order, candidate, respect_skip=False)
 
-        for alias_candidate in alias_candidates:
-            _append_candidate(candidate_order, alias_candidate)
+        for alias_candidate in bare_alias_candidates:
+            _dedupe_append(candidate_order, alias_candidate)
 
         return candidate_order
 

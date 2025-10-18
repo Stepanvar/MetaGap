@@ -692,44 +692,42 @@ emVCF (extended multi-VCF) — расширенный формат для хра
 ***
 ## Источники
 
-1. [Is Federated Analysis the Way Forward for Genomics?](https://www.aridhia.com/blog/is-federated-analysis-the-way-forward-for-genomics/) — Aridhia Blog
-2. [Rare genetic variants contributing factors](https://www.uu.se/en/press/press-releases/2022/2022-05-16) — Uppsala University
-3. [Этические и правовые аспекты генетических исследований](https://medgorod-clinic.ru/stati/eticheskie-i-pravovye-aspekty-geneticheskikh-issledovaniy/) — Medgorod Clinic
-4. [VCF - Variant Call Format](https://gatk.broadinstitute.org/hc/en-us/articles/360035531692-VCF-Variant-Call-Format) — GATK
-5. [Expanding the Russian allele frequency reference](https://ouci.dntb.gov.ua/en/works/4EB5Qpql/) — RUSeq, National Science Review
-6. [Low concordance of multiple variant-calling pipelines](https://pmc.ncbi.nlm.nih.gov/articles/PMC3706896/) — Genome Medicine
-7. [Comprehensive evaluation of error-correction methodologies](https://www.ncbi.nlm.nih.gov/books/NBK569557/) — NCBI
-8. [Effective filtering strategies data quality](https://pmc.ncbi.nlm.nih.gov/articles/PMC4098776/) — BMC Genomics
-9. [Measuring coverage accuracy WES](https://www.sciencedirect.com/science/article/pii/S109836002100023X) — ScienceDirect
-10. [Impact of sample size allele frequency](https://www.researchgate.net/figure/mpact-of-sample-size-on-the-precision-of-sample-allele-frequencies) — ResearchGate
-11. [Open Source Science Software](https://chanzuckerberg.com/blog/importance-open-source-science-software/) — CZI
-12. [Genomic data exponential growth](https://www.weka.io/resources/solution-brief/) — Weka.io
-13. [SNP clinical outcome PSA](https://www.nature.com/articles/s41467-024-52472-6) — Nature
-14. [SNP-SNP interactions colorectal](https://pmc.ncbi.nlm.nih.gov/articles/PMC9385108/) — PMC
-15. [FAIR data principles explained](https://www.tiledb.com/blog/fair-data-principles-explained) — TileDB
-16. [FAIR Data Principles NIH](https://www.niaid.nih.gov/research/fair-data-principles) — NIAID
-17. **Новые источники по фрагментации:**
-- [Alvarellos M. et al. "Democratizing clinical-genomic data: How federated platforms are emerging"](https://pmc.ncbi.nlm.nih.gov/articles/PMC9871385/) — PMC
-- [Casaletto J. "Filling the blank spots"](https://www.annualreviews.org/content/journals/10.1146/annurev-genom-110122-084756) — Annual Reviews
-- [Ardeshirdavani A. et al. "NGS-Logistics: federated analysis of NGS sequence variants"](https://genomemedicine.biomedcentral.com/articles/10.1186/s13073-014-0071-9) — Genome Medicine
+**Рост геномных данных и федеративные подходы**
+1. [Is Federated Analysis the Way Forward for Genomics?](https://www.aridhia.com/blog/is-federated-analysis-the-way-forward-for-genomics/) — Обзор федеративного подхода и роста объёмов геномных данных.
+2. [Genomic data exponential growth](https://www.weka.io/resources/solution-brief/) — Аналитика о темпах накопления данных и инфраструктурных вызовах.
+3. [Democratizing clinical-genomic data: How federated platforms are emerging](https://pmc.ncbi.nlm.nih.gov/articles/PMC9871385/) — Описание барьеров и преимуществ федеративных платформ.
+4. [Filling the blank spots](https://www.annualreviews.org/content/journals/10.1146/annurev-genom-110122-084756) — Обзор глобальных пробелов в обмене геномными данными.
+5. [NGS-Logistics: federated analysis of NGS sequence variants](https://genomemedicine.biomedcentral.com/articles/10.1186/s13073-014-0071-9) — Практический пример федеративной архитектуры для NGS-данных.
 
-**Новые источники по недостаточной представленности России:**
-- [Barbitoff YA et al. "Expanding the Russian allele frequency reference via cross-laboratory data integration"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11533896/) — PMC, 2024
-- [Ramensky VE et al. "Targeted Sequencing in Russian population"](https://pmc.ncbi.nlm.nih.gov/articles/PMC8529250/) — PMC, 2021
-- [Kolosov N. et al. "Genotype imputation in northwestern Russian population"](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2023.1086709/full) — Frontiers, 2022
-- [1](https://link.springer.com/10.1007/978-3-030-49028-7_10)
-[2](https://journals.muni.cz/mujlt/article/view/13177)
-[3](https://www.nature.com/articles/s41431-017-0045-7)
-[4](https://kluwerlawonline.com/journalarticle/European+Public+Law/27.1/EURO2021007)
-[5](https://jneonatalsurg.com/index.php/jns/article/view/8264)
-[6](https://ieeexplore.ieee.org/document/9583707/)
-[7](https://www.mdpi.com/2076-2615/13/14/2272)
-[8](https://academic.oup.com/idpl/article-lookup/doi/10.1093/idpl/ipx006)
+**Редкие варианты и популяционные референсы**
+6. [Rare genetic variants contributing factors](https://www.uu.se/en/press/press-releases/2022/2022-05-16) — Значение редких вариантов и необходимость крупных когорт.
+7. [Expanding the Russian allele frequency reference via cross-laboratory data integration](https://pmc.ncbi.nlm.nih.gov/articles/PMC11533896/) — Интеграция российских данных и выявление патогенных вариантов.
+8. [Targeted Sequencing in Russian population](https://pmc.ncbi.nlm.nih.gov/articles/PMC8529250/) — Представленность российских выборок в таргетных проектах.
+9. [Genotype imputation in northwestern Russian population](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2023.1086709/full) — Особенности региональных когорт и качество импутации.
+10. [Population-scale sequencing of Russian cohorts](https://www.frontiersin.org/articles/10.3389/fgene.2022.719317/full) — Расширение выборок и структурирование популяционных данных.
 
-[1](https://www.frontiersin.org/articles/10.3389/fgene.2022.719317/full)
-[2](https://journals.muni.cz/mujlt/article/view/13177)
-[3](https://link.springer.com/10.1007/978-3-030-49028-7_10)
-[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/collection_55e52396-16a7-4c99-861b-fdca00bf4e06/a3b14664-d0cb-430c-8e77-314850c68712/Plan-prezentatsii_-Razrabotka-platformy-obezlichennykh-geneticheskikh-dannykh-dlia-Rossii.docx)
-[2](https://academic.oup.com/idpl/article-lookup/doi/10.1093/idpl/ipx006)
-[3](https://www.frontiersin.org/articles/10.3389/fgene.2022.719317/full)
+**Качество данных и методы анализа**
+11. [Low concordance of multiple variant-calling pipelines](https://pmc.ncbi.nlm.nih.gov/articles/PMC3706896/) — Сравнение пайплайнов вызова вариантов и их расхождений.
+12. [Comprehensive evaluation of error-correction methodologies](https://www.ncbi.nlm.nih.gov/books/NBK569557/) — Профили ошибок различных секвенаторов и методы коррекции.
+13. [Effective filtering strategies improve data quality](https://pmc.ncbi.nlm.nih.gov/articles/PMC4098776/) — Методы повышения качества генетических данных.
+14. [Measuring coverage accuracy in WES](https://www.sciencedirect.com/science/article/pii/S109836002100023X) — Анализ равномерности покрытия в экзомном секвенировании.
+15. [Impact of sample size on allele frequency precision](https://www.researchgate.net/figure/mpact-of-sample-size-on-the-precision-of-sample-allele-frequencies) — Математические основания оценки частот аллелей.
 
+**Стандарты, открытость и принципы FAIR**
+16. [VCF - Variant Call Format](https://gatk.broadinstitute.org/hc/en-us/articles/360035531692-VCF-Variant-Call-Format) — Спецификация формата VCF для обмена вариантами.
+17. [FAIR data principles explained](https://www.tiledb.com/blog/fair-data-principles-explained) — Практическое толкование принципов FAIR для данных.
+18. [FAIR Data Principles](https://www.niaid.nih.gov/research/fair-data-principles) — Рекомендации NIH по реализации FAIR-подхода.
+19. [Importance of open-source science software](https://chanzuckerberg.com/blog/importance-open-source-science-software/) — Значение открытого кода для воспроизводимости исследований.
+
+**Клиническое значение генетических вариантов**
+20. [SNP rs17632542 and prostate cancer outcome](https://www.nature.com/articles/s41467-024-52472-6) — Связь SNP с клиническими исходами при раке простаты.
+21. [SNP-SNP interactions in colorectal cancer prognosis](https://pmc.ncbi.nlm.nih.gov/articles/PMC9385108/) — Влияние взаимодействий SNP на терапевтический ответ.
+
+**Правовые и этические аспекты защиты данных**
+22. [Этические и правовые аспекты генетических исследований](https://medgorod-clinic.ru/stati/eticheskie-i-pravovye-aspekty-geneticheskikh-issledovaniy/) — Обзор требований российского и европейского законодательства.
+23. [Data protection and privacy in healthcare](https://link.springer.com/10.1007/978-3-030-49028-7_10) — Глава о защите персональных данных в медицине.
+24. [GDPR and personal data protection in healthcare](https://journals.muni.cz/mujlt/article/view/13177) — Анализ применения GDPR к медицинским данным.
+25. [Genetic data sharing and privacy protections in Europe](https://www.nature.com/articles/s41431-017-0045-7) — Европейские практики обмена генетическими данными.
+26. [European Public Law: Genetic data governance](https://kluwerlawonline.com/journalarticle/European+Public+Law/27.1/EURO2021007) — Правовые механизмы управления генетической информацией.
+27. [International Data Privacy Law: Sensitive data processing](https://academic.oup.com/idpl/article-lookup/doi/10.1093/idpl/ipx006) — Рекомендации по обработке чувствительных данных.
+28. [Secure handling of genomic data in the cloud](https://ieeexplore.ieee.org/document/9583707/) — Технические подходы к защите геномных данных в распределённых системах.

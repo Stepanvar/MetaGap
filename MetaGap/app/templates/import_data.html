@@ -1,37 +1,40 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Import Data - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Import Data - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Import Data' %}
+{% trans "Import Data" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container py-5">
     <header class="mb-4">
-        <h1 class="h3 mb-1">Import sequencing cohorts</h1>
-        <p class="text-muted mb-0">Upload VCF or BCF files and MetaGaP will validate the metadata, populate sample groups, and surface any issues that require your attention.</p>
+        <h1 class="h3 mb-1">{% trans "Import sequencing cohorts" %}</h1>
+        <p class="text-muted mb-0">{% trans "Upload VCF or BCF files and MetaGaP will validate the metadata, populate sample groups, and surface any issues that require your attention." %}</p>
     </header>
 
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    {% include 'partials/form.html' with form=form form_action=form_action form_enctype=form_enctype submit_button_label='Upload and import' extra_actions=form_extra_actions|default:'' %}
+                    {% trans "Upload and import" as submit_label %}
+                    {% include 'partials/form.html' with form=form form_action=form_action form_enctype=form_enctype submit_button_label=submit_label extra_actions=form_extra_actions|default:'' %}
                 </div>
             </div>
         </div>
         <div class="col-lg-4">
             <aside class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <h2 class="h6 text-uppercase text-muted mb-3">Upload checklist</h2>
+                    <h2 class="h6 text-uppercase text-muted mb-3">{% trans "Upload checklist" %}</h2>
                     <ul class="list-unstyled small mb-4">
-                        <li class="mb-2"><i class="fas fa-file-medical text-primary me-2"></i>Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</code>, <code>.bcf</code> up to {{ form.max_upload_size_mb }}&nbsp;MB.</li>
-                        <li class="mb-2"><i class="fas fa-tags text-primary me-2"></i>Include <code>SAMPLE_GROUP</code> metadata in the header so we can build cohort profiles automatically.</li>
-                        <li class="mb-2"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Warnings highlight unsupported keys—resubmit after updating your header comments.</li>
-                        <li class="mb-0"><i class="fas fa-shield-alt text-success me-2"></i>Your upload is stored temporarily for processing and removed immediately after import.</li>
+                        <li class="mb-2"><i class="fas fa-file-medical text-primary me-2"></i>{% blocktrans with max_size=form.max_upload_size_mb %}Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</code>, <code>.bcf</code> up to {{ max_size }}&nbsp;MB.{% endblocktrans %}</li>
+                        <li class="mb-2"><i class="fas fa-tags text-primary me-2"></i>{% trans "Include <code>SAMPLE_GROUP</code> metadata in the header so we can build cohort profiles automatically." %}</li>
+                        <li class="mb-2"><i class="fas fa-exclamation-triangle text-warning me-2"></i>{% trans "Warnings highlight unsupported keys—resubmit after updating your header comments." %}</li>
+                        <li class="mb-0"><i class="fas fa-shield-alt text-success me-2"></i>{% trans "Your upload is stored temporarily for processing and removed immediately after import." %}</li>
                     </ul>
-                    <p class="small text-muted mb-0">Need a template? Download the demo VCF from your profile to view a fully annotated header.</p>
+                    <p class="small text-muted mb-0">{% trans "Need a template? Download the demo VCF from your profile to view a fully annotated header." %}</p>
                 </div>
             </aside>
         </div>
@@ -39,8 +42,8 @@
 
     <section class="mt-5">
         <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-            <h2 class="h4 mb-0">Imported sample groups</h2>
-            <span class="badge bg-primary bg-opacity-10 text-primary">{{ sample_groups|length }} total</span>
+            <h2 class="h4 mb-0">{% trans "Imported sample groups" %}</h2>
+            <span class="badge bg-primary bg-opacity-10 text-primary">{% blocktrans with total=sample_groups|length %}{{ total }} total{% endblocktrans %}</span>
         </div>
         {% if sample_groups %}
             <div class="card border-0 shadow-sm">
@@ -51,24 +54,24 @@
                                 <h3 class="h6 mb-1">{{ group.name }}</h3>
                                 <p class="text-muted small mb-0">
                                     {% if group.total_samples %}
-                                        {{ group.total_samples }} samples
+                                        {% blocktrans with total=group.total_samples %}{{ total }} samples{% endblocktrans %}
                                     {% else %}
-                                        Sample count pending
+                                        {% trans "Sample count pending" %}
                                     {% endif %}
-                                    · Owner: {% if group.created_by.organization_name %}{{ group.created_by.organization_name }}{% else %}{{ group.created_by.user.username }}{% endif %}
+                                    · {% trans "Owner:" %} {% if group.created_by.organization_name %}{{ group.created_by.organization_name }}{% else %}{{ group.created_by.user.username }}{% endif %}
                                 </p>
                             </div>
                             <div class="btn-group btn-group-sm" role="group">
-                                <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">View</a>
-                                <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">Edit</a>
-                                <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">Delete</a>
+                                <a class="btn btn-outline-secondary" href="{% url 'sample_group_detail' group.pk %}">{% trans "View" %}</a>
+                                <a class="btn btn-outline-primary" href="{% url 'sample_group_edit' group.pk %}">{% trans "Edit" %}</a>
+                                <a class="btn btn-outline-danger" href="{% url 'sample_group_delete' group.pk %}">{% trans "Delete" %}</a>
                             </div>
                         </li>
                     {% endfor %}
                 </ul>
             </div>
         {% else %}
-            <div class="alert alert-info" role="status">No cohorts imported yet. Upload your first VCF to populate this list.</div>
+            <div class="alert alert-info" role="status">{% trans "No cohorts imported yet. Upload your first VCF to populate this list." %}</div>
         {% endif %}
     </section>
 </div>

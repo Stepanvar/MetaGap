@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Home - {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Home - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}{% endblock %}
 
@@ -8,18 +9,18 @@
 <div class="container py-5">
     <section class="row align-items-center mb-5 g-5">
         <div class="col-lg-7">
-            <h1 class="display-5 fw-semibold mb-3">A unified workspace for variant frequency data</h1>
-            <p class="lead text-muted">{{ SITE_NAME }} helps laboratories curate sample metadata, compare allele frequencies across cohorts, and keep sequencing provenance transparent.</p>
+            <h1 class="display-5 fw-semibold mb-3">{% trans "A unified workspace for variant frequency data" %}</h1>
+            <p class="lead text-muted">{% blocktrans with site_name=SITE_NAME %}{{ site_name }} helps laboratories curate sample metadata, compare allele frequencies across cohorts, and keep sequencing provenance transparent.{% endblocktrans %}</p>
             <div class="d-flex flex-wrap gap-3 mt-4">
-                <a class="btn btn-primary btn-lg" href="{% url 'import_data' %}">Import your VCF</a>
-                <a class="btn btn-outline-primary btn-lg" href="{% url 'about' %}">Learn more</a>
+                <a class="btn btn-primary btn-lg" href="{% url 'import_data' %}">{% trans "Import your VCF" %}</a>
+                <a class="btn btn-outline-primary btn-lg" href="{% url 'about' %}">{% trans "Learn more" %}</a>
             </div>
         </div>
         <div class="col-lg-5">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h2 class="h5 mb-3">Search the catalogue</h2>
-                    <p class="text-muted">Query by variant ID, genomic coordinates, or metadata keywords to surface relevant cohorts instantly.</p>
+                    <h2 class="h5 mb-3">{% trans "Search the catalogue" %}</h2>
+                    <p class="text-muted">{% trans "Query by variant ID, genomic coordinates, or metadata keywords to surface relevant cohorts instantly." %}</p>
                     {% url 'search_results' as search_action %}
                     <form method="get" action="{{ search_action }}" class="needs-validation" novalidate>
                         {% for hidden_field in form.hidden_fields %}
@@ -39,10 +40,11 @@
                                 <div class="invalid-feedback d-block">{{ error }}</div>
                             {% endfor %}
                         </div>
-                        <p class="text-muted small mb-0">Need advanced filters? Open the <a href="{% url 'search_results' %}">results page</a> to refine by position, quality, or sample metadata.</p>
+                        {% url 'search_results' as results_url %}
+                        <p class="text-muted small mb-0">{% blocktrans with results_url=results_url %}Need advanced filters? Open the <a href="{{ results_url }}">results page</a> to refine by position, quality, or sample metadata.{% endblocktrans %}</p>
                         <div class="d-flex justify-content-between flex-wrap gap-2 mt-4">
-                            <button type="submit" class="btn btn-primary">Search</button>
-                            <a class="btn btn-link" href="{% url 'search_results' %}">View full catalogue</a>
+                            <button type="submit" class="btn btn-primary">{% trans "Search" %}</button>
+                            <a class="btn btn-link" href="{% url 'search_results' %}">{% trans "View full catalogue" %}</a>
                         </div>
                     </form>
                 </div>
@@ -54,24 +56,24 @@
         <div class="col-md-4">
             <article class="card h-100 border-0 shadow-sm">
                 <div class="card-body">
-                    <h2 class="h5">Guided imports</h2>
-                    <p class="text-muted mb-0">Upload compressed or uncompressed VCF files with immediate validation. MetaGaP surfaces unsupported metadata keys and highlights missing fields so you can fix issues before data is published.</p>
+                    <h2 class="h5">{% trans "Guided imports" %}</h2>
+                    <p class="text-muted mb-0">{% blocktrans %}Upload compressed or uncompressed VCF files with immediate validation. MetaGaP surfaces unsupported metadata keys and highlights missing fields so you can fix issues before data is published.{% endblocktrans %}</p>
                 </div>
             </article>
         </div>
         <div class="col-md-4">
             <article class="card h-100 border-0 shadow-sm">
                 <div class="card-body">
-                    <h2 class="h5">Rich sample context</h2>
-                    <p class="text-muted mb-0">Track tissue origin, extraction quality metrics, sequencing instruments, and downstream pipelines for every dataset in one dashboard.</p>
+                    <h2 class="h5">{% trans "Rich sample context" %}</h2>
+                    <p class="text-muted mb-0">{% trans "Track tissue origin, extraction quality metrics, sequencing instruments, and downstream pipelines for every dataset in one dashboard." %}</p>
                 </div>
             </article>
         </div>
         <div class="col-md-4">
             <article class="card h-100 border-0 shadow-sm">
                 <div class="card-body">
-                    <h2 class="h5">Actionable results</h2>
-                    <p class="text-muted mb-0">Interactive tables expose allele frequencies, counts, and QC statistics with filtering, pagination, and export options tailored for cross-study comparisons.</p>
+                    <h2 class="h5">{% trans "Actionable results" %}</h2>
+                    <p class="text-muted mb-0">{% trans "Interactive tables expose allele frequencies, counts, and QC statistics with filtering, pagination, and export options tailored for cross-study comparisons." %}</p>
                 </div>
             </article>
         </div>
@@ -81,17 +83,18 @@
         <div class="card-body p-4 p-lg-5">
             <div class="row g-4 align-items-center">
                 <div class="col-lg-8">
-                    <h2 class="h4">Import data in three easy steps</h2>
+                    <h2 class="h4">{% trans "Import data in three easy steps" %}</h2>
                     <ol class="mb-0 ps-3">
-                        <li>Generate a VCF/BCF file with complete header metadata describing your cohort.</li>
-                        <li>Upload the file via the <a href="{% url 'import_data' %}">Import Data</a> page and review any warnings.</li>
-                        <li>Explore new variants immediately in the dashboard and share curated sample groups with collaborators.</li>
+                        <li>{% trans "Generate a VCF/BCF file with complete header metadata describing your cohort." %}</li>
+                        {% url 'import_data' as import_url %}
+                        <li>{% blocktrans with import_url=import_url %}Upload the file via the <a href="{{ import_url }}">Import Data</a> page and review any warnings.{% endblocktrans %}</li>
+                        <li>{% trans "Explore new variants immediately in the dashboard and share curated sample groups with collaborators." %}</li>
                     </ol>
                 </div>
                 <div class="col-lg-4">
                     <div class="bg-body-secondary rounded-3 p-4 text-center h-100 d-flex flex-column justify-content-center">
                         <span class="display-6 text-primary mb-2"><i class="fas fa-chart-line"></i></span>
-                        <p class="text-muted mb-0">Need an example dataset? Import the bundled demo VCF from your profile page to see the workflow end to end.</p>
+                        <p class="text-muted mb-0">{% trans "Need an example dataset? Import the bundled demo VCF from your profile page to see the workflow end to end." %}</p>
                     </div>
                 </div>
             </div>
@@ -99,9 +102,9 @@
     </section>
 
     <section class="text-center">
-        <h2 class="h4 mb-3">Ready to get started?</h2>
-        <p class="text-muted mb-4">Create an account, upload your first dataset, and uncover insights across your cohorts.</p>
-        <a class="btn btn-success btn-lg" href="{% url 'signup' %}">Create an account</a>
+        <h2 class="h4 mb-3">{% trans "Ready to get started?" %}</h2>
+        <p class="text-muted mb-4">{% trans "Create an account, upload your first dataset, and uncover insights across your cohorts." %}</p>
+        <a class="btn btn-success btn-lg" href="{% url 'signup' %}">{% trans "Create an account" %}</a>
     </section>
 </div>
 {% endblock %}

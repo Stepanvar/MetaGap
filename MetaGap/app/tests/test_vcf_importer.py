@@ -6,6 +6,7 @@ import gzip
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any, Dict
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -142,6 +143,15 @@ class VCFImporterTests(TestCase):
 ##LIBRARY_CONSTRUCTION=<PCRCyles=12>
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
 1\t999\trsTypo\tA\tG\t60\tPASS\t.\tGT\t0/1
+"""
+
+    VCF_WITH_LIBRARY_ADDITIONAL_FIELDS = """##fileformat=VCFv4.2
+##contig=<ID=1>
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##SAMPLE=<ID=DropGroup,Description=Library additional fields>
+##LIBRARY_CONSTRUCTION=<Kit=DropKit,PCRCycles=11,AdditionalFields=PCRCycles>
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample001
+1\t909\trsDrop\tG\tA\t70\tPASS\t.\tGT\t0/1
 """
 
     VCF_WITHOUT_EXPLICIT_NAME = """##fileformat=VCFv4.2
@@ -504,6 +514,39 @@ class VCFImporterTests(TestCase):
 
         self.assertEqual(importer.warnings, [])
 
+    def test_import_metadata_file_style_preserves_variant_version_with_alias_conflict(self) -> None:
+        original_extract = VCFImporter.extract_sample_group_metadata
+
+        def patched_extract(self: VCFImporter, vcf_in: Any) -> Dict[str, Any]:
+            metadata = original_extract(self, vcf_in)
+            metadata = dict(metadata)
+            metadata["version"] = "p14"
+            metadata.pop("build_version", None)
+            metadata.pop("reference_genome_build_build_version", None)
+            metadata.pop("reference_genome_build_version", None)
+            return metadata
+
+        with mock.patch.object(VCFImporter, "extract_sample_group_metadata", patched_extract):
+            importer, sample_group = self._import(
+                self.VCF_WITH_METADATA_FILE_STYLE,
+                filename="metadata_file_style_alias_conflict.vcf",
+            )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build",
+            "bioinfo_variant_calling",
+        ).get(pk=sample_group.pk)
+
+        reference = sample_group.reference_genome_build
+        self.assertIsNotNone(reference)
+        assert reference is not None
+        self.assertEqual(reference.build_version, "p14")
+
+        variant_calling = sample_group.bioinfo_variant_calling
+        self.assertIsNotNone(variant_calling)
+        assert variant_calling is not None
+        self.assertEqual(variant_calling.version, "4.2")
+
     def test_import_handles_metadata_alias_variants(self) -> None:
         importer, sample_group = self._import(
             self.VCF_WITH_ALIAS_METADATA, filename="alias_metadata.vcf"
@@ -518,6 +561,36 @@ class VCFImporterTests(TestCase):
         self.assertEqual(
             sample_group.reference_genome_build.build_name, "AliasRef"
         )
+
+    def test_import_respects_additional_fields_override(self) -> None:
+        importer, sample_group = self._import(
+            self.VCF_WITH_LIBRARY_ADDITIONAL_FIELDS,
+            filename="library_additional_fields.vcf",
+        )
+
+        sample_group = SampleGroup.objects.select_related("library_construction").get(
+            pk=sample_group.pk
+        )
+
+        library = sample_group.library_construction
+        self.assertIsNotNone(library)
+        assert library is not None
+        self.assertEqual(library.kit, "DropKit")
+        self.assertIsNone(library.pcr_cycles)
+
+        additional_metadata = sample_group.additional_metadata or {}
+        self.assertIn("library_construction_pcr_cycles", additional_metadata)
+        self.assertEqual(additional_metadata["library_construction_pcr_cycles"], 11)
+        self.assertEqual(importer.warnings, [])
+
+        importer, sample_group = self._import(
+            self.VCF_WITH_ALIAS_METADATA, filename="alias_metadata.vcf"
+        )
+
+        sample_group = SampleGroup.objects.select_related(
+            "reference_genome_build", "library_construction"
+        ).get(pk=sample_group.pk)
+
         self.assertEqual(
             sample_group.reference_genome_build.build_version, "v2"
         )
@@ -688,9 +761,11 @@ class VCFImporterTests(TestCase):
         assert isinstance(platform_metadata, dict)
         self.assertEqual(platform_metadata.get("ID"), "BadGroup")
         self.assertEqual(platform_metadata.get("Description"), "Should fail")
-        self.assertIn(
-            "Unsupported metadata section 'SAMPLE_PLATFORM'",
-            importer.warnings,
+        self.assertTrue(
+            any(
+                "Unsupported metadata section 'SAMPLE_PLATFORM'" in warning
+                for warning in importer.warnings
+            )
         )
 
     def test_import_handles_undefined_info_and_format_fields(self) -> None:

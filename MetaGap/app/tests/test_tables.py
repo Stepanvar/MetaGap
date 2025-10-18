@@ -151,28 +151,31 @@ class AlleleFrequencyTableBuilderTests(TestCase):
 
     def test_allows_view_specific_overrides(self) -> None:
         table_class = build_allele_frequency_table(
-            priority_extra=("variant_id",),
+            priority_extra=("variant_id", "format__genotype"),
             exclude_extra=("info__id",),
         )
 
         fields = list(table_class.Meta.fields)
-        self.assertEqual(
-            fields[:12],
-            [
-                "chrom",
-                "pos",
-                "ref",
-                "alt",
-                "qual",
-                "filter",
-                "info__af",
-                "info__ac",
-                "info__an",
-                "info__dp",
-                "info__mq",
-                "variant_id",
-            ],
-        )
+        expected_prefix = [
+            "chrom",
+            "pos",
+            "ref",
+            "alt",
+            "qual",
+            "filter",
+            "info__af",
+            "info__ac",
+            "info__an",
+            "info__dp",
+            "info__mq",
+        ]
+        self.assertEqual(fields[: len(expected_prefix)], expected_prefix)
+        variant_index = fields.index("variant_id")
+        self.assertEqual(variant_index, len(expected_prefix))
+
+        additional_priority_index = fields.index("format__genotype")
+        self.assertGreater(additional_priority_index, variant_index)
+        self.assertEqual(additional_priority_index, variant_index + 1)
         self.assertNotIn("info__id", fields)
 
     def test_sample_group_header_uses_friendly_label(self) -> None:

@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% load render_table from django_tables2 %}
+{% load i18n %}
 
-{% block title %}Sample Group - {{ sample_group.name }} | {{ SITE_NAME }}{% endblock %}
+{% block title %}{% blocktrans with group_name=sample_group.name site_name=SITE_NAME %}Sample Group - {{ group_name }} | {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
     {% include 'partials/breadcrumbs.html' with breadcrumb_title=sample_group.name %}
@@ -11,7 +12,7 @@
 <div class="container mt-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">{{ sample_group.name }}</h2>
-        <a href="{% url 'profile' %}" class="btn btn-outline-secondary">Back to profile</a>
+        <a href="{% url 'profile' %}" class="btn btn-outline-secondary">{% trans "Back to profile" %}</a>
     </div>
 
     <div class="row g-4">
@@ -27,7 +28,7 @@
                                     {% if item.type == 'email' and item.value %}
                                         <a href="mailto:{{ item.value }}">{{ item.value }}</a>
                                     {% else %}
-                                        {{ item.value|default:"Not provided" }}
+                                        {{ item.value|default:_("Not provided") }}
                                     {% endif %}
                                 </dd>
                             {% endfor %}
@@ -41,15 +42,15 @@
     <div class="card mt-4">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h3 class="h5 mb-0">Allele frequencies</h3>
-                <span class="text-muted">{{ variant_table.rows|length }} variants</span>
+                <h3 class="h5 mb-0">{% trans "Allele frequencies" %}</h3>
+                <span class="text-muted">{% blocktrans with count=variant_table.rows|length %}{{ count }} variants{% endblocktrans %}</span>
             </div>
             {% if variant_table.rows %}
                 <div class="table-responsive">
                     {% render_table variant_table %}
                 </div>
             {% else %}
-                <p class="text-muted mb-0">No variant data has been imported for this sample group yet.</p>
+                <p class="text-muted mb-0">{% trans "No variant data has been imported for this sample group yet." %}</p>
             {% endif %}
         </div>
     </div>

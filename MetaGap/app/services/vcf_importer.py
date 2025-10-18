@@ -13,6 +13,7 @@ import pysam
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils.encoding import force_str
+from django.utils.translation import gettext_lazy as _
 from django.db import transaction
 
 from ..models import Format, Info, OrganizationProfile, SampleGroup
@@ -86,8 +87,7 @@ class VCFImporter:
                             f"Could not parse VCF metadata with pysam: {retry_exc}. "
                             "Falling back to a text parser."
                         )
-                        logger.warning("%s", warning)
-                        self.warnings.append(warning)
+                        self._add_warning_once(warning)
                         if sample_group is not None:
                             sample_group.delete()
                         try:
@@ -179,6 +179,15 @@ class VCFImporter:
     def _extract_metadata_text_fallback(self, file_path: str) -> Dict[str, Any]:
         return extract_metadata_text_fallback(file_path, warnings=self.warnings)
 
+    def _add_warning_once(self, message: str) -> None:
+        """Append a warning and emit a log entry only if it is new for this import."""
+
+        if message in self.warnings:
+            return
+
+        logger.warning("%s", message)
+        self.warnings.append(message)
+
     @staticmethod
     def _render_validation_error(exc: ValidationError) -> str:
         messages: list[str] = []
@@ -196,7 +205,7 @@ class VCFImporter:
             messages.append(force_str(exc))
 
         if not messages:
-            messages.append("The uploaded file is not valid.")
+            messages.append(_("The uploaded file is not valid."))
         return "; ".join(messages)
 
     @staticmethod

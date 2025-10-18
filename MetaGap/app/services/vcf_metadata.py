@@ -375,13 +375,36 @@ class VCFMetadataParser:
     ) -> None:
         self.warnings = warnings if warnings is not None else []
         self.configuration = configuration or load_metadata_configuration()
+        self._consumed_keys: set[str] = set()
+        self._section_keys: dict[str, set[str]] = {}
+        self._active_platform_section: Optional[str] = None
 
     def extract_sample_group_metadata(self, vcf_in: pysam.VariantFile) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
+        self._section_keys.clear()
+        self._active_platform_section = None
         self._consumed_keys.clear()
         for record in vcf_in.header.records:
             items = self._collect_record_items(record)
             self.ingest_metadata_items(metadata, record.key, items)
+
+        if self._section_keys:
+            section_key_map: dict[str, set[str]] = {}
+            for section, keys in self._section_keys.items():
+                normalized_section = normalize_metadata_key(section)
+                if not normalized_section:
+                    continue
+                for key in keys:
+                    normalized_key = normalize_metadata_key(key)
+                    if not normalized_key:
+                        continue
+                    bucket = section_key_map.setdefault(normalized_key, set())
+                    bucket.add(normalized_section)
+
+            if section_key_map:
+                metadata["_section_key_map"] = {
+                    key: sorted(values) for key, values in section_key_map.items()
+                }
 
         if "name" not in metadata and "sample_group_name" in metadata:
             metadata["name"] = metadata["sample_group_name"]
@@ -404,11 +427,11 @@ class VCFMetadataParser:
         section = self.configuration.section_map.get(normalized_key)
         if not section:
             if self._is_metadata_section_candidate(normalized_key):
-                log_message = (
-                    f"Unsupported metadata section '{key}' encountered in the VCF header."
+                warning = (
+                    f"Unsupported metadata section '{key}' encountered in the VCF header; "
+                    "storing raw values in additional metadata."
                 )
-                logger.warning("%s", log_message)
-                warning = f"Unsupported metadata section '{key}'"
+                logger.warning("%s", warning)
                 self.warnings.append(warning)
                 additional = metadata.setdefault("additional_metadata", {})
                 additional_key = normalize_metadata_key(key)

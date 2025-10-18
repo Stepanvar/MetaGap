@@ -1,3 +1,11 @@
+"""Forms for search, registration, sample grouping, and profile updates.
+
+This module defines Bootstrap-styled forms for catalogue search, user
+registration, sample group management, and user profile maintenance. In
+addition to widget customization, the forms enforce validation such as the
+requirement for unique email addresses when creating new accounts.
+"""
+
 from typing import Optional
 
 from django import forms
@@ -5,6 +13,8 @@ from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html, format_html_join
+from django.utils.text import format_lazy
+from django.utils.translation import gettext_lazy as _
 
 from django.conf import settings
 
@@ -128,10 +138,10 @@ class SearchForm(BootstrapFormMixin, forms.Form):
 
     query = forms.CharField(
         required=False,
-        label="Search the catalogue",
+        label=_("Search the catalogue"),
         widget=forms.TextInput(
             attrs={
-                "placeholder": "Variant ID, coordinate, or keyword",
+                "placeholder": _("Variant ID, coordinate, or keyword"),
             }
         ),
     )
@@ -140,32 +150,32 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(
-            attrs={"class": "form-control", "placeholder": "Email Address"}
+            attrs={"class": "form-control", "placeholder": _("Email address")}
         ),
     )
     username = forms.CharField(
         required=True,
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Username"}
+            attrs={"class": "form-control", "placeholder": _("Username")}
         ),
     )
     organization_name = forms.CharField(
         required=False,
-        label="Organization Name",
+        label=_("Organization name"),
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Organization"}
+            attrs={"class": "form-control", "placeholder": _("Organization")}
         ),
     )
     password1 = forms.CharField(
-        label="Password",
+        label=_("Password"),
         widget=forms.PasswordInput(
-            attrs={"class": "form-control", "placeholder": "Password"}
+            attrs={"class": "form-control", "placeholder": _("Password")}
         ),
     )
     password2 = forms.CharField(
-        label="Confirm Password",
+        label=_("Confirm password"),
         widget=forms.PasswordInput(
-            attrs={"class": "form-control", "placeholder": "Confirm Password"}
+            attrs={"class": "form-control", "placeholder": _("Confirm password")}
         ),
     )
 
@@ -176,9 +186,9 @@ class CustomUserCreationForm(BootstrapFormMixin, _OrganizationProfileFormMixin, 
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if not email:
-            raise ValidationError("Please provide an email address so we can contact you.")
+            raise ValidationError(_("Please provide an email address so we can contact you."))
         if User.objects.filter(email__iexact=email).exists():
-            raise ValidationError("An account with this email address already exists.")
+            raise ValidationError(_("An account with this email address already exists."))
         return email
 
     def save(self, commit=True):
@@ -250,39 +260,54 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
 
     sample_origin_tissue = forms.CharField(
         required=False,
-        label="Tissue",
+        label=_("Tissue"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     sample_origin_collection_method = forms.CharField(
         required=False,
-        label="Collection method",
+        label=_("Collection method"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     sample_origin_storage_conditions = forms.CharField(
         required=False,
-        label="Storage conditions",
+        label=_("Storage conditions"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     sample_origin_time_stored = forms.CharField(
         required=False,
-        label="Time stored",
+        label=_("Time stored"),
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
-    PLATFORM_RELATION_CHOICES = (
-        ("illumina_seq", "Illumina"),
-        ("ont_seq", "Oxford Nanopore"),
-        ("pacbio_seq", "PacBio"),
-        ("iontorrent_seq", "Ion Torrent"),
+    SEQUENCING_PLATFORM_CHOICES = (
+        ("illumina_seq", _("Illumina")),
+        ("ont_seq", _("Oxford Nanopore")),
+        ("pacbio_seq", _("PacBio")),
     )
-    PLATFORM_CHOICES = (("platform_independent", "Platform-independent"),) + (
+    PLATFORM_RELATION_CHOICES = SEQUENCING_PLATFORM_CHOICES + (
+        ("iontorrent_seq", _("Ion Torrent")),
+    )
+    PLATFORM_INDEPENDENT_VALUE = "platform_independent"
+    PLATFORM_CHOICES = ((PLATFORM_INDEPENDENT_VALUE, _("Platform-independent")),) + (
         PLATFORM_RELATION_CHOICES
     )
     PLATFORM_SELECTOR_ATTR = "data-platform-selector"
+    PLATFORM_SLUG_TO_LEGACY_VALUE = {
+        slug: platform_choice.value
+        for platform_choice, slug in SampleGroup.PLATFORM_FIELD_MAP.items()
+    }
+
+    sequencing_platform = forms.ChoiceField(
+        choices=SEQUENCING_PLATFORM_CHOICES,
+        required=False,
+        label=_("Sequencing platform"),
+    )
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
+
+        self._normalized_platform_selection: Optional[str] = None
 
         self._configure_sequencing_platform_field()
 
@@ -304,7 +329,31 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = SampleGroup
-        exclude = ["created_by", "sample_origin"]  # Managed manually via form fields
+        fields = [
+            "name",
+            "doi",
+            "source_lab",
+            "contact_email",
+            "contact_phone",
+            "total_samples",
+            "inclusion_criteria",
+            "exclusion_criteria",
+            "input_quality",
+            "comments",
+            "additional_metadata",
+            "reference_genome_build",
+            "genome_complexity",
+            "material_type",
+            "library_construction",
+            "sequencing_platform",
+            "illumina_seq",
+            "ont_seq",
+            "pacbio_seq",
+            "iontorrent_seq",
+            "bioinfo_alignment",
+            "bioinfo_variant_calling",
+            "bioinfo_post_proc",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             # Add widgets for other fields as needed
@@ -324,15 +373,21 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
                 ) from exc
             sample_group.created_by = organization_profile
 
-        selected_platform = self.cleaned_data.get("sequencing_platform") or None
-        if selected_platform:
-            sample_group.sequencing_platform = selected_platform
+        selected_platform = self.cleaned_data.get("sequencing_platform")
+        normalized_platform = self._normalized_platform_selection
+        if normalized_platform is None:
+            normalized_platform = self._normalize_platform_slug(selected_platform)
+        if normalized_platform == self.PLATFORM_INDEPENDENT_VALUE:
+            normalized_platform = None
+
+        if normalized_platform:
+            sample_group.sequencing_platform = normalized_platform
         else:
             sample_group.sequencing_platform = None
 
         platform_fields = {key for key, _ in self.PLATFORM_RELATION_CHOICES}
         for field_name in platform_fields:
-            if selected_platform != field_name and hasattr(sample_group, field_name):
+            if normalized_platform != field_name and hasattr(sample_group, field_name):
                 setattr(sample_group, field_name, None)
 
         origin_payload = {
@@ -390,7 +445,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         if total_samples is None:
             return total_samples
         if total_samples <= 0:
-            raise ValidationError("Total samples must be a positive integer.")
+            raise ValidationError(_("Total samples must be a positive integer."))
         return total_samples
 
     def clean_contact_phone(self):
@@ -405,10 +460,12 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         allowed_chars = set("0123456789+-.() extEXT ")
         if any(char not in allowed_chars for char in cleaned):
             raise ValidationError(
-                "Use digits and common separators (spaces, dashes, parentheses) for the phone number."
+                _(
+                    "Use digits and common separators (spaces, dashes, parentheses) for the phone number."
+                )
             )
         if sum(char.isdigit() for char in cleaned) < 6:
-            raise ValidationError("Enter a phone number with at least six digits.")
+            raise ValidationError(_("Enter a phone number with at least six digits."))
         return cleaned
 
     CREATABLE_METADATA_FIELDS = {
@@ -435,12 +492,19 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             datalist_options = self._build_metadata_datalist(field_name, queryset, lookup_field)
             widget = self.DatalistTextInput(
                 datalist=datalist_options,
-                attrs={"class": self.bootstrap_input_class, "placeholder": "Enter or select a value"},
+                attrs={
+                    "class": self.bootstrap_input_class,
+                    "placeholder": _("Enter or select a value"),
+                },
             )
 
-            help_text = original_field.help_text or ""
-            helper_suffix = "Start typing to select an existing value or enter a new one."
-            help_text = f"{help_text} {helper_suffix}".strip()
+            helper_suffix = _(
+                "Start typing to select an existing value or enter a new one."
+            )
+            if original_field.help_text:
+                help_text = format_lazy("{} {}", original_field.help_text, helper_suffix)
+            else:
+                help_text = helper_suffix
 
             self.fields[field_name] = self.CreatableModelChoiceField(
                 queryset=queryset,
@@ -467,7 +531,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             field = forms.ChoiceField(
                 choices=choices,
                 required=False,
-                label="Sequencing platform",
+                label=_("Sequencing platform"),
             )
             self.fields["sequencing_platform"] = field
         else:
@@ -480,7 +544,7 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
         initial_platform = self._determine_initial_platform()
         if not self.is_bound and initial_platform is not None:
             field.initial = initial_platform
-            self.initial.setdefault("sequencing_platform", initial_platform)
+            self.initial["sequencing_platform"] = initial_platform
 
     def _apply_platform_scope_metadata(self) -> None:
         selector_field = self.fields.get("sequencing_platform")
@@ -496,13 +560,64 @@ class SampleGroupForm(BootstrapFormMixin, forms.ModelForm):
             setattr(widget, "platform_scope", key)
 
     def _determine_initial_platform(self) -> Optional[str]:
-        explicit = getattr(self.instance, "sequencing_platform", None)
+        explicit_value = getattr(self.instance, "sequencing_platform", None)
+        explicit = self._normalize_platform_slug(explicit_value)
         if explicit:
             return explicit
         inferred = self._infer_platform_from_relations()
         if inferred:
             return inferred
-        return "platform_independent"
+        return self.PLATFORM_INDEPENDENT_VALUE
+
+    def _post_clean(self) -> None:
+        normalized = self._normalize_platform_slug(
+            self.cleaned_data.get("sequencing_platform")
+        )
+        self._normalized_platform_selection = normalized
+
+        placeholder: Optional[str]
+        if normalized in (None, self.PLATFORM_INDEPENDENT_VALUE):
+            placeholder = None
+        else:
+            placeholder = self._map_slug_to_legacy_value(normalized)
+
+        if "sequencing_platform" in self.cleaned_data:
+            self.cleaned_data["sequencing_platform"] = placeholder
+
+        try:
+            super()._post_clean()
+        finally:
+            if "sequencing_platform" in self.cleaned_data:
+                self.cleaned_data["sequencing_platform"] = normalized
+
+    @classmethod
+    def _normalize_platform_slug(cls, value: Optional[str]) -> Optional[str]:
+        if not value or not isinstance(value, str):
+            return None
+
+        normalized = value.strip()
+        if not normalized:
+            return None
+
+        valid_slugs = {
+            cls.PLATFORM_INDEPENDENT_VALUE,
+            *[key for key, _ in cls.PLATFORM_RELATION_CHOICES],
+        }
+        if normalized in valid_slugs:
+            return normalized
+
+        try:
+            enum_value = SampleGroup.SequencingPlatform(normalized)
+        except ValueError:
+            return None
+
+        return SampleGroup.PLATFORM_FIELD_MAP.get(enum_value)
+
+    @classmethod
+    def _map_slug_to_legacy_value(cls, slug: Optional[str]) -> Optional[str]:
+        if not slug:
+            return None
+        return cls.PLATFORM_SLUG_TO_LEGACY_VALUE.get(slug)
 
     def _infer_platform_from_relations(self) -> Optional[str]:
         for field_name, _ in self.PLATFORM_RELATION_CHOICES:
@@ -541,7 +656,7 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
     data_file = forms.FileField(
         required=True,
         widget=forms.ClearableFileInput(attrs={"class": "form-control"}),
-        help_text=(
+        help_text=_(
             "Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants you want to ingest."
         ),
     )
@@ -554,23 +669,25 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
         configured_limit = getattr(settings, "METAGAP_MAX_UPLOAD_SIZE_MB", None)
         self.max_upload_size_mb = configured_limit or self.DEFAULT_MAX_SIZE_MB
         self.max_upload_size_bytes = int(self.max_upload_size_mb * 1024 * 1024)
-        help_text = (
-            "Files up to %(limit)s&nbsp;MB are accepted. Ensure the header includes metadata"
-            " sections for your sample group." % {"limit": self.max_upload_size_mb}
+        help_text = _(
+            "Files up to %(limit)s MB are accepted. Ensure the header includes metadata sections for your sample group."
+        ) % {"limit": self.max_upload_size_mb}
+        self.fields["data_file"].help_text = format_html(
+            "{}<br>{}", self.fields["data_file"].help_text, help_text
         )
-        self.fields["data_file"].help_text = format_html("{}<br>{}", self.fields["data_file"].help_text, help_text)
 
     def clean_data_file(self):
         uploaded = self.cleaned_data.get("data_file")
         if not uploaded:
-            raise ValidationError("Select a VCF or BCF file to import.")
+            raise ValidationError(_("Select a VCF or BCF file to import."))
 
         name = uploaded.name or ""
         normalized_name = name.lower()
         is_supported = any(normalized_name.endswith(ext) for ext in self.SUPPORTED_EXTENSIONS)
         if not is_supported:
             raise ValidationError(
-                "Unsupported file type. Please upload a file ending in %s." % ", ".join(sorted(self.SUPPORTED_EXTENSIONS))
+                _("Unsupported file type. Please upload a file ending in %(extensions)s.")
+                % {"extensions": ", ".join(sorted(self.SUPPORTED_EXTENSIONS))}
             )
 
         file_size = getattr(uploaded, "size", None)
@@ -578,13 +695,16 @@ class ImportDataForm(BootstrapFormMixin, forms.Form):
             file_size = uploaded.file.size if hasattr(uploaded, "file") else None
         if file_size is not None and file_size > self.max_upload_size_bytes:
             raise ValidationError(
-                f"Files larger than {self.max_upload_size_mb} MB cannot be imported."
+                _("Files larger than %(limit)s MB cannot be imported.")
+                % {"limit": self.max_upload_size_mb}
             )
 
         content_type = getattr(uploaded, "content_type", "")
         if content_type and content_type not in self.SUPPORTED_CONTENT_TYPES:
             raise ValidationError(
-                "The uploaded file does not look like a VCF/BCF file. Please check the format and try again."
+                _(
+                    "The uploaded file does not look like a VCF/BCF file. Please check the format and try again."
+                )
             )
 
         return uploaded
@@ -593,9 +713,9 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
     password = None  # Exclude password field
     organization_name = forms.CharField(
         required=False,
-        label="Organization Name",
+        label=_("Organization name"),
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Organization"}
+            attrs={"class": "form-control", "placeholder": _("Organization")}
         ),
     )
 
@@ -620,12 +740,12 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if not email:
-            raise ValidationError("Please provide a valid email address.")
+            raise ValidationError(_("Please provide a valid email address."))
         queryset = User.objects.filter(email__iexact=email)
         if self.instance.pk:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
-            raise ValidationError("Another user is already using this email address.")
+            raise ValidationError(_("Another user is already using this email address."))
         return email
 
     def save(self, commit=True):
@@ -643,6 +763,6 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
 class DeleteAccountForm(BootstrapFormMixin, forms.Form):
     confirm = forms.BooleanField(
         required=True,
-        label="I confirm that I want to delete my account.",
+        label=_("I confirm that I want to delete my account."),
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )

@@ -15,6 +15,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class OrganizationProfile(models.Model):
@@ -67,9 +68,9 @@ class MaterialType(models.Model):
     """Material type and integrity information."""
 
     MATERIAL_CHOICES = [
-        ("DNA", "DNA"),
-        ("RNA", "RNA"),
-        ("cDNA", "cDNA"),
+        ("DNA", _("DNA")),
+        ("RNA", _("RNA")),
+        ("cDNA", _("cDNA")),
     ]
 
     material_type = models.CharField(
@@ -104,7 +105,7 @@ def _format_attributes(*attributes: tuple[str, Any]) -> str:
         if value not in (None, ""):
             parts.append(f"{label}: {value}" if label else str(value))
 
-    return ", ".join(parts) if parts else "Not provided"
+    return ", ".join(parts) if parts else _("Not provided")
 
 
 class SequencingInstrument(models.Model):
@@ -128,10 +129,10 @@ class IlluminaSeq(SequencingInstrument):
     def __str__(self) -> str:
         return _format_attributes(
             ("", self.instrument),
-            ("Flow Cell", self.flow_cell),
-            ("Channel method", self.channel_method),
-            ("Cluster density", self.cluster_density),
-            ("QC software", self.qc_software),
+            (_("Flow Cell"), self.flow_cell),
+            (_("Channel method"), self.channel_method),
+            (_("Cluster density"), self.cluster_density),
+            (_("QC software"), self.qc_software),
         )
 
 
@@ -145,9 +146,9 @@ class OntSeq(SequencingInstrument):
     def __str__(self) -> str:
         return _format_attributes(
             ("", self.instrument),
-            ("Flow Cell Version", self.flow_cell_version),
-            ("Pore type", self.pore_type),
-            ("Bias voltage", self.bias_voltage),
+            (_("Flow Cell Version"), self.flow_cell_version),
+            (_("Pore type"), self.pore_type),
+            (_("Bias voltage"), self.bias_voltage),
         )
 
 
@@ -160,8 +161,8 @@ class PacBioSeq(SequencingInstrument):
     def __str__(self) -> str:
         return _format_attributes(
             ("", self.instrument),
-            ("SMRT Cell Type", self.smrt_cell_type),
-            ("ZMW density", self.zmw_density),
+            (_("SMRT Cell Type"), self.smrt_cell_type),
+            (_("ZMW density"), self.zmw_density),
         )
 
 
@@ -176,10 +177,10 @@ class IonTorrentSeq(SequencingInstrument):
     def __str__(self) -> str:
         return _format_attributes(
             ("", self.instrument),
-            ("Chip Type", self.chip_type),
-            ("pH calibration", self.ph_calibration),
-            ("Flow order", self.flow_order),
-            ("Ion sphere metrics", self.ion_sphere_metrics),
+            (_("Chip Type"), self.chip_type),
+            (_("pH calibration"), self.ph_calibration),
+            (_("Flow order"), self.flow_order),
+            (_("Ion sphere metrics"), self.ion_sphere_metrics),
         )
 
 
@@ -193,10 +194,10 @@ class BioinfoAlignment(models.Model):
 
     def __str__(self) -> str:
         return _format_attributes(
-            ("Tool", self.tool or "Unknown"),
-            ("Parameters", self.params),
-            ("Ref Genome Version", self.ref_genome_version),
-            ("Recalibration settings", self.recalibration_settings),
+            (_("Tool"), self.tool or _("Unknown")),
+            (_("Parameters"), self.params),
+            (_("Ref Genome Version"), self.ref_genome_version),
+            (_("Recalibration settings"), self.recalibration_settings),
         )
 
 
@@ -211,11 +212,11 @@ class BioinfoVariantCalling(models.Model):
 
     def __str__(self) -> str:
         return _format_attributes(
-            ("Tool", self.tool),
-            ("Version", self.version),
-            ("Filtering thresholds", self.filtering_thresholds),
-            ("Duplicate handling", self.duplicate_handling),
-            ("MQ", self.mq),
+            (_("Tool"), self.tool),
+            (_("Version"), self.version),
+            (_("Filtering thresholds"), self.filtering_thresholds),
+            (_("Duplicate handling"), self.duplicate_handling),
+            (_("MQ"), self.mq),
         )
 
 
@@ -227,8 +228,8 @@ class BioinfoPostProc(models.Model):
 
     def __str__(self) -> str:
         return _format_attributes(
-            ("Normalization", self.normalization),
-            ("Harmonization", self.harmonization),
+            (_("Normalization"), self.normalization),
+            (_("Harmonization"), self.harmonization),
         )
 
 
@@ -369,16 +370,16 @@ class SampleGroup(models.Model):
     """A group of samples along with the associated metadata."""
 
     SEQUENCING_PLATFORM_FIELDS: ClassVar[Tuple[Tuple[str, str], ...]] = (
-        ("illumina_seq", "Illumina"),
-        ("ont_seq", "Oxford Nanopore"),
-        ("pacbio_seq", "PacBio"),
-        ("iontorrent_seq", "Ion Torrent"),
+        ("illumina_seq", _("Illumina")),
+        ("ont_seq", _("Oxford Nanopore")),
+        ("pacbio_seq", _("PacBio")),
+        ("iontorrent_seq", _("Ion Torrent")),
     )
     class SequencingPlatform(models.TextChoices):
-        ILLUMINA = "illumina", "Illumina"
-        ONT = "ont", "ONT"
-        PACBIO = "pacbio", "PacBio"
-        ION_TORRENT = "ion_torrent", "Ion Torrent"
+        ILLUMINA = "illumina", _("Illumina")
+        ONT = "ont", _("ONT")
+        PACBIO = "pacbio", _("PacBio")
+        ION_TORRENT = "ion_torrent", _("Ion Torrent")
 
     PLATFORM_FIELD_MAP = {
         SequencingPlatform.ILLUMINA: "illumina_seq",
@@ -489,9 +490,11 @@ class SampleGroup(models.Model):
         return self.name
 
     @staticmethod
-    def _normalize_platform_key(value: str) -> str:
-        if not isinstance(value, str):
+    def _normalize_platform_key(value: Any) -> str:
+        if value in (None, ""):
             return ""
+        if not isinstance(value, str):
+            value = str(value)
         return "_".join(value.strip().lower().replace("-", " ").split())
 
     @classmethod

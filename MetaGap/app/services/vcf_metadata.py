@@ -537,6 +537,25 @@ class VCFMetadataParser:
         section_values: Dict[str, Any] = {}
         section_keys: set[str] = set()
 
+        if alias_map:
+            alias_section_keys: set[str] = set()
+            for field_name, aliases in alias_map.items():
+                canonical_field = normalize_metadata_key(field_name)
+                if canonical_field:
+                    alias_section_keys.add(canonical_field)
+                    collapsed = canonical_field.replace("_", "")
+                    if collapsed:
+                        alias_section_keys.add(collapsed)
+                for alias in aliases:
+                    normalized_alias = normalize_alias_key(alias)
+                    if normalized_alias:
+                        alias_section_keys.add(normalized_alias)
+                        collapsed = normalized_alias.replace("_", "")
+                        if collapsed:
+                            alias_section_keys.add(collapsed)
+            if alias_section_keys:
+                section_keys.update(alias_section_keys)
+
         if restrict_to_section and alias_map:
             alias_keys_to_remove = {
                 normalize_metadata_key(field_name)

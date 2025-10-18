@@ -1,21 +1,23 @@
 {% extends "base.html" %}
 {% load render_table from django_tables2 %}
+{% load i18n %}
 
-{% block title %}Sample Groups - MetaGaP{% endblock %}
+{% block title %}{% blocktrans with site_name=SITE_NAME %}Sample Groups - {{ site_name }}{% endblocktrans %}{% endblock %}
 
 {% block breadcrumbs %}
-{% include 'partials/breadcrumbs.html' with breadcrumb_title='Sample Groups' %}
+{% trans "Sample Groups" as breadcrumb_label %}
+{% include 'partials/breadcrumbs.html' with breadcrumb_title=breadcrumb_label %}
 {% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-  <h1 class="mb-3">Sample Groups</h1>
+  <h1 class="mb-3">{% trans "Sample Groups" %}</h1>
   {% if table %}
     <div class="table-responsive">
       {% render_table table %}
     </div>
   {% else %}
-    <p>No sample groups are available.</p>
+    <p>{% trans "No sample groups are available." %}</p>
   {% endif %}
 </div>
 {% endblock %}

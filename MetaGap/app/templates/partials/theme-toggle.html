@@ -1,10 +1,13 @@
+{% load i18n %}
 <div class="theme-toggle">
     <button id="themeToggle"
             class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2"
             type="button"
-            aria-label="Toggle color theme">
+            aria-label="{% trans "Toggle color theme" %}"
+            data-label-light="{% trans "Light" %}"
+            data-label-dark="{% trans "Dark" %}">
         <i class="fa-solid fa-sun" data-icon-light></i>
         <i class="fa-solid fa-moon d-none" data-icon-dark></i>
-        <span class="d-none d-sm-inline" data-theme-label>Light</span>
+        <span class="d-none d-sm-inline" data-theme-label>{% trans "Light" %}</span>
     </button>
 </div>

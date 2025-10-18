@@ -1,0 +1,767 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-10-12 21:01+0000\n"
+"PO-Revision-Date: 2025-10-12 21:30+0000\n"
+"Last-Translator: AI Assistant <noreply@example.com>\n"
+"Language-Team: English <LL@li.org>\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: app/filters.py:28 app/filters.py:409
+msgid "Search"
+msgstr "Search"
+
+#: app/filters.py:29
+msgid "Chrom"
+msgstr "Chrom"
+
+#: app/filters.py:31
+msgid "Position (min)"
+msgstr "Position (min)"
+
+#: app/filters.py:34
+msgid "Position (max)"
+msgstr "Position (max)"
+
+#: app/filters.py:37
+msgid "Position"
+msgstr "Position"
+
+#: app/filters.py:40 app/filters.py:255
+msgid "Reference"
+msgstr "Reference"
+
+#: app/filters.py:43 app/filters.py:260
+msgid "Alternate"
+msgstr "Alternate"
+
+#: app/filters.py:46
+msgid "Filter is PASS"
+msgstr "Filter is PASS"
+
+#: app/filters.py:49
+msgid "QUAL (min)"
+msgstr "QUAL (min)"
+
+#: app/filters.py:52
+msgid "QUAL (max)"
+msgstr "QUAL (max)"
+
+#: app/filters.py:55
+msgid "AF (min)"
+msgstr "AF (min)"
+
+#: app/filters.py:58
+msgid "AF (max)"
+msgstr "AF (max)"
+
+#: app/filters.py:61
+msgid "DP (min)"
+msgstr "DP (min)"
+
+#: app/filters.py:64
+msgid "DP (max)"
+msgstr "DP (max)"
+
+#: app/filters.py:67
+msgid "MQ (min)"
+msgstr "MQ (min)"
+
+#: app/filters.py:70
+msgid "MQ (max)"
+msgstr "MQ (max)"
+
+#: app/filters.py:73
+msgid "QD (min)"
+msgstr "QD (min)"
+
+#: app/filters.py:76
+msgid "QD (max)"
+msgstr "QD (max)"
+
+#: app/filters.py:79
+msgid "FS (min)"
+msgstr "FS (min)"
+
+#: app/filters.py:82
+msgid "FS (max)"
+msgstr "FS (max)"
+
+#: app/filters.py:85
+msgid "SOR (min)"
+msgstr "SOR (min)"
+
+#: app/filters.py:88
+msgid "SOR (max)"
+msgstr "SOR (max)"
+
+#: app/filters.py:94 app/filters.py:305 app/views.py:584
+msgid "Source lab"
+msgstr "Source lab"
+
+#: app/filters.py:99 app/tables.py:220
+msgid "Sample tissue"
+msgstr "Sample tissue"
+
+#: app/filters.py:104 app/tables.py:254
+msgid "Variant calling tool"
+msgstr "Variant calling tool"
+
+#: app/filters.py:109
+msgid "Variant calling version"
+msgstr "Variant calling version"
+
+#: app/filters.py:114 app/tables.py:250
+msgid "Alignment tool"
+msgstr "Alignment tool"
+
+#: app/filters.py:119
+msgid "Alignment reference genome"
+msgstr "Alignment reference genome"
+
+#: app/filters.py:124
+msgid "Alignment recalibration"
+msgstr "Alignment recalibration"
+
+#: app/filters.py:235
+msgid "Keyword"
+msgstr "Keyword"
+
+#: app/filters.py:240 app/tables.py:188
+msgid "Chromosome"
+msgstr "Chromosome"
+
+#: app/filters.py:245
+msgid "Position ≥"
+msgstr "Position ≥"
+
+#: app/filters.py:250
+msgid "Position ≤"
+msgstr "Position ≤"
+
+#: app/filters.py:264
+msgid "PASS only"
+msgstr "PASS only"
+
+#: app/filters.py:270
+msgid "Quality ≥"
+msgstr "Quality ≥"
+
+#: app/filters.py:275
+msgid "AF ≥"
+msgstr "AF ≥"
+
+#: app/filters.py:280
+msgid "AC ≥"
+msgstr "AC ≥"
+
+#: app/filters.py:285
+msgid "AN ≥"
+msgstr "AN ≥"
+
+#: app/filters.py:290
+msgid "DP ≥"
+msgstr "DP ≥"
+
+#: app/filters.py:295
+msgid "MQ ≥"
+msgstr "MQ ≥"
+
+#: app/filters.py:300 app/tables.py:206
+msgid "Sample group"
+msgstr "Sample group"
+
+#: app/filters.py:310 app/forms.py:263
+msgid "Tissue"
+msgstr "Tissue"
+
+#: app/filters.py:315
+msgid "Variant caller"
+msgstr "Variant caller"
+
+#: app/forms.py:141
+msgid "Search the catalogue"
+msgstr "Search the catalogue"
+
+#: app/forms.py:144
+msgid "Variant ID, coordinate, or keyword"
+msgstr "Variant ID, coordinate, or keyword"
+
+#: app/forms.py:153
+msgid "Email address"
+msgstr "Email address"
+
+#: app/forms.py:159
+msgid "Username"
+msgstr "Username"
+
+#: app/forms.py:164 app/forms.py:716
+msgid "Organization name"
+msgstr "Organization name"
+
+#: app/forms.py:166 app/forms.py:718
+msgid "Organization"
+msgstr "Organization"
+
+#: app/forms.py:170 app/forms.py:172
+msgid "Password"
+msgstr "Password"
+
+#: app/forms.py:176 app/forms.py:178
+msgid "Confirm password"
+msgstr "Confirm password"
+
+#: app/forms.py:189
+msgid "Please provide an email address so we can contact you."
+msgstr "Please provide an email address so we can contact you."
+
+#: app/forms.py:191
+msgid "An account with this email address already exists."
+msgstr "An account with this email address already exists."
+
+#: app/forms.py:268 app/tables.py:221
+msgid "Collection method"
+msgstr "Collection method"
+
+#: app/forms.py:273 app/tables.py:222
+msgid "Storage conditions"
+msgstr "Storage conditions"
+
+#: app/forms.py:278 app/tables.py:223
+msgid "Time stored"
+msgstr "Time stored"
+
+#: app/forms.py:283
+msgid "Illumina"
+msgstr "Illumina"
+
+#: app/forms.py:284
+msgid "Oxford Nanopore"
+msgstr "Oxford Nanopore"
+
+#: app/forms.py:285
+msgid "PacBio"
+msgstr "PacBio"
+
+#: app/forms.py:288
+msgid "Ion Torrent"
+msgstr "Ion Torrent"
+
+#: app/forms.py:291
+msgid "Platform-independent"
+msgstr "Platform-independent"
+
+#: app/forms.py:303 app/forms.py:534 app/views.py:568
+msgid "Sequencing platform"
+msgstr "Sequencing platform"
+
+#: app/forms.py:448
+msgid "Total samples must be a positive integer."
+msgstr "Total samples must be a positive integer."
+
+#: app/forms.py:464
+msgid ""
+"Use digits and common separators (spaces, dashes, parentheses) for the phone"
+" number."
+msgstr ""
+"Use digits and common separators (spaces, dashes, parentheses) for the phone"
+" number."
+
+#: app/forms.py:468
+msgid "Enter a phone number with at least six digits."
+msgstr "Enter a phone number with at least six digits."
+
+#: app/forms.py:497
+msgid "Enter or select a value"
+msgstr "Enter or select a value"
+
+#: app/forms.py:502
+msgid "Start typing to select an existing value or enter a new one."
+msgstr "Start typing to select an existing value or enter a new one."
+
+#: app/forms.py:660
+msgid ""
+"Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants "
+"you want to ingest."
+msgstr ""
+"Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants "
+"you want to ingest."
+
+#: app/forms.py:673
+#, python-format
+msgid ""
+"Files up to %(limit)s MB are accepted. Ensure the header includes metadata "
+"sections for your sample group."
+msgstr ""
+"Files up to %(limit)s MB are accepted. Ensure the header includes metadata "
+"sections for your sample group."
+
+#: app/forms.py:682
+msgid "Select a VCF or BCF file to import."
+msgstr "Select a VCF or BCF file to import."
+
+#: app/forms.py:689
+#, python-format
+msgid "Unsupported file type. Please upload a file ending in %(extensions)s."
+msgstr "Unsupported file type. Please upload a file ending in %(extensions)s."
+
+#: app/forms.py:698
+#, python-format
+msgid "Files larger than %(limit)s MB cannot be imported."
+msgstr "Files larger than %(limit)s MB cannot be imported."
+
+#: app/forms.py:706
+msgid ""
+"The uploaded file does not look like a VCF/BCF file. Please check the format"
+" and try again."
+msgstr ""
+"The uploaded file does not look like a VCF/BCF file. Please check the format"
+" and try again."
+
+#: app/forms.py:743
+msgid "Please provide a valid email address."
+msgstr "Please provide a valid email address."
+
+#: app/forms.py:748
+msgid "Another user is already using this email address."
+msgstr "Another user is already using this email address."
+
+#: app/forms.py:766
+msgid "I confirm that I want to delete my account."
+msgstr "I confirm that I want to delete my account."
+
+#: app/services/vcf_importer.py:200
+msgid "The uploaded file is not valid."
+msgstr "The uploaded file is not valid."
+
+#: app/tables.py:189
+msgid "Position (bp)"
+msgstr "Position (bp)"
+
+#: app/tables.py:190
+msgid "Reference allele"
+msgstr "Reference allele"
+
+#: app/tables.py:191
+msgid "Alternate allele"
+msgstr "Alternate allele"
+
+#: app/tables.py:192
+msgid "QUAL"
+msgstr "QUAL"
+
+#: app/tables.py:193
+msgid "Filter status"
+msgstr "Filter status"
+
+#: app/tables.py:194
+msgid "Allele frequency (AF)"
+msgstr "Allele frequency (AF)"
+
+#: app/tables.py:195
+msgid "Allele count (AC)"
+msgstr "Allele count (AC)"
+
+#: app/tables.py:196
+msgid "Alleles analysed (AN)"
+msgstr "Alleles analysed (AN)"
+
+#: app/tables.py:197
+msgid "Read depth (DP)"
+msgstr "Read depth (DP)"
+
+#: app/tables.py:198
+msgid "Mapping quality (MQ)"
+msgstr "Mapping quality (MQ)"
+
+#: app/tables.py:199
+msgid "Quality by depth (QD)"
+msgstr "Quality by depth (QD)"
+
+#: app/tables.py:200
+msgid "Fisher strand (FS)"
+msgstr "Fisher strand (FS)"
+
+#: app/tables.py:201
+msgid "Strand odds ratio (SOR)"
+msgstr "Strand odds ratio (SOR)"
+
+#: app/tables.py:202
+msgid "Samples counted (NS)"
+msgstr "Samples counted (NS)"
+
+#: app/tables.py:203
+msgid "Strand bias (SB)"
+msgstr "Strand bias (SB)"
+
+#: app/tables.py:204
+msgid "Variant ID"
+msgstr "Variant ID"
+
+#: app/tables.py:205
+msgid "Variant comments"
+msgstr "Variant comments"
+
+#: app/tables.py:207
+msgid "Source laboratory"
+msgstr "Source laboratory"
+
+#: app/tables.py:208 app/views.py:583
+msgid "DOI"
+msgstr "DOI"
+
+#: app/tables.py:209 app/views.py:586
+msgid "Contact email"
+msgstr "Contact email"
+
+#: app/tables.py:210 app/views.py:587
+msgid "Contact phone"
+msgstr "Contact phone"
+
+#: app/tables.py:211 app/views.py:585
+msgid "Total samples"
+msgstr "Total samples"
+
+#: app/tables.py:212
+msgid "Inclusion criteria"
+msgstr "Inclusion criteria"
+
+#: app/tables.py:213
+msgid "Exclusion criteria"
+msgstr "Exclusion criteria"
+
+#: app/tables.py:214
+msgid "Group comments"
+msgstr "Group comments"
+
+#: app/tables.py:215
+msgid "Reference build"
+msgstr "Reference build"
+
+#: app/tables.py:216
+msgid "Reference build version"
+msgstr "Reference build version"
+
+#: app/tables.py:217
+msgid "Genome size"
+msgstr "Genome size"
+
+#: app/tables.py:218
+msgid "Genome ploidy"
+msgstr "Genome ploidy"
+
+#: app/tables.py:219
+msgid "Genome GC content"
+msgstr "Genome GC content"
+
+#: app/tables.py:224 app/views.py:626
+msgid "Material type"
+msgstr "Material type"
+
+#: app/tables.py:225
+msgid "Integrity number"
+msgstr "Integrity number"
+
+#: app/tables.py:226
+msgid "Library kit"
+msgstr "Library kit"
+
+#: app/tables.py:227
+msgid "Fragmentation"
+msgstr "Fragmentation"
+
+#: app/tables.py:228
+msgid "Adapter ligation efficiency"
+msgstr "Adapter ligation efficiency"
+
+#: app/tables.py:229
+msgid "PCR cycles"
+msgstr "PCR cycles"
+
+#: app/tables.py:230
+msgid "Illumina instrument"
+msgstr "Illumina instrument"
+
+#: app/tables.py:231
+msgid "Illumina flow cell"
+msgstr "Illumina flow cell"
+
+#: app/tables.py:232
+msgid "Illumina channel method"
+msgstr "Illumina channel method"
+
+#: app/tables.py:233
+msgid "Illumina cluster density"
+msgstr "Illumina cluster density"
+
+#: app/tables.py:234
+msgid "Illumina QC software"
+msgstr "Illumina QC software"
+
+#: app/tables.py:235
+msgid "ONT instrument"
+msgstr "ONT instrument"
+
+#: app/tables.py:236
+msgid "ONT flow cell"
+msgstr "ONT flow cell"
+
+#: app/tables.py:237
+msgid "ONT flow cell version"
+msgstr "ONT flow cell version"
+
+#: app/tables.py:238
+msgid "ONT pore type"
+msgstr "ONT pore type"
+
+#: app/tables.py:239
+msgid "ONT bias voltage"
+msgstr "ONT bias voltage"
+
+#: app/tables.py:240
+msgid "PacBio instrument"
+msgstr "PacBio instrument"
+
+#: app/tables.py:241
+msgid "PacBio flow cell"
+msgstr "PacBio flow cell"
+
+#: app/tables.py:242
+msgid "PacBio SMRT cell type"
+msgstr "PacBio SMRT cell type"
+
+#: app/tables.py:243
+msgid "PacBio ZMW density"
+msgstr "PacBio ZMW density"
+
+#: app/tables.py:244
+msgid "Ion Torrent instrument"
+msgstr "Ion Torrent instrument"
+
+#: app/tables.py:245
+msgid "Ion Torrent flow cell"
+msgstr "Ion Torrent flow cell"
+
+#: app/tables.py:246
+msgid "Ion Torrent chip type"
+msgstr "Ion Torrent chip type"
+
+#: app/tables.py:247
+msgid "Ion Torrent pH calibration"
+msgstr "Ion Torrent pH calibration"
+
+#: app/tables.py:248
+msgid "Ion Torrent flow order"
+msgstr "Ion Torrent flow order"
+
+#: app/tables.py:249
+msgid "Ion Sphere metrics"
+msgstr "Ion Sphere metrics"
+
+#: app/tables.py:251
+msgid "Alignment parameters"
+msgstr "Alignment parameters"
+
+#: app/tables.py:252
+msgid "Reference genome version"
+msgstr "Reference genome version"
+
+#: app/tables.py:253
+msgid "Recalibration settings"
+msgstr "Recalibration settings"
+
+#: app/tables.py:255
+msgid "Variant caller version"
+msgstr "Variant caller version"
+
+#: app/tables.py:256
+msgid "Variant filtering thresholds"
+msgstr "Variant filtering thresholds"
+
+#: app/tables.py:257
+msgid "Duplicate handling"
+msgstr "Duplicate handling"
+
+#: app/tables.py:258
+msgid "Variant caller MQ"
+msgstr "Variant caller MQ"
+
+#: app/tables.py:259
+msgid "Post-processing normalization"
+msgstr "Post-processing normalization"
+
+#: app/tables.py:260
+msgid "Post-processing harmonization"
+msgstr "Post-processing harmonization"
+
+#: app/tables.py:261
+msgid "Input A260/A280"
+msgstr "Input A260/A280"
+
+#: app/tables.py:262
+msgid "Input A260/A230"
+msgstr "Input A260/A230"
+
+#: app/tables.py:263 app/views.py:653
+msgid "DNA concentration"
+msgstr "DNA concentration"
+
+#: app/tables.py:264 app/views.py:658
+msgid "RNA concentration"
+msgstr "RNA concentration"
+
+#: app/tables.py:265
+msgid "Input quality notes"
+msgstr "Input quality notes"
+
+#: app/views.py:242
+msgid "Sample group not found."
+msgstr "Sample group not found."
+
+#: app/views.py:376
+msgid "Your profile has been updated."
+msgstr "Your profile has been updated."
+
+#: app/views.py:389
+msgid "Your account has been deleted."
+msgstr "Your account has been deleted."
+
+#: app/views.py:400 app/views.py:401 app/views.py:455 app/views.py:456
+msgid "Cancel"
+msgstr "Cancel"
+
+#: app/views.py:443
+msgid "Sample group metadata updated successfully."
+msgstr "Sample group metadata updated successfully."
+
+#: app/views.py:489
+#, python-format
+msgid "Deleted %(group)s successfully."
+msgstr "Deleted %(group)s successfully."
+
+#: app/views.py:580
+msgid "Summary"
+msgstr "Summary"
+
+#: app/views.py:582
+msgid "Name"
+msgstr "Name"
+
+#: app/views.py:589
+msgid "Created by"
+msgstr "Created by"
+
+#: app/views.py:597
+msgid "Criteria"
+msgstr "Criteria"
+
+#: app/views.py:599
+msgid "Inclusion"
+msgstr "Inclusion"
+
+#: app/views.py:600
+msgid "Exclusion"
+msgstr "Exclusion"
+
+#: app/views.py:601
+msgid "Comments"
+msgstr "Comments"
+
+#: app/views.py:605
+msgid "Sample & Material"
+msgstr "Sample & Material"
+
+#: app/views.py:608
+msgid "Reference genome build"
+msgstr "Reference genome build"
+
+#: app/views.py:617
+msgid "Genome complexity"
+msgstr "Genome complexity"
+
+#: app/views.py:625
+msgid "Sample origin"
+msgstr "Sample origin"
+
+#: app/views.py:627
+msgid "Library construction"
+msgstr "Library construction"
+
+#: app/views.py:631
+msgid "Sequencing & Bioinformatics"
+msgstr "Sequencing & Bioinformatics"
+
+#: app/views.py:634
+msgid "Alignment"
+msgstr "Alignment"
+
+#: app/views.py:635
+msgid "Variant calling"
+msgstr "Variant calling"
+
+#: app/views.py:636
+msgid "Post-processing"
+msgstr "Post-processing"
+
+#: app/views.py:640
+msgid "Input Quality"
+msgstr "Input Quality"
+
+#: app/views.py:643
+msgid "A260/A280"
+msgstr "A260/A280"
+
+#: app/views.py:648
+msgid "A260/A230"
+msgstr "A260/A230"
+
+#: app/views.py:663
+msgid "Notes"
+msgstr "Notes"
+
+#: app/views.py:675
+msgid "Custom metadata"
+msgstr "Custom metadata"
+
+#: app/views.py:728 app/views.py:788
+msgid ""
+"We could not import the file because some required metadata was missing or "
+"invalid."
+msgstr ""
+"We could not import the file because some required metadata was missing or "
+"invalid."
+
+#: app/views.py:742
+msgid ""
+"An unexpected error occurred while importing the file. Please review the "
+"file and try again."
+msgstr ""
+"An unexpected error occurred while importing the file. Please review the "
+"file and try again."
+
+#: app/views.py:748
+msgid ""
+"Something went wrong while processing the upload. Check the error above for "
+"details."
+msgstr ""
+"Something went wrong while processing the upload. Check the error above for "
+"details."
+
+#: app/views.py:764
+#, python-format
+msgid "Imported %(group)s successfully."
+msgstr "Imported %(group)s successfully."
+
+#: app/views.py:779
+msgid "An error occurred while importing the provided file."
+msgstr "An error occurred while importing the provided file."

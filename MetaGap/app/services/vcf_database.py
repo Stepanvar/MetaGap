@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, Optional, Tuple
 
@@ -79,6 +80,8 @@ class VCFDatabaseWriter:
     ) -> SampleGroup:
         parser_consumed_raw = metadata.pop("_consumed_keys", None)
         parser_consumed = set(parser_consumed_raw or [])
+        if isinstance(metadata.get("_section_key_map"), dict):
+            parser_consumed.add("_section_key_map")
 
         group_data, group_consumed, group_additional = self._extract_section_data(
             metadata, "sample_group", SampleGroup
@@ -86,14 +89,21 @@ class VCFDatabaseWriter:
 
         consumed_keys = set(group_consumed)
         consumed_keys.update(parser_consumed)
+        section_overrides = metadata.pop("_section_additional_fields", None)
+        if isinstance(section_overrides, dict):
+            consumed_keys.add("_section_additional_fields")
         additional_metadata: Dict[str, Any] = {}
-        parser_additional = metadata.get("additional_metadata")
+        parser_additional = metadata.pop("additional_metadata", None)
         if isinstance(parser_additional, dict):
             for key, value in parser_additional.items():
                 additional_metadata[key] = self._coerce_additional_value(value)
             consumed_keys.add("additional_metadata")
         if group_additional:
             additional_metadata.update(group_additional)
+
+        self._consume_additional_metadata_buffer(
+            metadata, additional_metadata, consumed_keys
+        )
 
         fallback_name = os.path.splitext(os.path.basename(file_path))[0]
         name_candidate = group_data.pop("name", None)
@@ -141,6 +151,9 @@ class VCFDatabaseWriter:
                 )
 
                 consumed_keys.update(section_consumed)
+                self._consume_additional_metadata_buffer(
+                    metadata, additional_metadata, consumed_keys
+                )
                 if not section_data and additional is None:
                     continue
 
@@ -165,6 +178,10 @@ class VCFDatabaseWriter:
                 setattr(sample_group, section, instance)
                 if section not in update_fields:
                     update_fields.append(section)
+
+            self._consume_additional_metadata_buffer(
+                metadata, additional_metadata, consumed_keys
+            )
 
             for key, value in metadata.items():
                 if key in consumed_keys:
@@ -204,10 +221,90 @@ class VCFDatabaseWriter:
         consumed: set[str] = set()
         skip_set = set(skip_keys or [])
         normalized_section = normalize_metadata_key(section)
+        raw_section_key_map = metadata.get("_section_key_map")
+        normalized_key_sections: dict[str, set[str]] = {}
+        if isinstance(raw_section_key_map, dict):
+            for key, sections in raw_section_key_map.items():
+                normalized_key = normalize_metadata_key(key)
+                if not normalized_key:
+                    continue
+                normalized_sections: set[str] = set()
+                if isinstance(sections, (list, tuple, set)):
+                    candidates = sections
+                else:
+                    candidates = [sections]
+                for candidate in candidates:
+                    normalized_candidate = normalize_metadata_key(candidate)
+                    if normalized_candidate:
+                        normalized_sections.add(normalized_candidate)
+                if normalized_sections:
+                    normalized_key_sections[normalized_key] = normalized_sections
+
+        def key_matches_section(candidate: str) -> bool:
+            if not normalized_key_sections:
+                return True
+            normalized_key = normalize_metadata_key(candidate)
+            if not normalized_key:
+                return True
+            allowed_sections = normalized_key_sections.get(normalized_key)
+            if not allowed_sections:
+                return True
+            if not normalized_section:
+                return True
+            return normalized_section in allowed_sections
+        drop_fields, instruction_consumed = self._collect_section_additional_fields(
+            metadata, section, alias_map, skip_set
+        )
+        if drop_fields:
+            section_overrides = metadata.setdefault("_section_additional_fields", {})
+            if isinstance(section_overrides, dict):
+                section_overrides[section] = sorted(drop_fields)
+        if instruction_consumed:
+            consumed.update(instruction_consumed)
+
+        preserve_suffixes: set[str] = set()
 
         for field_name, aliases in alias_map.items():
             model_field = self._get_model_field(model_cls, field_name)
             if model_field is None:
+                continue
+            normalized_field = normalize_metadata_key(field_name)
+            if normalized_field in drop_fields:
+                key = self._find_metadata_key(
+                    metadata,
+                    section,
+                    field_name,
+                    aliases,
+                    skip_keys=skip_set | consumed,
+                )
+                if key is None or not key_matches_section(key):
+                    continue
+                raw_value = metadata[key]
+                self._store_dropped_field_value(
+                    metadata, section, normalized_field, raw_value
+                )
+
+                consumed.add(key)
+                consumed.add(field_name)
+                consumed.add(normalized_field)
+
+                normalized_key = normalize_metadata_key(key)
+                for prefix in (
+                    f"{normalized_section}_",
+                    f"{normalized_section}.",
+                    f"{normalized_section}-",
+                ):
+                    if normalized_key.startswith(prefix):
+                        suffix = normalized_key[len(prefix) :]
+                        if suffix:
+                            consumed.add(suffix)
+                        break
+
+                equivalent_keys = self._resolve_equivalent_metadata_keys(
+                    metadata, section, field_name, aliases, key
+                )
+                if equivalent_keys:
+                    consumed.update(equivalent_keys)
                 continue
             key = self._find_metadata_key(
                 metadata,
@@ -216,7 +313,7 @@ class VCFDatabaseWriter:
                 aliases,
                 skip_keys=skip_set | consumed,
             )
-            if key is None:
+            if key is None or not key_matches_section(key):
                 continue
             raw_value = metadata[key]
             if (
@@ -226,31 +323,49 @@ class VCFDatabaseWriter:
             ):
                 consumed.add(key)
                 continue
-            section_data[field_name] = self._coerce_model_value(model_field, raw_value)
+            section_data[field_name] = self._coerce_model_value(
+                model_field, raw_value
+            )
 
-		# Consume the original key and normalized variants
-		consumed.add(key)
-		consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
-		consumed.add(normalize_metadata_key(field_name))
+            # Consume the original key and normalized variants
+            consumed.add(key)
 
-		normalized_key = normalize_metadata_key(key)
-		for prefix in (
-			f"{normalized_section}_",
-			f"{normalized_section}.",
-			f"{normalized_section}-",
-		):
-			if normalized_key.startswith(prefix):
-				suffix = normalized_key[len(prefix):]
-				if suffix:
-					consumed.add(suffix)
-				break
+            matched_is_section_specific = self._is_section_prefixed_key(section, key)
+            skip_canonical_alias = (
+                matched_is_section_specific and normalized_field == "version"
+            )
 
-		# Also consume equivalent/aliased keys (from codex branch)
-		consumed.update(
-			self._resolve_equivalent_metadata_keys(
-				metadata, section, field_name, aliases, key
-			)
-		)	
+            if skip_canonical_alias:
+                if normalized_field:
+                    preserve_suffixes.add(normalized_field)
+            else:
+                consumed.add(field_name)  # keep for reverse lookups if you rely on it elsewhere
+                consumed.add(normalized_field)
+
+            normalized_key = normalize_metadata_key(key)
+            for prefix in (
+                f"{normalized_section}_",
+                f"{normalized_section}.",
+                f"{normalized_section}-",
+            ):
+                if normalized_key.startswith(prefix):
+                    suffix = normalized_key[len(prefix) :]
+                    if suffix:
+                        normalized_suffix = normalize_metadata_key(suffix)
+                        if not (
+                            skip_canonical_alias
+                            and normalized_suffix
+                            and normalized_suffix == normalized_field
+                        ):
+                            consumed.add(suffix)
+                    break
+
+            # Also consume equivalent/aliased keys (from codex branch)
+            equivalent_keys = self._resolve_equivalent_metadata_keys(
+                metadata, section, field_name, aliases, key
+            )
+            if equivalent_keys:
+                consumed.update(equivalent_keys)
 
         primary_field = self.section_primary_field.get(section)
         if (
@@ -267,10 +382,194 @@ class VCFDatabaseWriter:
                 consumed.add(section)
 
         additional, additional_consumed = self._build_additional_payload(
-            metadata, section, consumed | skip_set
+            metadata, section, consumed | skip_set, preserve_suffixes=preserve_suffixes
         )
         consumed.update(additional_consumed)
         return section_data, consumed, additional
+
+    def _collect_section_additional_fields(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        alias_map: Dict[str, Iterable[str]],
+        skip_set: set[str],
+    ) -> Tuple[set[str], set[str]]:
+        normalized_section = normalize_metadata_key(section)
+        candidate_keys = [
+            "additional_fields",
+            "additionalfields",
+            f"{section}_additional_fields",
+            f"{section}_additionalfields",
+            f"{normalized_section}_additional_fields",
+            f"{normalized_section}_additionalfields",
+        ]
+        lookup = self._build_normalized_lookup(metadata)
+        drop_fields: set[str] = set()
+        consumed: set[str] = set()
+        seen_keys: set[str] = set()
+
+        for candidate in candidate_keys:
+            normalized_candidate = normalize_metadata_key(candidate)
+            if not normalized_candidate:
+                continue
+            for key in lookup.get(normalized_candidate, []):
+                if key in skip_set or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                consumed.add(key)
+                raw_value = metadata.get(key)
+                entries = self._parse_additional_field_entries(raw_value)
+                for entry in entries:
+                    canonical = self._resolve_additional_field_name(
+                        entry, alias_map, normalized_section
+                    )
+                    if canonical:
+                        drop_fields.add(canonical)
+
+        if (
+            section == "library_construction"
+            and self._is_metadata_file_style(metadata)
+        ):
+            metadata_keys = self._build_normalized_lookup(metadata)
+            target_keys = {
+                normalize_metadata_key("pcr_cycles"),
+                normalize_metadata_key(f"{section}_pcr_cycles"),
+            }
+            if any(metadata_keys.get(target) for target in target_keys):
+                drop_fields.add("pcr_cycles")
+
+        return drop_fields, consumed
+
+    def _consume_additional_metadata_buffer(
+        self,
+        metadata: Dict[str, Any],
+        additional_metadata: Dict[str, Any],
+        consumed_keys: set[str],
+    ) -> None:
+        buffer = metadata.pop("additional_metadata", None)
+        if not isinstance(buffer, dict):
+            return
+
+        for key, value in buffer.items():
+            coerced = self._coerce_additional_value(value)
+            existing = additional_metadata.get(key)
+            if isinstance(existing, dict) and isinstance(coerced, dict):
+                additional_metadata[key] = {**existing, **coerced}
+            else:
+                additional_metadata[key] = coerced
+
+        consumed_keys.add("additional_metadata")
+
+    def _is_metadata_file_style(self, metadata: Dict[str, Any]) -> bool:
+        sentinel_keys = {
+            "sample_group_source_lab",
+            "sample_group_contact_email",
+            "sample_group_contact_phone",
+            "sample_group_total_samples",
+        }
+        metadata_keys = {normalize_metadata_key(key) for key in metadata.keys()}
+        return any(key in metadata_keys for key in sentinel_keys)
+
+    def _parse_additional_field_entries(self, raw_value: Any) -> set[str]:
+        if raw_value is None:
+            return set()
+
+        entries: Iterable[Any]
+        if isinstance(raw_value, str):
+            candidate = raw_value.strip()
+            if not candidate:
+                return set()
+            if (
+                len(candidate) >= 2
+                and candidate[0] in {"[", "{"}
+                and candidate[-1] in {"]", "}"}
+            ):
+                try:
+                    loaded = json.loads(candidate)
+                except (TypeError, ValueError):
+                    loaded = None
+                if isinstance(loaded, dict):
+                    entries = list(loaded.keys())
+                elif isinstance(loaded, (list, tuple, set)):
+                    entries = list(loaded)
+                else:
+                    entries = [candidate]
+            else:
+                parts = [segment.strip() for segment in re.split(r"[|,;]", candidate)]
+                entries = [segment for segment in parts if segment]
+        elif isinstance(raw_value, dict):
+            entries = list(raw_value.keys())
+        elif isinstance(raw_value, (list, tuple, set)):
+            entries = list(raw_value)
+        else:
+            entries = [raw_value]
+
+        normalized: set[str] = set()
+        for entry in entries:
+            normalized_entry = normalize_metadata_key(entry)
+            if normalized_entry:
+                normalized.add(normalized_entry)
+        return normalized
+
+    def _resolve_additional_field_name(
+        self,
+        normalized_entry: str,
+        alias_map: Dict[str, Iterable[str]],
+        normalized_section: str,
+    ) -> Optional[str]:
+        if not normalized_entry:
+            return None
+
+        candidates: set[str] = {normalized_entry, normalized_entry.replace("_", "")}
+        collapsed_section = normalized_section.replace("_", "")
+
+        for prefix in (normalized_section, collapsed_section):
+            if not prefix:
+                continue
+            if normalized_entry.startswith(prefix):
+                remainder = normalized_entry[len(prefix) :].lstrip("_.-")
+                if remainder:
+                    candidates.add(remainder)
+                    candidates.add(remainder.replace("_", ""))
+
+        expanded_candidates = set(candidates)
+        for candidate in candidates:
+            collapsed = candidate.replace("_", "")
+            if collapsed:
+                expanded_candidates.add(collapsed)
+
+        for field_name, aliases in alias_map.items():
+            canonical = normalize_metadata_key(field_name)
+            alias_candidates = {canonical, canonical.replace("_", "")}
+            for alias in aliases:
+                normalized_alias = normalize_metadata_key(alias)
+                if normalized_alias:
+                    alias_candidates.add(normalized_alias)
+                    alias_candidates.add(normalized_alias.replace("_", ""))
+            if expanded_candidates & alias_candidates:
+                return canonical
+
+        return None
+
+    def _store_dropped_field_value(
+        self,
+        metadata: Dict[str, Any],
+        section: str,
+        canonical_field: str,
+        value: Any,
+    ) -> None:
+        normalized_section = normalize_metadata_key(section)
+        if canonical_field.startswith(f"{normalized_section}_"):
+            qualified_key = canonical_field
+        else:
+            qualified_key = f"{normalized_section}_{canonical_field}"
+
+        additional = metadata.setdefault("additional_metadata", {})
+        if not isinstance(additional, dict):
+            additional = {}
+            metadata["additional_metadata"] = additional
+
+        additional.setdefault(qualified_key, value)
 
     @staticmethod
     def _get_model_field(model_cls: Any, field_name: str) -> Optional[django_models.Field]:
@@ -288,9 +587,35 @@ class VCFDatabaseWriter:
         *,
         skip_keys: Optional[Iterable[str]] = None,
     ) -> Optional[str]:
-        candidate_order = self._enumerate_metadata_candidates(section, field_name, aliases)
+        skip_exact: set[str] = set()
+        skip_normalized: set[str] = set()
+
+        for entry in skip_keys or []:
+            if entry is None:
+                continue
+            text = str(entry)
+            if not text:
+                continue
+            skip_exact.add(text)
+            normalized = normalize_metadata_key(text)
+            if normalized:
+                skip_normalized.add(normalized)
+                collapsed = normalized.replace("_", "")
+                if collapsed:
+                    skip_normalized.add(collapsed)
+
+        combined_skip = skip_exact | skip_normalized
+
+        candidate_order = self._enumerate_metadata_candidates(
+            section,
+            field_name,
+            aliases,
+            skip_keys=combined_skip,
+        )
 
         for candidate in candidate_order:
+            if candidate in skip_exact:
+                continue
             if candidate in metadata:
                 return candidate
 
@@ -300,16 +625,32 @@ class VCFDatabaseWriter:
             normalized_candidate = normalize_metadata_key(candidate)
             if not normalized_candidate:
                 continue
+            if normalized_candidate in skip_normalized:
+                continue
 
             mapped_keys = normalized_lookup.get(normalized_candidate)
             if mapped_keys:
-                return mapped_keys[0]
+                for mapped_key in mapped_keys:
+                    if mapped_key in skip_exact:
+                        continue
+                    normalized_mapped = normalize_metadata_key(mapped_key)
+                    if normalized_mapped and normalized_mapped in skip_normalized:
+                        continue
+                    return mapped_key
 
             collapsed_candidate = normalized_candidate.replace("_", "")
             if collapsed_candidate != normalized_candidate:
+                if collapsed_candidate in skip_normalized:
+                    continue
                 mapped_keys = normalized_lookup.get(collapsed_candidate)
                 if mapped_keys:
-                    return mapped_keys[0]
+                    for mapped_key in mapped_keys:
+                        if mapped_key in skip_exact:
+                            continue
+                        normalized_mapped = normalize_metadata_key(mapped_key)
+                        if normalized_mapped and normalized_mapped in skip_normalized:
+                            continue
+                        return mapped_key
 
         return None
 
@@ -318,48 +659,99 @@ class VCFDatabaseWriter:
         section: str,
         field_name: str,
         aliases: Iterable[str],
+        skip_keys: Optional[Iterable[str]] = None,
     ) -> list[str]:
-        skip_set = set(skip_keys or [])
+        skip_set: set[str] = set()
+        if skip_keys:
+            for entry in skip_keys:
+                if entry is None:
+                    continue
+                text = str(entry)
+                if not text:
+                    continue
+                skip_set.add(text)
 
-        def _dedupe_append(collection: list[str], candidate: str) -> None:
-            if candidate and candidate not in collection:
-                collection.append(candidate)
+        def _coerce_candidate(value: Any) -> Optional[str]:
+            if value is None:
+                return None
+            text = str(value)
+            if not text.strip():
+                return None
+            return text
+
+        def _dedupe_append(
+            collection: list[str],
+            candidate: Any,
+            *,
+            respect_skip: bool = True,
+        ) -> None:
+            text = _coerce_candidate(candidate)
+            if not text or text in collection:
+                return
+            if respect_skip and text in skip_set:
+                return
+            collection.append(text)
+
+        def _dedupe_append_raw(collection: list[str], candidate: Any) -> None:
+            text = _coerce_candidate(candidate)
+            if not text or text in collection:
+                return
+            collection.append(text)
 
         normalized_section = normalize_metadata_key(section)
         normalized_field = normalize_metadata_key(field_name)
 
-        alias_candidates: list[str] = []
-        for candidate in (str(field_name), normalized_field):
-            _dedupe_append(alias_candidates, candidate)
+        raw_alias_candidates: list[str] = []
+        bare_alias_candidates: list[str] = []
+        section_alias_candidates: list[str] = []
+
+        def _collect_raw(candidate: Any) -> None:
+            _dedupe_append_raw(raw_alias_candidates, candidate)
+
+        _collect_raw(field_name)
+        _collect_raw(normalized_field)
 
         for alias in aliases:
-            alias_text = str(alias)
-            normalized_alias = normalize_metadata_key(alias_text)
-            _dedupe_append(alias_candidates, alias_text)
-            _dedupe_append(alias_candidates, normalized_alias)
+            alias_text = _coerce_candidate(alias)
+            if alias_text:
+                _collect_raw(alias_text)
+                normalized_alias = normalize_metadata_key(alias_text)
+                _collect_raw(normalized_alias)
+
+        for candidate in list(raw_alias_candidates):
+            collapsed = candidate.replace("_", "")
+            if collapsed:
+                _collect_raw(collapsed)
+
+        for candidate in raw_alias_candidates:
+            _dedupe_append(bare_alias_candidates, candidate)
+
+        for candidate in raw_alias_candidates:
+            _dedupe_append(section_alias_candidates, candidate, respect_skip=False)
+        _dedupe_append(section_alias_candidates, field_name, respect_skip=False)
+        _dedupe_append(section_alias_candidates, normalized_field, respect_skip=False)
 
         candidate_order: list[str] = []
 
         section_variants: list[str] = []
         for section_variant in (section, normalized_section):
             if section_variant:
-                _dedupe_append(section_variants, section_variant)
+                _dedupe_append(section_variants, section_variant, respect_skip=False)
 
         collapsed_variants: list[str] = []
         for section_variant in section_variants:
             collapsed = section_variant.replace("_", "")
             if collapsed and collapsed != section_variant:
-                _dedupe_append(collapsed_variants, collapsed)
+                _dedupe_append(collapsed_variants, collapsed, respect_skip=False)
 
         section_variants.extend(collapsed_variants)
 
         for section_variant in section_variants:
-            for alias_candidate in alias_candidates:
-                _dedupe_append(
-                    candidate_order, f"{section_variant}_{alias_candidate}"
-                )
+            for alias_candidate in section_alias_candidates:
+                candidate = f"{section_variant}_{alias_candidate}"
+                _dedupe_append(candidate_order, candidate, respect_skip=False)
 
-        for alias_candidate in alias_candidates:
+        for alias_candidate in bare_alias_candidates:
             _dedupe_append(candidate_order, alias_candidate)
 
         return candidate_order
@@ -383,6 +775,29 @@ class VCFDatabaseWriter:
                 _append_lookup(collapsed_key, original_key)
 
         return lookup
+
+    @staticmethod
+    def _is_section_prefixed_key(section: str, candidate: str) -> bool:
+        normalized_section = normalize_metadata_key(section)
+        normalized_candidate = normalize_metadata_key(candidate)
+        if not normalized_section or not normalized_candidate:
+            return False
+
+        prefixes = [
+            normalized_section,
+            f"{normalized_section}_",
+            f"{normalized_section}.",
+            f"{normalized_section}-",
+        ]
+        collapsed_section = normalized_section.replace("_", "")
+        if collapsed_section and collapsed_section not in prefixes:
+            prefixes.append(collapsed_section)
+
+        return any(
+            normalized_candidate.startswith(prefix)
+            for prefix in prefixes
+            if prefix
+        )
 
     def _resolve_equivalent_metadata_keys(
         self,
@@ -412,6 +827,16 @@ class VCFDatabaseWriter:
             if collapsed_candidate != normalized_candidate:
                 for mapped_key in normalized_lookup.get(collapsed_candidate, []):
                     equivalents.add(mapped_key)
+
+        if self._is_section_prefixed_key(section, matched_key):
+            normalized_field = normalize_metadata_key(field_name)
+            equivalents = {
+                key
+                for key in equivalents
+                if self._is_section_prefixed_key(section, key)
+                or normalize_metadata_key(key) != normalized_field
+            }
+            equivalents.add(matched_key)
 
         return equivalents
 
@@ -449,6 +874,8 @@ class VCFDatabaseWriter:
         metadata: Dict[str, Any],
         section: str,
         consumed: Iterable[str],
+        *,
+        preserve_suffixes: Optional[Iterable[str]] = None,
     ) -> Tuple[Optional[Dict[str, Any]], set[str]]:
         consumed_set = set(consumed)
         normalized_section = normalize_metadata_key(section)
@@ -467,6 +894,11 @@ class VCFDatabaseWriter:
         normalized_consumed = {
             normalize_metadata_key(entry) for entry in consumed_set if entry
         }
+        preserved_suffixes = {
+            normalize_metadata_key(entry)
+            for entry in (preserve_suffixes or [])
+            if entry
+        }
         consumed_suffixes: set[str] = set()
         for entry in consumed_set:
             normalized_entry = normalize_metadata_key(entry)
@@ -478,6 +910,9 @@ class VCFDatabaseWriter:
                 if normalized_entry.startswith(prefix):
                     suffix = normalized_entry[len(prefix) :]
                     if suffix:
+                        normalized_suffix = normalize_metadata_key(suffix)
+                        if normalized_suffix in preserved_suffixes:
+                            continue
                         consumed_suffixes.add(suffix)
                     break
 

@@ -1,7 +1,9 @@
 {% load static %}
 {% load django_bootstrap5 %}
+{% load i18n %}
+{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="light">
 <head>
         {% load static %}
         {% load django_bootstrap5 %}
@@ -30,10 +32,10 @@
 </header>
 
 {% block breadcrumbs %}
-<nav aria-label="breadcrumb" class="app-breadcrumbs">
+<nav aria-label="{% trans "Breadcrumb" %}" class="app-breadcrumbs">
         <div class="container">
                 <ol class="breadcrumb mb-0">
-                        <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'home' %}">{% trans "Home" %}</a></li>
                         {% block breadcrumb_items %}{% endblock %}
                 </ol>
         </div>
@@ -58,7 +60,7 @@
                                 <span class="fw-semibold">© {% now "Y" %} {{ SITE_NAME }}</span>
                         </div>
                         <div class="col-lg-6 text-lg-end">
-                                <span class="small opacity-75">Empowering genomic data management with confidence.</span>
+                                <span class="small opacity-75">{% trans "Empowering genomic data management with confidence." %}</span>
                         </div>
                 </div>
         </div>

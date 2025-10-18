@@ -29,6 +29,20 @@ After loading the data you can sign in with either demo account and visit the pr
   server logs so developers can diagnose issues without exposing Django's debug
   pages to end users.
 
+## Internationalisation
+
+MetaGap ships with English and Russian interface translations.  To switch the
+active language at runtime, submit a POST request to Django's built-in language
+selection view at `/i18n/setlang/` with a `language` parameter set to either
+`en` or `ru`.  For example, to switch to Russian while preserving the current
+page, send the request with `language=ru` and `next={{ request.path }}`.
+Successful requests update the `metagap_language` cookie so subsequent page
+loads render using the selected locale.
+
+The repository stores editable `.po` message catalogs; compile them locally with
+`django-admin compilemessages` (after setting `DJANGO_SETTINGS_MODULE=MetaGap.settings`)
+whenever translations change so Django can serve the generated `.mo` binaries.
+
 ## Metadata configuration workflow
 
 MetaGap's VCF importer is driven by a configuration module at
@@ -114,6 +128,16 @@ To add a new metadata field or section:
 
 The importer and database writer use the cached configuration automatically, so
 no further code changes are needed once the YAML file and models are in sync.
+
+### Handling unsupported metadata sections
+
+When the importer encounters a `##` header section that is not mapped in
+`metadata_fields.yaml`, the parser records a warning and saves the raw values in
+`SampleGroup.additional_metadata`.  This ensures novel or organisation-specific
+fields remain accessible in the UI even before first-class support is added.
+Expect log entries similar to "Unsupported metadata section 'SAMPLE_PLATFORM'
+encountered in the VCF header; storing raw values in additional metadata." for
+these cases.【F:MetaGap/app/services/vcf_metadata.py†L396-L420】
 
 ### Logging format for the VCF merger
 

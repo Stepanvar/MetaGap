@@ -11,6 +11,7 @@ import pytest
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test.utils import setup_test_environment, teardown_test_environment
 
 if not settings.configured:
@@ -30,6 +31,13 @@ def django_test_environment():
     setup_test_environment()
     yield
     teardown_test_environment()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def migrate_django_db():
+    """Create the in-memory SQLite schema required by Django's auth models."""
+
+    call_command("migrate", run_syncdb=True)
 
 
 @pytest.fixture

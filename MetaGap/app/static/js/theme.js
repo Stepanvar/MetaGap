@@ -40,7 +40,9 @@ const updateToggleAppearance = (theme) => {
     }
 
     if (label) {
-        label.textContent = theme === DARK_THEME ? 'Dark' : 'Light';
+        const lightLabel = toggleButton.getAttribute('data-label-light') || 'Light';
+        const darkLabel = toggleButton.getAttribute('data-label-dark') || 'Dark';
+        label.textContent = theme === DARK_THEME ? darkLabel : lightLabel;
     }
 };
 

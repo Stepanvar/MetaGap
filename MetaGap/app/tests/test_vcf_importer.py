@@ -13,6 +13,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from ..models import AlleleFrequency, SampleGroup
+from ..services.import_exceptions import (
+    GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    ImporterValidationError,
+)
 from ..services.vcf_importer import VCFImporter
 
 
@@ -895,3 +899,46 @@ class VCFImporterTests(TestCase):
         )
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Falling back to a text parser", importer.warnings[0])
+
+    def test_import_reports_generic_validation_when_fallback_fails(self) -> None:
+        path = self._write_vcf(self.VCF_CONTENT, filename="fallback_failure.vcf")
+
+        unicode_error = UnicodeDecodeError("utf-8", b"\x80", 0, 1, "invalid start byte")
+
+        importer = VCFImporter(self.user)
+        with mock.patch.object(
+            VCFImporter, "_import_with_pysam", side_effect=OSError("pysam failure")
+        ) as mocked_pysam, mock.patch(
+            "app.services.vcf_importer.parse_vcf_text_fallback",
+            side_effect=unicode_error,
+        ) as mocked_fallback:
+            with self.assertRaises(ImporterValidationError) as excinfo:
+                importer.import_file(str(path))
+
+        self.assertTrue(mocked_pysam.called)
+        self.assertTrue(mocked_fallback.called)
+        self.assertEqual(str(excinfo.exception), GENERIC_FALLBACK_VALIDATION_MESSAGE)
+
+    def test_should_retry_with_inflated_copy_for_bgzf_and_not_implemented_errors(self) -> None:
+        self.assertTrue(
+            VCFImporter._should_retry_with_inflated_copy(
+                "problematic.vcf.gz", OSError("BGZF block missing")
+            )
+        )
+        self.assertTrue(
+            VCFImporter._should_retry_with_inflated_copy(
+                "problematic.vcf.gz", NotImplementedError("unsupported")
+            )
+        )
+
+    def test_should_retry_with_inflated_copy_rejects_irrelevant_errors(self) -> None:
+        self.assertFalse(
+            VCFImporter._should_retry_with_inflated_copy(
+                "problematic.vcf", OSError("BGZF block missing")
+            )
+        )
+        self.assertFalse(
+            VCFImporter._should_retry_with_inflated_copy(
+                "problematic.vcf.gz", OSError("plain failure")
+            )
+        )

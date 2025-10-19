@@ -900,6 +900,27 @@ class VCFImporterTests(TestCase):
         self.assertEqual(len(importer.warnings), 1)
         self.assertIn("Falling back to a text parser", importer.warnings[0])
 
+    def test_text_fallback_cleans_up_partial_pysam_group(self) -> None:
+        with mock.patch.object(
+            VCFImporter,
+            "_populate_sample_group_from_pysam",
+            side_effect=ValueError("force fallback"),
+        ) as mocked_populate:
+            importer, sample_group = self._import(
+                self.VCF_CONTENT,
+                filename="partial_cleanup.vcf",
+            )
+
+        mocked_populate.assert_called_once()
+        self.assertEqual(SampleGroup.objects.count(), 1)
+
+        stored_group = SampleGroup.objects.get()
+        self.assertEqual(stored_group.pk, sample_group.pk)
+        self.assertEqual(stored_group.allele_frequencies.count(), 1)
+
+        self.assertEqual(len(importer.warnings), 1)
+        self.assertIn("Falling back to a text parser", importer.warnings[0])
+
     def test_import_reports_generic_validation_when_fallback_fails(self) -> None:
         path = self._write_vcf(self.VCF_CONTENT, filename="fallback_failure.vcf")
 

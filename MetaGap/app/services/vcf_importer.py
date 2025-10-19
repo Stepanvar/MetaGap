@@ -7,7 +7,7 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 import pysam
 
@@ -61,6 +61,17 @@ class VCFImporter:
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None
         temp_paths: list[str] = []
+        pysam_sample_group: Optional[SampleGroup] = None
+
+        def remember_sample_group(group: SampleGroup) -> None:
+            nonlocal pysam_sample_group
+            pysam_sample_group = group
+
+        def cleanup_pysam_sample_group() -> None:
+            nonlocal pysam_sample_group
+            if pysam_sample_group is not None:
+                pysam_sample_group.delete()
+                pysam_sample_group = None
         with transaction.atomic():
             try:
                 try:
@@ -68,9 +79,11 @@ class VCFImporter:
                         file_path,
                         organization_profile,
                         original_file_path=file_path,
+                        on_sample_group_created=remember_sample_group,
                     )
                 except (OSError, ValueError, NotImplementedError) as exc:
                     retry_exc: BaseException = exc
+                    cleanup_pysam_sample_group()
                     if self._should_retry_with_inflated_copy(file_path, exc):
                         inflated_path = self._inflate_gzip_to_temp(file_path)
                         temp_paths.append(inflated_path)
@@ -79,15 +92,18 @@ class VCFImporter:
                                 inflated_path,
                                 organization_profile,
                                 original_file_path=file_path,
+                                on_sample_group_created=remember_sample_group,
                             )
                         except (OSError, ValueError, NotImplementedError) as inflated_exc:
                             retry_exc = inflated_exc
+                            cleanup_pysam_sample_group()
                     if sample_group is None:
                         warning = (
                             f"Could not parse VCF metadata with pysam: {retry_exc}. "
                             "Falling back to a text parser."
                         )
                         self._add_warning_once(warning)
+                        cleanup_pysam_sample_group()
                         if sample_group is not None:
                             sample_group.delete()
                         try:
@@ -238,6 +254,7 @@ class VCFImporter:
         organization_profile: Any,
         *,
         original_file_path: Optional[str] = None,
+        on_sample_group_created: Optional[Callable[[SampleGroup], None]] = None,
     ) -> Tuple[Dict[str, Any], SampleGroup]:
         with pysam.VariantFile(file_path) as vcf_in:
             metadata = self.extract_sample_group_metadata(vcf_in)
@@ -246,6 +263,8 @@ class VCFImporter:
                 original_file_path or file_path,
                 organization_profile,
             )
+            if on_sample_group_created is not None:
+                on_sample_group_created(sample_group)
             self._populate_sample_group_from_pysam(vcf_in, sample_group)
         return metadata, sample_group
 

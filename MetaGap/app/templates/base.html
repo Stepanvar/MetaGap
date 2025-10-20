@@ -62,7 +62,8 @@
         <div class="container py-4 text-center text-lg-start">
                 <div class="row align-items-center g-3">
                         <div class="col-lg-6 text-lg-start">
-                                <span class="fw-semibold">© {% now "Y" %} {{ SITE_NAME }}</span>
+                                {% now "Y" as current_year %}
+                                <span class="fw-semibold">{% blocktrans with year=current_year site=SITE_NAME %}© {{ year }} {{ site }}{% endblocktrans %}</span>
                         </div>
                         <div class="col-lg-6 text-lg-end">
                                 <span class="small opacity-75">{% trans "Empowering genomic data management with confidence." %}</span>

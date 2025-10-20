@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-18 14:36+0000\n"
+"POT-Creation-Date: 2025-10-20 08:15+0000\n"
 "PO-Revision-Date: 2025-10-12 21:30+0000\n"
 "Last-Translator: AI Assistant <noreply@example.com>\n"
 "Language-Team: English <LL@li.org>\n"
@@ -245,19 +245,19 @@ msgstr "Storage conditions"
 msgid "Time stored"
 msgstr "Time stored"
 
-#: MetaGap/app/forms.py:283 MetaGap/app/models.py:373 MetaGap/app/models.py:379
+#: MetaGap/app/forms.py:283 MetaGap/app/models.py:377 MetaGap/app/models.py:383
 msgid "Illumina"
 msgstr "Illumina"
 
-#: MetaGap/app/forms.py:284 MetaGap/app/models.py:374
+#: MetaGap/app/forms.py:284 MetaGap/app/models.py:378
 msgid "Oxford Nanopore"
 msgstr "Oxford Nanopore"
 
-#: MetaGap/app/forms.py:285 MetaGap/app/models.py:375 MetaGap/app/models.py:381
+#: MetaGap/app/forms.py:285 MetaGap/app/models.py:379 MetaGap/app/models.py:385
 msgid "PacBio"
 msgstr "PacBio"
 
-#: MetaGap/app/forms.py:288 MetaGap/app/models.py:376 MetaGap/app/models.py:382
+#: MetaGap/app/forms.py:288 MetaGap/app/models.py:380 MetaGap/app/models.py:386
 msgid "Ion Torrent"
 msgstr "Ion Torrent"
 
@@ -344,160 +344,181 @@ msgstr "Another user is already using this email address."
 msgid "I confirm that I want to delete my account."
 msgstr "I confirm that I want to delete my account."
 
-#: MetaGap/app/models.py:71
+#: MetaGap/app/models.py:53
+msgid "Size"
+msgstr ""
+
+#: MetaGap/app/models.py:54
+msgid "Ploidy"
+msgstr ""
+
+#: MetaGap/app/models.py:55
+#, fuzzy
+#| msgid "Genome GC content"
+msgid "GC content"
+msgstr "Genome GC content"
+
+#: MetaGap/app/models.py:75
 msgid "DNA"
 msgstr ""
 
-#: MetaGap/app/models.py:72
+#: MetaGap/app/models.py:76
 msgid "RNA"
 msgstr ""
 
-#: MetaGap/app/models.py:73
+#: MetaGap/app/models.py:77
 msgid "cDNA"
 msgstr ""
 
 #: MetaGap/app/models.py:98
 msgid "Kit"
 msgstr "Kit"
+#: MetaGap/app/models.py:86
+msgid "Type"
+msgstr ""
+
+#: MetaGap/app/models.py:87
+msgid "Integrity Number"
+msgstr ""
 
 #: MetaGap/app/models.py:108 MetaGap/app/templates/profile.html:17
 #: MetaGap/app/templates/sample_group_detail.html:31
 msgid "Not provided"
 msgstr ""
 
-#: MetaGap/app/models.py:132
+#: MetaGap/app/models.py:136
 #, fuzzy
 #| msgid "ONT flow cell"
 msgid "Flow Cell"
 msgstr "ONT flow cell"
 
-#: MetaGap/app/models.py:133
+#: MetaGap/app/models.py:137
 #, fuzzy
 #| msgid "Illumina channel method"
 msgid "Channel method"
 msgstr "Illumina channel method"
 
-#: MetaGap/app/models.py:134
+#: MetaGap/app/models.py:138
 #, fuzzy
 #| msgid "Illumina cluster density"
 msgid "Cluster density"
 msgstr "Illumina cluster density"
 
-#: MetaGap/app/models.py:135
+#: MetaGap/app/models.py:139
 #, fuzzy
 #| msgid "Illumina QC software"
 msgid "QC software"
 msgstr "Illumina QC software"
 
-#: MetaGap/app/models.py:149
+#: MetaGap/app/models.py:153
 #, fuzzy
 #| msgid "ONT flow cell version"
 msgid "Flow Cell Version"
 msgstr "ONT flow cell version"
 
-#: MetaGap/app/models.py:150
+#: MetaGap/app/models.py:154
 #, fuzzy
 #| msgid "ONT pore type"
 msgid "Pore type"
 msgstr "ONT pore type"
 
-#: MetaGap/app/models.py:151
+#: MetaGap/app/models.py:155
 #, fuzzy
 #| msgid "ONT bias voltage"
 msgid "Bias voltage"
 msgstr "ONT bias voltage"
 
-#: MetaGap/app/models.py:164
+#: MetaGap/app/models.py:168
 #, fuzzy
 #| msgid "PacBio SMRT cell type"
 msgid "SMRT Cell Type"
 msgstr "PacBio SMRT cell type"
 
-#: MetaGap/app/models.py:165
+#: MetaGap/app/models.py:169
 #, fuzzy
 #| msgid "PacBio ZMW density"
 msgid "ZMW density"
 msgstr "PacBio ZMW density"
 
-#: MetaGap/app/models.py:180
+#: MetaGap/app/models.py:184
 msgid "Chip Type"
 msgstr ""
 
-#: MetaGap/app/models.py:181
+#: MetaGap/app/models.py:185
 #, fuzzy
 #| msgid "Ion Torrent pH calibration"
 msgid "pH calibration"
 msgstr "Ion Torrent pH calibration"
 
-#: MetaGap/app/models.py:182
+#: MetaGap/app/models.py:186
 msgid "Flow order"
 msgstr ""
 
-#: MetaGap/app/models.py:183
+#: MetaGap/app/models.py:187
 #, fuzzy
 #| msgid "Ion Sphere metrics"
 msgid "Ion sphere metrics"
 msgstr "Ion Sphere metrics"
 
-#: MetaGap/app/models.py:197 MetaGap/app/models.py:215
+#: MetaGap/app/models.py:201 MetaGap/app/models.py:219
 msgid "Tool"
 msgstr ""
 
-#: MetaGap/app/models.py:197
+#: MetaGap/app/models.py:201
 msgid "Unknown"
 msgstr ""
 
-#: MetaGap/app/models.py:198
+#: MetaGap/app/models.py:202
 #, fuzzy
 #| msgid "Alignment parameters"
 msgid "Parameters"
 msgstr "Alignment parameters"
 
-#: MetaGap/app/models.py:199
+#: MetaGap/app/models.py:203
 #, fuzzy
 #| msgid "Reference genome version"
 msgid "Ref Genome Version"
 msgstr "Reference genome version"
 
-#: MetaGap/app/models.py:200 MetaGap/app/tables.py:248
+#: MetaGap/app/models.py:204 MetaGap/app/tables.py:248
 msgid "Recalibration settings"
 msgstr "Recalibration settings"
 
-#: MetaGap/app/models.py:216
+#: MetaGap/app/models.py:220
 msgid "Version"
 msgstr ""
 
-#: MetaGap/app/models.py:217
+#: MetaGap/app/models.py:221
 #, fuzzy
 #| msgid "Variant filtering thresholds"
 msgid "Filtering thresholds"
 msgstr "Variant filtering thresholds"
 
-#: MetaGap/app/models.py:218 MetaGap/app/tables.py:252
+#: MetaGap/app/models.py:222 MetaGap/app/tables.py:252
 msgid "Duplicate handling"
 msgstr "Duplicate handling"
 
-#: MetaGap/app/models.py:219
+#: MetaGap/app/models.py:223
 msgid "MQ"
 msgstr ""
 
-#: MetaGap/app/models.py:231
+#: MetaGap/app/models.py:235
 #, fuzzy
 #| msgid "Organization"
 msgid "Normalization"
 msgstr "Organization"
 
-#: MetaGap/app/models.py:232
+#: MetaGap/app/models.py:236
 #, fuzzy
 #| msgid "Organization"
 msgid "Harmonization"
 msgstr "Organization"
 
-#: MetaGap/app/models.py:380
+#: MetaGap/app/models.py:384
 msgid "ONT"
 msgstr ""
 
-#: MetaGap/app/services/vcf_importer.py:208
+#: MetaGap/app/services/vcf_importer.py:224
 msgid "The uploaded file is not valid."
 msgstr "The uploaded file is not valid."
 
@@ -909,21 +930,21 @@ msgstr ""
 msgid "Submit"
 msgstr ""
 
-#: MetaGap/app/templates/base.html:35
+#: MetaGap/app/templates/base.html:40
 #: MetaGap/app/templates/partials/breadcrumbs.html:2
 #: MetaGap/app/templates/sample_group_confirm_delete.html:7
 #: MetaGap/app/templates/sample_group_form.html:8
 msgid "Breadcrumb"
 msgstr ""
 
-#: MetaGap/app/templates/base.html:38
+#: MetaGap/app/templates/base.html:43
 #: MetaGap/app/templates/partials/breadcrumbs.html:4
 #: MetaGap/app/templates/sample_group_confirm_delete.html:9
 #: MetaGap/app/templates/sample_group_form.html:10
 msgid "Home"
 msgstr ""
 
-#: MetaGap/app/templates/base.html:63
+#: MetaGap/app/templates/base.html:68
 msgid "Empowering genomic data management with confidence."
 msgstr ""
 

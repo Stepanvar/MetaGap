@@ -27,7 +27,7 @@ class OrganizationProfile(models.Model):
     organization_name = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"{self.user.username}'s Organization Profile"
+        return _("Organization Profile of %(user)s") % {"user": self.user.username}
 
 
 class ReferenceGenomeBuild(models.Model):
@@ -49,7 +49,11 @@ class GenomeComplexity(models.Model):
     gc_content = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Size: {self.size}, Ploidy: {self.ploidy}, GC: {self.gc_content}"
+        return _format_attributes(
+            (_("Size"), self.size),
+            (_("Ploidy"), self.ploidy),
+            (_("GC content"), self.gc_content),
+        )
 
 
 class SampleOrigin(models.Model):
@@ -61,7 +65,10 @@ class SampleOrigin(models.Model):
     time_stored = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Tissue: {self.tissue}, Collection Method: {self.collection_method}"
+        return _format_attributes(
+            (_("Tissue"), self.tissue),
+            (_("Collection Method"), self.collection_method),
+        )
 
 
 class MaterialType(models.Model):
@@ -82,7 +89,10 @@ class MaterialType(models.Model):
     integrity_number = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Type: {self.material_type}, Integrity Number: {self.integrity_number}"
+        return _format_attributes(
+            (_("Type"), self.material_type),
+            (_("Integrity Number"), self.integrity_number),
+        )
 
 
 class LibraryConstruction(models.Model):

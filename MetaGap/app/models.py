@@ -82,7 +82,10 @@ class MaterialType(models.Model):
     integrity_number = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Type: {self.material_type}, Integrity Number: {self.integrity_number}"
+        return _format_attributes(
+            (_("Type"), self.material_type),
+            (_("Integrity Number"), self.integrity_number),
+        )
 
 
 class LibraryConstruction(models.Model):

@@ -456,7 +456,11 @@ msgstr "Гармонизация"
 msgid "ONT"
 msgstr "ONT"
 
-#: app/services/vcf_importer.py:224
+#: app/services/vcf_importer.py:46
+msgid "Please complete your organization profile before importing data."
+msgstr ""
+
+#: app/services/vcf_importer.py:222
 msgid "The uploaded file is not valid."
 msgstr "Загруженный файл недействителен."
 
@@ -898,14 +902,14 @@ msgstr "Хлебная крошка"
 msgid "Home"
 msgstr "Главная"
 
+#: app/templates/base.html:68
+msgid "Empowering genomic data management with confidence."
+msgstr "Управление геномными данными с уверенностью."
+
 #: app/templates/base.html:66
 #, python-format
 msgid "© %(year)s %(site)s"
 msgstr "© %(year)s %(site)s"
-
-#: app/templates/base.html:69
-msgid "Empowering genomic data management with confidence."
-msgstr "Управление геномными данными с уверенностью."
 
 #: app/templates/confirm_delete.html:4
 #, python-format
@@ -1753,10 +1757,6 @@ msgid ""
 msgid "Imported %(group)s successfully."
 msgstr "%(group)s успешно импортирована."
 
-#: MetaGap/app/services/import_exceptions.py:17
-msgid "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
-msgstr "Загруженный файл VCF выглядит недействительным или повреждённым. Проверьте содержимое файла и попробуйте снова."
-
-#: MetaGap/app/views.py:779
+#: app/views.py:779
 msgid "An error occurred while importing the provided file."
 msgstr "При импорте предоставленного файла произошла ошибка."

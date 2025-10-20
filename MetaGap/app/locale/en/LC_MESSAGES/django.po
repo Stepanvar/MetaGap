@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-20 08:15+0000\n"
+"POT-Creation-Date: 2025-10-20 08:18+0000\n"
 "PO-Revision-Date: 2025-10-12 21:30+0000\n"
 "Last-Translator: AI Assistant <noreply@example.com>\n"
 "Language-Team: English <LL@li.org>\n"
@@ -490,11 +490,15 @@ msgstr "Organization"
 msgid "ONT"
 msgstr ""
 
+#: app/services/vcf_importer.py:34
+msgid "The uploaded file could not be parsed as a valid VCF."
+msgstr "The uploaded file could not be parsed as a valid VCF."
+
 #: app/services/vcf_importer.py:46
 msgid "Please complete your organization profile before importing data."
 msgstr ""
 
-#: app/services/vcf_importer.py:222
+#: app/services/vcf_importer.py:229
 msgid "The uploaded file is not valid."
 msgstr "The uploaded file is not valid."
 

@@ -490,7 +490,11 @@ msgstr "Organization"
 msgid "ONT"
 msgstr ""
 
-#: app/services/vcf_importer.py:224
+#: app/services/vcf_importer.py:46
+msgid "Please complete your organization profile before importing data."
+msgstr ""
+
+#: app/services/vcf_importer.py:222
 msgid "The uploaded file is not valid."
 msgstr "The uploaded file is not valid."
 
@@ -912,12 +916,7 @@ msgstr ""
 msgid "Home"
 msgstr ""
 
-#: app/templates/base.html:66
-#, python-format
-msgid "© %(year)s %(site)s"
-msgstr "© %(year)s %(site)s"
-
-#: app/templates/base.html:69
+#: app/templates/base.html:68
 msgid "Empowering genomic data management with confidence."
 msgstr ""
 
@@ -1757,10 +1756,10 @@ msgstr ""
 msgid "Imported %(group)s successfully."
 msgstr "Imported %(group)s successfully."
 
-#: MetaGap/app/services/import_exceptions.py:17
+#: app/services/import_exceptions.py:17
 msgid "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
 msgstr "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
 
-#: MetaGap/app/views.py:779
+#: app/views.py:779
 msgid "An error occurred while importing the provided file."
 msgstr "An error occurred while importing the provided file."

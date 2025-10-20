@@ -273,7 +273,16 @@ msgstr "РНК"
 #: MetaGap/app/models.py:77
 msgid "cDNA"
 msgstr "кДНК"
-#: MetaGap/app/models.py:112 MetaGap/app/templates/profile.html:17
+
+#: MetaGap/app/models.py:86
+msgid "Type"
+msgstr "Тип"
+
+#: MetaGap/app/models.py:87
+msgid "Integrity Number"
+msgstr "Индекс целостности"
+
+#: MetaGap/app/models.py:108 MetaGap/app/templates/profile.html:17
 #: MetaGap/app/templates/sample_group_detail.html:31
 msgid "Not provided"
 msgstr "Не указано"

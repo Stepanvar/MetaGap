@@ -370,7 +370,15 @@ msgstr ""
 msgid "cDNA"
 msgstr ""
 
-#: MetaGap/app/models.py:112 MetaGap/app/templates/profile.html:17
+#: MetaGap/app/models.py:86
+msgid "Type"
+msgstr ""
+
+#: MetaGap/app/models.py:87
+msgid "Integrity Number"
+msgstr ""
+
+#: MetaGap/app/models.py:108 MetaGap/app/templates/profile.html:17
 #: MetaGap/app/templates/sample_group_detail.html:31
 msgid "Not provided"
 msgstr ""

@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
+from django.utils.functional import lazy
 
 from ..models import (
     AlleleFrequency,
@@ -189,6 +190,25 @@ class ImportDataViewTests(TestCase):
         messages = [message.message for message in response.wsgi_request._messages]
         self.assertIn("Imported Imported Group successfully.", messages)
         self.assertIn("Fallback message", messages)
+
+    def test_success_flow_displays_localized_warning(self) -> None:
+        """Localized warnings remain translated when rendered through messages."""
+
+        importer_instance = Mock()
+        importer_instance.import_file.return_value = Mock(name="SampleGroupMock")
+        importer_instance.import_file.return_value.name = "Imported Group"
+        localized_warning = lazy(lambda: "Предупреждение", str)()
+        importer_instance.warnings = [localized_warning]
+
+        with patch("app.views.VCFImporter", return_value=importer_instance):
+            response = self.client.post(
+                reverse("import_data"), {"data_file": self.build_upload("##fileformat=VCFv4.2\n")}
+            )
+
+        self.assertRedirects(response, reverse("profile"))
+        messages = [message.message for message in response.wsgi_request._messages]
+        self.assertIn("Imported Imported Group successfully.", messages)
+        self.assertIn("Предупреждение", messages)
 
     def test_error_flow_surfaces_exception_message(self) -> None:
         """Errors from the importer are shown to the user."""

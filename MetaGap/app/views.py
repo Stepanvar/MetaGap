@@ -37,6 +37,7 @@ from django.db import models as django_models
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
+from django.utils.functional import Promise
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import (
@@ -765,7 +766,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             % {"group": created_group.name},
         )
         for warning in importer.warnings:
-            messages.warning(self.request, warning)
+            self._add_warning_message(warning)
 
         return super().form_valid(form)
 
@@ -779,7 +780,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             message = _("An error occurred while importing the provided file.")
         form.add_error("data_file", message)
         for warning in getattr(exc, "warnings", []) or []:
-            messages.warning(self.request, warning)
+            self._add_warning_message(warning)
         messages.error(self.request, message)
         if str(message) == GENERIC_FALLBACK_VALIDATION_MESSAGE:
             messages.error(
@@ -788,3 +789,16 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
                     "We could not import the file because some required metadata was missing or invalid."
                 ),
             )
+
+    def _add_warning_message(self, warning: Any) -> None:
+        """Add a warning message, ensuring translation is respected."""
+
+        if warning is None:
+            return
+
+        if isinstance(warning, Promise):
+            translated_warning = warning
+        else:
+            translated_warning = _(str(warning))
+
+        messages.warning(self.request, translated_warning)

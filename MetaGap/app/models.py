@@ -65,7 +65,10 @@ class SampleOrigin(models.Model):
     time_stored = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Tissue: {self.tissue}, Collection Method: {self.collection_method}"
+        return _format_attributes(
+            (_("Tissue"), self.tissue),
+            (_("Collection Method"), self.collection_method),
+        )
 
 
 class MaterialType(models.Model):

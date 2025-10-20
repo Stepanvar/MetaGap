@@ -1757,6 +1757,10 @@ msgstr ""
 msgid "Imported %(group)s successfully."
 msgstr "Imported %(group)s successfully."
 
-#: app/views.py:779
+#: MetaGap/app/services/import_exceptions.py:17
+msgid "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
+msgstr "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
+
+#: MetaGap/app/views.py:779
 msgid "An error occurred while importing the provided file."
 msgstr "An error occurred while importing the provided file."

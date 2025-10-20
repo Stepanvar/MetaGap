@@ -31,6 +31,11 @@ from .vcf_metadata import VCFMetadataParser
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_PARSE_ERROR_MESSAGE = _(
+    "The uploaded file could not be parsed as a valid VCF."
+)
+
+
 class VCFImporter:
     """Encapsulate the VCF parsing workflow."""
 
@@ -134,7 +139,7 @@ class VCFImporter:
                     self._render_validation_error(exc)
                 ) from exc
             except (TypeError, ValueError) as exc:
-                message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
+                message = str(exc).strip() or DEFAULT_PARSE_ERROR_MESSAGE
                 raise ImporterValidationError(message) from exc
             finally:
                 for temp_path in temp_paths:

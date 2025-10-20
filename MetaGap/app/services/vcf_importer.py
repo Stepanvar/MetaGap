@@ -102,10 +102,10 @@ class VCFImporter:
                             retry_exc = inflated_exc
                             cleanup_pysam_sample_group()
                     if sample_group is None:
-                        warning = (
-                            f"Could not parse VCF metadata with pysam: {retry_exc}. "
+                        warning = _(
+                            "Could not parse VCF metadata with pysam: %(error)s. "
                             "Falling back to a text parser."
-                        )
+                        ) % {"error": retry_exc}
                         self._add_warning_once(warning)
                         cleanup_pysam_sample_group()
                         if sample_group is not None:

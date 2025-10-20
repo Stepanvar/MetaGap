@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
+from django.utils.translation import gettext_lazy as _
 
-GENERIC_FALLBACK_VALIDATION_MESSAGE = (
+
+GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW = (
     "The uploaded VCF file appears to be invalid or corrupted. "
     "Please verify the file contents and try again."
 )
+GENERIC_FALLBACK_VALIDATION_MESSAGE = _(GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW)
 
 
 class ImporterError(Exception):
@@ -31,6 +34,7 @@ class ImporterConfigurationError(ImporterValidationError):
 
 __all__ = [
     "GENERIC_FALLBACK_VALIDATION_MESSAGE",
+    "GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW",
     "ImporterConfigurationError",
     "ImporterError",
     "ImporterValidationError",

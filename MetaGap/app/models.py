@@ -104,7 +104,7 @@ class LibraryConstruction(models.Model):
     pcr_cycles = models.IntegerField(blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Kit: {self.kit}, Fragmentation: {self.fragmentation}"
+        return _format_attributes((_("Kit"), self.kit), (_("Fragmentation"), self.fragmentation))
 
 
 def _format_attributes(*attributes: tuple[str, Any]) -> str:

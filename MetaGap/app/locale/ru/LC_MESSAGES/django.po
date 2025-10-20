@@ -274,6 +274,9 @@ msgstr "РНК"
 msgid "cDNA"
 msgstr "кДНК"
 
+#: MetaGap/app/models.py:98
+msgid "Kit"
+msgstr ""
 #: MetaGap/app/models.py:86
 msgid "Type"
 msgstr "Тип"
@@ -461,7 +464,8 @@ msgstr "Индекс целостности"
 #: app/tables.py:221
 msgid "Library kit"
 msgstr "Набор для библиотеки"
-#: app/tables.py:222
+
+#: MetaGap/app/models.py:99 MetaGap/app/tables.py:222
 msgid "Fragmentation"
 msgstr "Фрагментация"
 #: app/tables.py:223

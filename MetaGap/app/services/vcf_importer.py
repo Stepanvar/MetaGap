@@ -19,6 +19,7 @@ from django.db import transaction
 from ..models import Format, Info, OrganizationProfile, SampleGroup
 from .import_exceptions import (
     GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW,
     ImporterConfigurationError,
     ImporterError,
     ImporterValidationError,
@@ -28,6 +29,11 @@ from .vcf_file_utils import extract_metadata_text_fallback, parse_vcf_text_fallb
 from .vcf_metadata import VCFMetadataParser
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_PARSE_ERROR_MESSAGE = _(
+    "The uploaded file could not be parsed as a valid VCF."
+)
 
 
 class VCFImporter:
@@ -42,21 +48,19 @@ class VCFImporter:
     def import_file(self, file_path: str) -> SampleGroup:
         """Import the provided VCF file and return the created sample group."""
 
+        profile_required_message = _(
+            "Please complete your organization profile before importing data."
+        )
+
         try:
             organization_profile = self.user.organization_profile
         except AttributeError as exc:  # pragma: no cover - defensive fallback
-            raise ImporterConfigurationError(
-                "Please complete your organization profile before importing data."
-            ) from exc
+            raise ImporterConfigurationError(profile_required_message) from exc
         except (OrganizationProfile.DoesNotExist, ObjectDoesNotExist) as exc:
-            raise ImporterConfigurationError(
-                "Please complete your organization profile before importing data."
-            ) from exc
+            raise ImporterConfigurationError(profile_required_message) from exc
 
         if organization_profile is None:
-            raise ImporterConfigurationError(
-                "Please complete your organization profile before importing data."
-            )
+            raise ImporterConfigurationError(profile_required_message)
 
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None
@@ -98,10 +102,10 @@ class VCFImporter:
                             retry_exc = inflated_exc
                             cleanup_pysam_sample_group()
                     if sample_group is None:
-                        warning = (
-                            f"Could not parse VCF metadata with pysam: {retry_exc}. "
+                        warning = _(
+                            "Could not parse VCF metadata with pysam: %(error)s. "
                             "Falling back to a text parser."
-                        )
+                        ) % {"error": retry_exc}
                         self._add_warning_once(warning)
                         cleanup_pysam_sample_group()
                         if sample_group is not None:
@@ -126,7 +130,7 @@ class VCFImporter:
                             if sample_group is not None:
                                 sample_group.delete()
                             raise ValidationError(
-                                GENERIC_FALLBACK_VALIDATION_MESSAGE
+                                GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
                             ) from fallback_exc
             except ImporterError:
                 raise
@@ -135,7 +139,7 @@ class VCFImporter:
                     self._render_validation_error(exc)
                 ) from exc
             except (TypeError, ValueError) as exc:
-                message = str(exc).strip() or "The uploaded file could not be parsed as a valid VCF."
+                message = str(exc).strip() or DEFAULT_PARSE_ERROR_MESSAGE
                 raise ImporterValidationError(message) from exc
             finally:
                 for temp_path in temp_paths:

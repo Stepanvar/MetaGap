@@ -49,7 +49,11 @@ class GenomeComplexity(models.Model):
     gc_content = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"Size: {self.size}, Ploidy: {self.ploidy}, GC: {self.gc_content}"
+        return _format_attributes(
+            (_("Size"), self.size),
+            (_("Ploidy"), self.ploidy),
+            (_("GC content"), self.gc_content),
+        )
 
 
 class SampleOrigin(models.Model):

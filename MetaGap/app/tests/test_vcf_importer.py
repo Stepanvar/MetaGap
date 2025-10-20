@@ -15,6 +15,7 @@ from django.test import TestCase
 from ..models import AlleleFrequency, SampleGroup
 from ..services.import_exceptions import (
     GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW,
     ImporterValidationError,
 )
 from ..services.vcf_importer import VCFImporter
@@ -938,7 +939,9 @@ class VCFImporterTests(TestCase):
 
         self.assertTrue(mocked_pysam.called)
         self.assertTrue(mocked_fallback.called)
-        self.assertEqual(str(excinfo.exception), GENERIC_FALLBACK_VALIDATION_MESSAGE)
+        self.assertEqual(
+            str(excinfo.exception), GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
+        )
 
     def test_should_retry_with_inflated_copy_for_bgzf_and_not_implemented_errors(self) -> None:
         self.assertTrue(

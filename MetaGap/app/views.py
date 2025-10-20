@@ -37,6 +37,7 @@ from django.db import models as django_models
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
+from django.utils.encoding import force_str
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import (
@@ -65,6 +66,7 @@ from .mixins import OrganizationSampleGroupMixin
 from .models import AlleleFrequency, Info, SampleGroup
 from .services.import_exceptions import (
     GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW,
     ImporterError,
     ImporterValidationError,
 )
@@ -774,14 +776,25 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
         form: ImportDataForm,
         exc: ImporterError,
     ) -> None:
-        message = getattr(exc, "user_message", str(exc)).strip()
-        if not message:
-            message = _("An error occurred while importing the provided file.")
-        form.add_error("data_file", message)
+        message = getattr(exc, "user_message", str(exc))
+        message_str = force_str(message).strip()
+        if not message_str:
+            message_str = force_str(
+                _("An error occurred while importing the provided file.")
+            )
+        is_generic_fallback = (
+            message_str == GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
+        )
+        display_message = (
+            force_str(GENERIC_FALLBACK_VALIDATION_MESSAGE)
+            if is_generic_fallback
+            else message_str
+        )
+        form.add_error("data_file", display_message)
         for warning in getattr(exc, "warnings", []) or []:
             messages.warning(self.request, warning)
-        messages.error(self.request, message)
-        if str(message) == GENERIC_FALLBACK_VALIDATION_MESSAGE:
+        messages.error(self.request, display_message)
+        if is_generic_fallback:
             messages.error(
                 self.request,
                 _(

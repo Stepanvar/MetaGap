@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-18 14:36+0000\n"
+"POT-Creation-Date: 2025-10-20 08:16+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -15,347 +15,262 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n%100>=11 && n%100<=14)? 2 : 3);\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || "
+"(n%100>=11 && n%100<=14)? 2 : 3);\n"
 
-#: MetaGap/app/filters.py:28 MetaGap/app/filters.py:409
-#: MetaGap/app/templates/index.html:46
-#: MetaGap/app/templates/partials/navbar.html:17
-#: MetaGap/app/templates/search_form.html:5
+#: app/filters.py:28 app/filters.py:409 app/templates/index.html:46
+#: app/templates/partials/navbar.html:17 app/templates/search_form.html:5
 msgid "Search"
 msgstr "Поиск"
-
-#: MetaGap/app/filters.py:29
+#: app/filters.py:29
 msgid "Chrom"
 msgstr "Хромосома"
-
-#: MetaGap/app/filters.py:31
+#: app/filters.py:31
 msgid "Position (min)"
 msgstr "Позиция (мин.)"
-
-#: MetaGap/app/filters.py:34
+#: app/filters.py:34
 msgid "Position (max)"
 msgstr "Позиция (макс.)"
-
-#: MetaGap/app/filters.py:37
+#: app/filters.py:37
 msgid "Position"
 msgstr "Позиция"
-
-#: MetaGap/app/filters.py:40 MetaGap/app/filters.py:255
+#: app/filters.py:40 app/filters.py:255
 msgid "Reference"
 msgstr "Референс"
-
-#: MetaGap/app/filters.py:43 MetaGap/app/filters.py:260
+#: app/filters.py:43 app/filters.py:260
 msgid "Alternate"
 msgstr "Альтернативная"
-
-#: MetaGap/app/filters.py:46
+#: app/filters.py:46
 msgid "Filter is PASS"
 msgstr "Фильтр PASS"
-
-#: MetaGap/app/filters.py:49
+#: app/filters.py:49
 msgid "QUAL (min)"
 msgstr "QUAL (мин.)"
-
-#: MetaGap/app/filters.py:52
+#: app/filters.py:52
 msgid "QUAL (max)"
 msgstr "QUAL (макс.)"
-
-#: MetaGap/app/filters.py:55
+#: app/filters.py:55
 msgid "AF (min)"
 msgstr "AF (мин.)"
-
-#: MetaGap/app/filters.py:58
+#: app/filters.py:58
 msgid "AF (max)"
 msgstr "AF (макс.)"
-
-#: MetaGap/app/filters.py:61
+#: app/filters.py:61
 msgid "DP (min)"
 msgstr "DP (мин.)"
-
-#: MetaGap/app/filters.py:64
+#: app/filters.py:64
 msgid "DP (max)"
 msgstr "DP (макс.)"
-
-#: MetaGap/app/filters.py:67
+#: app/filters.py:67
 msgid "MQ (min)"
 msgstr "MQ (мин.)"
-
-#: MetaGap/app/filters.py:70
+#: app/filters.py:70
 msgid "MQ (max)"
 msgstr "MQ (макс.)"
-
-#: MetaGap/app/filters.py:73
+#: app/filters.py:73
 msgid "QD (min)"
 msgstr "QD (мин.)"
-
-#: MetaGap/app/filters.py:76
+#: app/filters.py:76
 msgid "QD (max)"
 msgstr "QD (макс.)"
-
-#: MetaGap/app/filters.py:79
+#: app/filters.py:79
 msgid "FS (min)"
 msgstr "FS (мин.)"
-
-#: MetaGap/app/filters.py:82
+#: app/filters.py:82
 msgid "FS (max)"
 msgstr "FS (макс.)"
-
-#: MetaGap/app/filters.py:85
+#: app/filters.py:85
 msgid "SOR (min)"
 msgstr "SOR (мин.)"
-
-#: MetaGap/app/filters.py:88
+#: app/filters.py:88
 msgid "SOR (max)"
 msgstr "SOR (макс.)"
-
-#: MetaGap/app/filters.py:94 MetaGap/app/filters.py:305
-#: MetaGap/app/views.py:584
+#: app/filters.py:94 app/filters.py:305 app/views.py:584
 msgid "Source lab"
 msgstr "Лаборатория-источник"
-
-#: MetaGap/app/filters.py:99 MetaGap/app/tables.py:215
+#: app/filters.py:99 app/tables.py:215
 msgid "Sample tissue"
 msgstr "Ткань образца"
-
-#: MetaGap/app/filters.py:104 MetaGap/app/tables.py:249
+#: app/filters.py:104 app/tables.py:249
 msgid "Variant calling tool"
 msgstr "Инструмент вызова вариантов"
-
-#: MetaGap/app/filters.py:109
+#: app/filters.py:109
 msgid "Variant calling version"
 msgstr "Версия вызова вариантов"
-
-#: MetaGap/app/filters.py:114 MetaGap/app/tables.py:245
+#: app/filters.py:114 app/tables.py:245
 msgid "Alignment tool"
 msgstr "Инструмент выравнивания"
-
-#: MetaGap/app/filters.py:119
+#: app/filters.py:119
 msgid "Alignment reference genome"
 msgstr "Референсный геном для выравнивания"
-
-#: MetaGap/app/filters.py:124
+#: app/filters.py:124
 msgid "Alignment recalibration"
 msgstr "Рекалибровка выравнивания"
-
-#: MetaGap/app/filters.py:235
+#: app/filters.py:235
 msgid "Keyword"
 msgstr "Ключевое слово"
-
-#: MetaGap/app/filters.py:240 MetaGap/app/tables.py:183
+#: app/filters.py:240 app/tables.py:183
 msgid "Chromosome"
-msgstr "Хромосома"
-
-#: MetaGap/app/filters.py:245
+#: app/filters.py:245
 msgid "Position ≥"
 msgstr "Позиция ≥"
-
-#: MetaGap/app/filters.py:250
+#: app/filters.py:250
 msgid "Position ≤"
 msgstr "Позиция ≤"
-
-#: MetaGap/app/filters.py:264
+#: app/filters.py:264
 msgid "PASS only"
 msgstr "Только PASS"
-
-#: MetaGap/app/filters.py:270
+#: app/filters.py:270
 msgid "Quality ≥"
 msgstr "Качество ≥"
-
-#: MetaGap/app/filters.py:275
+#: app/filters.py:275
 msgid "AF ≥"
 msgstr "AF ≥"
-
-#: MetaGap/app/filters.py:280
+#: app/filters.py:280
 msgid "AC ≥"
 msgstr "AC ≥"
-
-#: MetaGap/app/filters.py:285
+#: app/filters.py:285
 msgid "AN ≥"
 msgstr "AN ≥"
-
-#: MetaGap/app/filters.py:290
+#: app/filters.py:290
 msgid "DP ≥"
 msgstr "DP ≥"
-
-#: MetaGap/app/filters.py:295
+#: app/filters.py:295
 msgid "MQ ≥"
 msgstr "MQ ≥"
-
-#: MetaGap/app/filters.py:300 MetaGap/app/tables.py:201
+#: app/filters.py:300 app/tables.py:201
 msgid "Sample group"
 msgstr "Группа образцов"
-
-#: MetaGap/app/filters.py:310 MetaGap/app/forms.py:263
+#: app/filters.py:310 app/forms.py:263
 msgid "Tissue"
 msgstr "Ткань"
-
-#: MetaGap/app/filters.py:315
+#: app/filters.py:315
 msgid "Variant caller"
 msgstr "Вызов вариантов"
-
-#: MetaGap/app/forms.py:141 MetaGap/app/templates/index.html:22
+#: app/forms.py:141 app/templates/index.html:22
 msgid "Search the catalogue"
 msgstr "Поиск по каталогу"
-
-#: MetaGap/app/forms.py:144
+#: app/forms.py:144
 msgid "Variant ID, coordinate, or keyword"
 msgstr "ID варианта, координата или ключевое слово"
-
-#: MetaGap/app/forms.py:153
+#: app/forms.py:153
 msgid "Email address"
 msgstr "Адрес электронной почты"
-
-#: MetaGap/app/forms.py:159
+#: app/forms.py:159
 msgid "Username"
 msgstr "Имя пользователя"
-
-#: MetaGap/app/forms.py:164 MetaGap/app/forms.py:716
+#: app/forms.py:164 app/forms.py:716
 msgid "Organization name"
 msgstr "Название организации"
-
-#: MetaGap/app/forms.py:166 MetaGap/app/forms.py:718
+#: app/forms.py:166 app/forms.py:718
 msgid "Organization"
 msgstr "Организация"
-
-#: MetaGap/app/forms.py:170 MetaGap/app/forms.py:172
+#: app/forms.py:170 app/forms.py:172
 msgid "Password"
 msgstr "Пароль"
-
-#: MetaGap/app/forms.py:176 MetaGap/app/forms.py:178
+#: app/forms.py:176 app/forms.py:178
 msgid "Confirm password"
 msgstr "Подтвердите пароль"
-
-#: MetaGap/app/forms.py:189
+#: app/forms.py:189
 msgid "Please provide an email address so we can contact you."
 msgstr "Укажите адрес электронной почты, чтобы мы могли с вами связаться."
-
-#: MetaGap/app/forms.py:191
+#: app/forms.py:191
 msgid "An account with this email address already exists."
 msgstr "Учетная запись с таким адресом электронной почты уже существует."
-
-#: MetaGap/app/forms.py:268 MetaGap/app/tables.py:216
+#: app/forms.py:268 app/tables.py:216
 msgid "Collection method"
 msgstr "Метод сбора"
-
-#: MetaGap/app/forms.py:273 MetaGap/app/tables.py:217
+#: app/forms.py:273 app/tables.py:217
 msgid "Storage conditions"
 msgstr "Условия хранения"
-
-#: MetaGap/app/forms.py:278 MetaGap/app/tables.py:218
+#: app/forms.py:278 app/tables.py:218
 msgid "Time stored"
 msgstr "Время хранения"
-
-#: MetaGap/app/forms.py:283 MetaGap/app/models.py:373
-#: MetaGap/app/models.py:379
+#: MetaGap/app/forms.py:283 MetaGap/app/models.py:377 MetaGap/app/models.py:383
 msgid "Illumina"
 msgstr "Illumina"
-
-#: MetaGap/app/forms.py:284 MetaGap/app/models.py:374
+#: MetaGap/app/forms.py:284 MetaGap/app/models.py:378
 msgid "Oxford Nanopore"
 msgstr "Oxford Nanopore"
-
-#: MetaGap/app/forms.py:285 MetaGap/app/models.py:375
-#: MetaGap/app/models.py:381
+#: MetaGap/app/forms.py:285 MetaGap/app/models.py:379 MetaGap/app/models.py:385
 msgid "PacBio"
 msgstr "PacBio"
-
-#: MetaGap/app/forms.py:288 MetaGap/app/models.py:376
-#: MetaGap/app/models.py:382
+#: MetaGap/app/forms.py:288 MetaGap/app/models.py:380 MetaGap/app/models.py:386
 msgid "Ion Torrent"
 msgstr "Ion Torrent"
-
-#: MetaGap/app/forms.py:291
+#: app/forms.py:291
 msgid "Platform-independent"
 msgstr "Независимо от платформы"
-
-#: MetaGap/app/forms.py:303 MetaGap/app/forms.py:534 MetaGap/app/views.py:568
+#: app/forms.py:303 app/forms.py:534 app/views.py:568
 msgid "Sequencing platform"
 msgstr "Секвенатор"
-
-#: MetaGap/app/forms.py:448
+#: app/forms.py:448
 msgid "Total samples must be a positive integer."
 msgstr "Общее количество образцов должно быть положительным целым числом."
-
-#: MetaGap/app/forms.py:464
-msgid ""
-"Use digits and common separators (spaces, dashes, parentheses) for the phone"
-" number."
-msgstr ""
+#: app/forms.py:464
+"Use digits and common separators (spaces, dashes, parentheses) for the phone "
+"number."
 "Используйте цифры и стандартные разделители (пробелы, дефисы, скобки) для "
 "телефонного номера."
-
-#: MetaGap/app/forms.py:468
+#: app/forms.py:468
 msgid "Enter a phone number with at least six digits."
 msgstr "Введите номер телефона минимум из шести цифр."
-
-#: MetaGap/app/forms.py:497
+#: app/forms.py:497
 msgid "Enter or select a value"
 msgstr "Введите или выберите значение"
-
-#: MetaGap/app/forms.py:502
+#: app/forms.py:502
 msgid "Start typing to select an existing value or enter a new one."
 msgstr "Начните ввод, чтобы выбрать существующее значение или добавить новое."
-
-#: MetaGap/app/forms.py:660
-msgid ""
+#: app/forms.py:660
 "Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants "
 "you want to ingest."
-msgstr ""
 "Загрузите файл VCF (.vcf, .vcf.gz, .vcf.bgz) или BCF с вариантами, которые "
 "нужно импортировать."
-
-#: MetaGap/app/forms.py:673
+#: app/forms.py:673
 #, python-format
-msgid ""
 "Files up to %(limit)s MB are accepted. Ensure the header includes metadata "
 "sections for your sample group."
-msgstr ""
 "Принимаются файлы размером до %(limit)s МБ. Убедитесь, что заголовок "
 "содержит разделы метаданных для вашей группы образцов."
-
-#: MetaGap/app/forms.py:682
+#: app/forms.py:682
 msgid "Select a VCF or BCF file to import."
 msgstr "Выберите файл VCF или BCF для импорта."
-
-#: MetaGap/app/forms.py:689
-#, python-format
+#: app/forms.py:689
 msgid "Unsupported file type. Please upload a file ending in %(extensions)s."
-msgstr ""
 "Неподдерживаемый тип файла. Загрузите файл с расширением %(extensions)s."
-
-#: MetaGap/app/forms.py:698
-#, python-format
+#: app/forms.py:698
 msgid "Files larger than %(limit)s MB cannot be imported."
 msgstr "Файлы размером более %(limit)s МБ импортировать нельзя."
-
-#: MetaGap/app/forms.py:706
-msgid ""
-"The uploaded file does not look like a VCF/BCF file. Please check the format"
-" and try again."
-msgstr ""
+#: app/forms.py:706
+"The uploaded file does not look like a VCF/BCF file. Please check the format "
+"and try again."
 "Загруженный файл не похож на VCF/BCF. Проверьте формат и повторите попытку."
-
-#: MetaGap/app/forms.py:743
+#: app/forms.py:743
 msgid "Please provide a valid email address."
 msgstr "Укажите корректный адрес электронной почты."
-
-#: MetaGap/app/forms.py:748
+#: app/forms.py:748
 msgid "Another user is already using this email address."
 msgstr "Другой пользователь уже использует этот адрес электронной почты."
-
-#: MetaGap/app/forms.py:766
+#: app/forms.py:766
 msgid "I confirm that I want to delete my account."
 msgstr "Я подтверждаю, что хочу удалить свою учетную запись."
-
-#: MetaGap/app/models.py:71
+#: MetaGap/app/models.py:53
+msgid "Size"
+#: MetaGap/app/models.py:54
+msgid "Ploidy"
+#: MetaGap/app/models.py:55
+#, fuzzy
+#| msgid "Genome GC content"
+msgid "GC content"
+msgstr "GC-состав генома"
+#: MetaGap/app/models.py:75
 msgid "DNA"
 msgstr "ДНК"
-
-#: MetaGap/app/models.py:72
+#: MetaGap/app/models.py:76
 msgid "RNA"
 msgstr "РНК"
-
-#: MetaGap/app/models.py:73
+#: MetaGap/app/models.py:77
 msgid "cDNA"
 msgstr "кДНК"
 
@@ -371,1456 +286,1005 @@ msgstr "Индекс целостности"
 #: MetaGap/app/templates/sample_group_detail.html:31
 msgid "Not provided"
 msgstr "Не указано"
-
-#: MetaGap/app/models.py:132
+#: MetaGap/app/models.py:136
 msgid "Flow Cell"
 msgstr "Ячейка потока"
-
-#: MetaGap/app/models.py:133
+#: MetaGap/app/models.py:137
 msgid "Channel method"
 msgstr "Метод канала"
-
-#: MetaGap/app/models.py:134
+#: MetaGap/app/models.py:138
 msgid "Cluster density"
 msgstr "Плотность кластеров"
-
-#: MetaGap/app/models.py:135
+#: MetaGap/app/models.py:139
 msgid "QC software"
 msgstr "ПО контроля качества"
-
-#: MetaGap/app/models.py:149
+#: MetaGap/app/models.py:153
 msgid "Flow Cell Version"
 msgstr "Версия ячейки потока"
-
-#: MetaGap/app/models.py:150
+#: MetaGap/app/models.py:154
 msgid "Pore type"
 msgstr "Тип пор"
-
-#: MetaGap/app/models.py:151
+#: MetaGap/app/models.py:155
 msgid "Bias voltage"
 msgstr "Напряжение смещения"
-
-#: MetaGap/app/models.py:164
+#: MetaGap/app/models.py:168
 msgid "SMRT Cell Type"
 msgstr "Тип ячейки SMRT"
-
-#: MetaGap/app/models.py:165
+#: MetaGap/app/models.py:169
 msgid "ZMW density"
 msgstr "Плотность ZMW"
-
-#: MetaGap/app/models.py:180
+#: MetaGap/app/models.py:184
 msgid "Chip Type"
 msgstr "Тип чипа"
-
-#: MetaGap/app/models.py:181
+#: MetaGap/app/models.py:185
 msgid "pH calibration"
 msgstr "Калибровка pH"
-
-#: MetaGap/app/models.py:182
+#: MetaGap/app/models.py:186
 msgid "Flow order"
 msgstr "Порядок потоков"
-
-#: MetaGap/app/models.py:183
+#: MetaGap/app/models.py:187
 msgid "Ion sphere metrics"
 msgstr "Метрики Ion Sphere"
-
-#: MetaGap/app/models.py:197 MetaGap/app/models.py:215
+#: MetaGap/app/models.py:201 MetaGap/app/models.py:219
 msgid "Tool"
 msgstr "Инструмент"
-
-#: MetaGap/app/models.py:197
+#: MetaGap/app/models.py:201
 msgid "Unknown"
 msgstr "Неизвестно"
-
-#: MetaGap/app/models.py:198
+#: MetaGap/app/models.py:202
 msgid "Parameters"
 msgstr "Параметры"
-
-#: MetaGap/app/models.py:199
+#: MetaGap/app/models.py:203
 msgid "Ref Genome Version"
 msgstr "Версия референсного генома"
-
-#: MetaGap/app/models.py:200 MetaGap/app/tables.py:248
+#: MetaGap/app/models.py:204 MetaGap/app/tables.py:248
 msgid "Recalibration settings"
 msgstr "Параметры рекалибровки"
-
-#: MetaGap/app/models.py:216
+#: MetaGap/app/models.py:220
 msgid "Version"
 msgstr "Версия"
-
-#: MetaGap/app/models.py:217
+#: MetaGap/app/models.py:221
 msgid "Filtering thresholds"
 msgstr "Пороговые значения фильтрации"
-
-#: MetaGap/app/models.py:218 MetaGap/app/tables.py:252
+#: MetaGap/app/models.py:222 MetaGap/app/tables.py:252
 msgid "Duplicate handling"
 msgstr "Обработка дубликатов"
-
-#: MetaGap/app/models.py:219
+#: MetaGap/app/models.py:223
 msgid "MQ"
 msgstr "MQ"
-
-#: MetaGap/app/models.py:231
+#: MetaGap/app/models.py:235
 msgid "Normalization"
 msgstr "Нормализация"
-
-#: MetaGap/app/models.py:232
+#: MetaGap/app/models.py:236
 msgid "Harmonization"
 msgstr "Гармонизация"
-
-#: MetaGap/app/models.py:380
+#: MetaGap/app/models.py:384
 msgid "ONT"
 msgstr "ONT"
-
-#: MetaGap/app/services/vcf_importer.py:208
+#: MetaGap/app/services/vcf_importer.py:224
 msgid "The uploaded file is not valid."
 msgstr "Загруженный файл недействителен."
-
-#: MetaGap/app/tables.py:184
+#: app/tables.py:184
 msgid "Position (bp)"
 msgstr "Позиция (п.н.)"
-
-#: MetaGap/app/tables.py:185
+#: app/tables.py:185
 msgid "Reference allele"
 msgstr "Референсная аллель"
-
-#: MetaGap/app/tables.py:186
+#: app/tables.py:186
 msgid "Alternate allele"
 msgstr "Альтернативная аллель"
-
-#: MetaGap/app/tables.py:187
+#: app/tables.py:187
 msgid "QUAL"
 msgstr "QUAL"
-
-#: MetaGap/app/tables.py:188
+#: app/tables.py:188
 msgid "Filter status"
 msgstr "Статус фильтра"
-
-#: MetaGap/app/tables.py:189
+#: app/tables.py:189
 msgid "Allele frequency (AF)"
 msgstr "Частота аллели (AF)"
-
-#: MetaGap/app/tables.py:190
+#: app/tables.py:190
 msgid "Allele count (AC)"
 msgstr "Количество аллелей (AC)"
-
-#: MetaGap/app/tables.py:191
+#: app/tables.py:191
 msgid "Alleles analysed (AN)"
 msgstr "Проанализированные аллели (AN)"
-
-#: MetaGap/app/tables.py:192
+#: app/tables.py:192
 msgid "Read depth (DP)"
 msgstr "Глубина чтения (DP)"
-
-#: MetaGap/app/tables.py:193
+#: app/tables.py:193
 msgid "Mapping quality (MQ)"
 msgstr "Качество картирования (MQ)"
-
-#: MetaGap/app/tables.py:194
+#: app/tables.py:194
 msgid "Quality by depth (QD)"
 msgstr "Качество на глубину (QD)"
-
-#: MetaGap/app/tables.py:195
+#: app/tables.py:195
 msgid "Fisher strand (FS)"
 msgstr "Показатель Фишера по цепи (FS)"
-
-#: MetaGap/app/tables.py:196
+#: app/tables.py:196
 msgid "Strand odds ratio (SOR)"
 msgstr "Отношение шансов по цепям (SOR)"
-
-#: MetaGap/app/tables.py:197
+#: app/tables.py:197
 msgid "Samples counted (NS)"
 msgstr "Количество образцов (NS)"
-
-#: MetaGap/app/tables.py:198
+#: app/tables.py:198
 msgid "Strand bias (SB)"
 msgstr "Смещённость по цепям (SB)"
-
-#: MetaGap/app/tables.py:199
+#: app/tables.py:199
 msgid "Variant ID"
 msgstr "ID варианта"
-
-#: MetaGap/app/tables.py:200
+#: app/tables.py:200
 msgid "Variant comments"
 msgstr "Комментарии к варианту"
-
-#: MetaGap/app/tables.py:202
+#: app/tables.py:202
 msgid "Source laboratory"
-msgstr "Лаборатория-источник"
-
-#: MetaGap/app/tables.py:203 MetaGap/app/views.py:583
+#: app/tables.py:203 app/views.py:583
 msgid "DOI"
 msgstr "DOI"
-
-#: MetaGap/app/tables.py:204 MetaGap/app/views.py:586
+#: app/tables.py:204 app/views.py:586
 msgid "Contact email"
 msgstr "Контактный email"
-
-#: MetaGap/app/tables.py:205 MetaGap/app/views.py:587
+#: app/tables.py:205 app/views.py:587
 msgid "Contact phone"
 msgstr "Контактный телефон"
-
-#: MetaGap/app/tables.py:206 MetaGap/app/views.py:585
+#: app/tables.py:206 app/views.py:585
 msgid "Total samples"
 msgstr "Всего образцов"
-
-#: MetaGap/app/tables.py:207
+#: app/tables.py:207
 msgid "Inclusion criteria"
 msgstr "Критерии включения"
-
-#: MetaGap/app/tables.py:208
+#: app/tables.py:208
 msgid "Exclusion criteria"
 msgstr "Критерии исключения"
-
-#: MetaGap/app/tables.py:209
+#: app/tables.py:209
 msgid "Group comments"
 msgstr "Комментарии группы"
-
-#: MetaGap/app/tables.py:210
+#: app/tables.py:210
 msgid "Reference build"
 msgstr "Сборка референса"
-
-#: MetaGap/app/tables.py:211
+#: app/tables.py:211
 msgid "Reference build version"
 msgstr "Версия референсной сборки"
-
-#: MetaGap/app/tables.py:212
+#: app/tables.py:212
 msgid "Genome size"
 msgstr "Размер генома"
-
-#: MetaGap/app/tables.py:213
+#: app/tables.py:213
 msgid "Genome ploidy"
 msgstr "Плоидность генома"
-
-#: MetaGap/app/tables.py:214
+#: app/tables.py:214
 msgid "Genome GC content"
-msgstr "GC-состав генома"
-
-#: MetaGap/app/tables.py:219 MetaGap/app/views.py:626
+#: app/tables.py:219 app/views.py:626
 msgid "Material type"
 msgstr "Тип материала"
-
-#: MetaGap/app/tables.py:220
+#: app/tables.py:220
 msgid "Integrity number"
 msgstr "Индекс целостности"
-
-#: MetaGap/app/tables.py:221
+#: app/tables.py:221
 msgid "Library kit"
 msgstr "Набор для библиотеки"
-
-#: MetaGap/app/tables.py:222
+#: app/tables.py:222
 msgid "Fragmentation"
 msgstr "Фрагментация"
-
-#: MetaGap/app/tables.py:223
+#: app/tables.py:223
 msgid "Adapter ligation efficiency"
 msgstr "Эффективность лигирования адаптеров"
-
-#: MetaGap/app/tables.py:224
+#: app/tables.py:224
 msgid "PCR cycles"
 msgstr "Число циклов ПЦР"
-
-#: MetaGap/app/tables.py:225
+#: app/tables.py:225
 msgid "Illumina instrument"
 msgstr "Прибор Illumina"
-
-#: MetaGap/app/tables.py:226
+#: app/tables.py:226
 msgid "Illumina flow cell"
 msgstr "Поточная ячейка Illumina"
-
-#: MetaGap/app/tables.py:227
+#: app/tables.py:227
 msgid "Illumina channel method"
 msgstr "Метод канала Illumina"
-
-#: MetaGap/app/tables.py:228
+#: app/tables.py:228
 msgid "Illumina cluster density"
 msgstr "Плотность кластеров Illumina"
-
-#: MetaGap/app/tables.py:229
+#: app/tables.py:229
 msgid "Illumina QC software"
 msgstr "ПО контроля качества Illumina"
-
-#: MetaGap/app/tables.py:230
+#: app/tables.py:230
 msgid "ONT instrument"
 msgstr "Прибор ONT"
-
-#: MetaGap/app/tables.py:231
+#: app/tables.py:231
 msgid "ONT flow cell"
 msgstr "Поточная ячейка ONT"
-
-#: MetaGap/app/tables.py:232
+#: app/tables.py:232
 msgid "ONT flow cell version"
 msgstr "Версия ячейки ONT"
-
-#: MetaGap/app/tables.py:233
+#: app/tables.py:233
 msgid "ONT pore type"
 msgstr "Тип пор ONT"
-
-#: MetaGap/app/tables.py:234
+#: app/tables.py:234
 msgid "ONT bias voltage"
 msgstr "Напряжение смещения ONT"
-
-#: MetaGap/app/tables.py:235
+#: app/tables.py:235
 msgid "PacBio instrument"
 msgstr "Прибор PacBio"
-
-#: MetaGap/app/tables.py:236
+#: app/tables.py:236
 msgid "PacBio flow cell"
 msgstr "Поточная ячейка PacBio"
-
-#: MetaGap/app/tables.py:237
+#: app/tables.py:237
 msgid "PacBio SMRT cell type"
 msgstr "Тип ячейки PacBio SMRT"
-
-#: MetaGap/app/tables.py:238
+#: app/tables.py:238
 msgid "PacBio ZMW density"
 msgstr "Плотность ZMW PacBio"
-
-#: MetaGap/app/tables.py:239
+#: app/tables.py:239
 msgid "Ion Torrent instrument"
 msgstr "Прибор Ion Torrent"
-
-#: MetaGap/app/tables.py:240
+#: app/tables.py:240
 msgid "Ion Torrent flow cell"
 msgstr "Поточная ячейка Ion Torrent"
-
-#: MetaGap/app/tables.py:241
+#: app/tables.py:241
 msgid "Ion Torrent chip type"
 msgstr "Тип чипа Ion Torrent"
-
-#: MetaGap/app/tables.py:242
+#: app/tables.py:242
 msgid "Ion Torrent pH calibration"
 msgstr "Калибровка pH Ion Torrent"
-
-#: MetaGap/app/tables.py:243
+#: app/tables.py:243
 msgid "Ion Torrent flow order"
 msgstr "Порядок потоков Ion Torrent"
-
-#: MetaGap/app/tables.py:244
+#: app/tables.py:244
 msgid "Ion Sphere metrics"
-msgstr "Метрики Ion Sphere"
-
-#: MetaGap/app/tables.py:246
+#: app/tables.py:246
 msgid "Alignment parameters"
 msgstr "Параметры выравнивания"
-
-#: MetaGap/app/tables.py:247
+#: app/tables.py:247
 msgid "Reference genome version"
-msgstr "Версия референсного генома"
-
-#: MetaGap/app/tables.py:250
+#: app/tables.py:250
 msgid "Variant caller version"
-msgstr "Версия вызова вариантов"
-
-#: MetaGap/app/tables.py:251
+#: app/tables.py:251
 msgid "Variant filtering thresholds"
 msgstr "Пороговые значения фильтрации вариантов"
-
-#: MetaGap/app/tables.py:253
+#: app/tables.py:253
 msgid "Variant caller MQ"
 msgstr "MQ вызова вариантов"
-
-#: MetaGap/app/tables.py:254
+#: app/tables.py:254
 msgid "Post-processing normalization"
 msgstr "Нормализация постобработки"
-
-#: MetaGap/app/tables.py:255
+#: app/tables.py:255
 msgid "Post-processing harmonization"
 msgstr "Гармонизация постобработки"
-
-#: MetaGap/app/tables.py:256
+#: app/tables.py:256
 msgid "Input A260/A280"
 msgstr "Входной A260/A280"
-
-#: MetaGap/app/tables.py:257
+#: app/tables.py:257
 msgid "Input A260/A230"
 msgstr "Входной A260/A230"
-
-#: MetaGap/app/tables.py:258 MetaGap/app/views.py:653
+#: app/tables.py:258 app/views.py:653
 msgid "DNA concentration"
 msgstr "Концентрация ДНК"
-
-#: MetaGap/app/tables.py:259 MetaGap/app/views.py:658
+#: app/tables.py:259 app/views.py:658
 msgid "RNA concentration"
 msgstr "Концентрация РНК"
-
-#: MetaGap/app/tables.py:260
+#: app/tables.py:260
 msgid "Input quality notes"
 msgstr "Заметки о качестве входных данных"
-
-#: MetaGap/app/templates/about.html:4
-#, python-format
+#: app/templates/about.html:4
 msgid "About - %(site_name)s"
 msgstr "О проекте — %(site_name)s"
-
-#: MetaGap/app/templates/about.html:7
-#: MetaGap/app/templates/partials/navbar.html:14
+#: app/templates/about.html:7 app/templates/partials/navbar.html:14
 msgid "About"
 msgstr "О проекте"
-
-#: MetaGap/app/templates/about.html:15
-#, python-format
-msgid ""
+#: app/templates/about.html:15
 "%(site_name)s is a web platform for unifying, aggregating, and visualising "
 "variant data from VCF/gVCF files."
-msgstr ""
 "%(site_name)s — это веб-платформа для объединения, агрегации и визуализации "
 "данных о вариантах из файлов VCF/gVCF."
-
-#: MetaGap/app/templates/about.html:16
-msgid ""
+#: app/templates/about.html:16
 "MetaGaP is an open platform for exploring cohort-level variant frequencies."
-msgstr ""
 "MetaGaP — открытая платформа для исследования частот вариантов на уровне "
 "когорт."
-
-#: MetaGap/app/templates/about.html:20
+#: app/templates/about.html:20
 msgid "Platform capabilities"
 msgstr "Возможности платформы"
-
-#: MetaGap/app/templates/about.html:22
-msgid ""
+#: app/templates/about.html:22
 "Import and basic validation of VCF/gVCF files with support for GRCh37 and "
 "GRCh38 assemblies."
-msgstr ""
 "Импорт и базовая проверка файлов VCF/gVCF с поддержкой сборок GRCh37 и "
 "GRCh38."
-
-#: MetaGap/app/templates/about.html:23
-msgid ""
+#: app/templates/about.html:23
 "Merge multiple VCFs into a cohort-level file and recalculate AC/AN/AF tags "
 "using <code>bcftools +fill-tags</code>."
-msgstr ""
-"Объединение нескольких VCF в файл на уровне когорты с перерасчётом тегов "
-"AC/AN/AF с помощью <code>bcftools +fill-tags</code>."
-
-#: MetaGap/app/templates/about.html:24
-msgid ""
+"Объединение нескольких VCF в файл на уровне когорты с перерасчётом тегов AC/"
+"AN/AF с помощью <code>bcftools +fill-tags</code>."
+#: app/templates/about.html:24
 "Apply filters (QUAL, PASS, and more) and remove genotype columns during "
 "export to support de-identification."
-msgstr ""
 "Применение фильтров (QUAL, PASS и др.) и удаление столбцов генотипов при "
 "экспорте для обеспечения де-идентификации."
-
-#: MetaGap/app/templates/about.html:25
-msgid ""
+#: app/templates/about.html:25
 "Leverage tables and filters (django-tables2, django-filter) for streamlined "
 "browsing and navigation."
-msgstr ""
 "Используйте таблицы и фильтры (django-tables2, django-filter) для удобной "
 "навигации и просмотра."
-
-#: MetaGap/app/templates/about.html:30
+#: app/templates/about.html:30
 msgid "How it works"
 msgstr "Как это работает"
-
-#: MetaGap/app/templates/about.html:32
-msgid ""
+#: app/templates/about.html:32
 "Each input VCF is normalised with <code>bgzip + tabix</code> and validated "
 "for readability and a compliant header."
-msgstr ""
 "Каждый входной VCF нормализуется с помощью <code>bgzip + tabix</code> и "
 "проверяется на читабельность и корректность заголовка."
-
-#: MetaGap/app/templates/about.html:33
-msgid ""
+#: app/templates/about.html:33
 "Cohort merging runs via <code>bcftools merge -m all</code> followed by "
 "recalculation of summary tags (AC/AN/AF)."
-msgstr ""
 "Объединение когорт выполняется с помощью <code>bcftools merge -m all</code> "
 "с последующим пересчётом сводных тегов (AC/AN/AF)."
-
-#: MetaGap/app/templates/about.html:34
-msgid ""
+#: app/templates/about.html:34
 "Configured filters are applied; genotype data can be stripped with "
 "<code>bcftools view -G</code>. The final VCF and index are then produced."
-msgstr ""
 "Применяются настроенные фильтры; данные генотипов могут быть удалены "
 "командой <code>bcftools view -G</code>. Затем формируются итоговый VCF и "
 "индекс."
-
-#: MetaGap/app/templates/about.html:39
+#: app/templates/about.html:39
 msgid "Reliability and quality control"
 msgstr "Надёжность и контроль качества"
-
-#: MetaGap/app/templates/about.html:41
-msgid ""
+#: app/templates/about.html:41
 "Format validation and error logging for external tools (bcftools, bgzip, "
 "tabix)."
-msgstr ""
 "Проверка формата и журнал ошибок для внешних инструментов (bcftools, bgzip, "
-"tabix)."
-
-#: MetaGap/app/templates/about.html:42
-msgid ""
+#: app/templates/about.html:42
 "Automated tests cover key merge and import scenarios, and community "
 "regression suites are welcome."
-msgstr ""
 "Автоматические тесты охватывают основные сценарии слияния и импорта, "
 "приветствуются регрессионные наборы сообщества."
-
-#: MetaGap/app/templates/about.html:47
+#: app/templates/about.html:47
 msgid "Limitations and disclaimer"
 msgstr "Ограничения и отказ от ответственности"
-
-#: MetaGap/app/templates/about.html:48
-msgid ""
+#: app/templates/about.html:48
 "The platform is intended for research use only and is not a medical device. "
 "Do not upload personal or clinical genomic data; use synthetic examples or "
 "de-identified metadata."
-msgstr ""
 "Платформа предназначена только для исследовательских целей и не является "
 "медицинским изделием. Не загружайте персональные или клинические геномные "
 "данные; используйте синтетические примеры или де-идентифицированные "
 "метаданные."
-
-#: MetaGap/app/templates/about.html:52
+#: app/templates/about.html:52
 msgid "Technology stack"
 msgstr "Технологический стек"
-
-#: MetaGap/app/templates/about.html:53
-msgid ""
+#: app/templates/about.html:53
 "Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-"
 "bootstrap5, django-tables2, django-filter, backed by SQLite or PostgreSQL."
-msgstr ""
-"Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-"
 "bootstrap5, django-tables2, django-filter, с поддержкой SQLite или "
 "PostgreSQL."
-
-#: MetaGap/app/templates/about.html:57
+#: app/templates/about.html:57
 msgid "Community and feedback"
 msgstr "Сообщество и обратная связь"
-
-#: MetaGap/app/templates/about.html:58
-msgid ""
+#: app/templates/about.html:58
 "Repository: <a href=\"https://github.com/Stepanvar/MetaGap\" "
 "target=\"_blank\" rel=\"noopener\">github.com/Stepanvar/MetaGap</a>. "
-"Contributions that improve the pipeline, add tests, or enhance the interface"
-" are welcome."
-msgstr ""
+"Contributions that improve the pipeline, add tests, or enhance the interface "
+"are welcome."
 "Репозиторий: <a href=\"https://github.com/Stepanvar/MetaGap\" "
-"target=\"_blank\" rel=\"noopener\">github.com/Stepanvar/MetaGap</a>. "
-"Приветствуются улучшения пайплайна, добавление тестов и улучшение "
-"интерфейса."
-
-#: MetaGap/app/templates/adddata.html:4
-#, python-format
+"Приветствуются улучшения пайплайна, добавление тестов и улучшение интерфейса."
+#: app/templates/adddata.html:4
 msgid "Add Data - %(site_name)s"
 msgstr "Добавление данных — %(site_name)s"
-
-#: MetaGap/app/templates/adddata.html:7 MetaGap/app/templates/adddata.html:12
+#: app/templates/adddata.html:7 app/templates/adddata.html:12
 msgid "Add Data"
 msgstr "Добавить данные"
-
-#: MetaGap/app/templates/adddata.html:17
-#: MetaGap/app/templates/form_template.html:37
-#: MetaGap/app/templates/partials/form.html:80
+#: app/templates/adddata.html:17 app/templates/form_template.html:37
+#: app/templates/partials/form.html:80
 msgid "Submit"
 msgstr "Отправить"
-
-#: MetaGap/app/templates/base.html:35
+#: MetaGap/app/templates/base.html:40
 #: MetaGap/app/templates/partials/breadcrumbs.html:2
 #: MetaGap/app/templates/sample_group_confirm_delete.html:7
 #: MetaGap/app/templates/sample_group_form.html:8
 msgid "Breadcrumb"
 msgstr "Хлебная крошка"
-
-#: MetaGap/app/templates/base.html:38
+#: MetaGap/app/templates/base.html:43
 #: MetaGap/app/templates/partials/breadcrumbs.html:4
 #: MetaGap/app/templates/sample_group_confirm_delete.html:9
 #: MetaGap/app/templates/sample_group_form.html:10
 msgid "Home"
 msgstr "Главная"
-
-#: MetaGap/app/templates/base.html:63
+#: MetaGap/app/templates/base.html:68
+#: app/templates/base.html:40 app/templates/partials/breadcrumbs.html:2
+#: app/templates/sample_group_confirm_delete.html:7
+#: app/templates/sample_group_form.html:8
+#: app/templates/base.html:43 app/templates/partials/breadcrumbs.html:4
+#: app/templates/sample_group_confirm_delete.html:9
+#: app/templates/sample_group_form.html:10
+#: app/templates/base.html:68
 msgid "Empowering genomic data management with confidence."
 msgstr "Управление геномными данными с уверенностью."
-
-#: MetaGap/app/templates/confirm_delete.html:4
-#, python-format
+#: app/templates/confirm_delete.html:4
 msgid "Delete Account - %(site_name)s"
 msgstr "Удаление аккаунта — %(site_name)s"
-
-#: MetaGap/app/templates/confirm_delete.html:7
-#: MetaGap/app/templates/profile.html:69
+#: app/templates/confirm_delete.html:7 app/templates/profile.html:69
 msgid "Delete Account"
 msgstr "Удалить аккаунт"
-
-#: MetaGap/app/templates/confirm_delete.html:13
+#: app/templates/confirm_delete.html:13
 msgid "Are you sure you want to delete your account?"
 msgstr "Вы уверены, что хотите удалить свою учётную запись?"
-
-#: MetaGap/app/templates/confirm_delete.html:14
+#: app/templates/confirm_delete.html:14
 msgid "Yes, Delete My Account"
 msgstr "Да, удалить мою учётную запись"
-
-#: MetaGap/app/templates/contact.html:4
-#, python-format
+#: app/templates/contact.html:4
 msgid "Contact — %(site_name)s"
 msgstr "Контакты — %(site_name)s"
-
-#: MetaGap/app/templates/contact.html:7 MetaGap/app/templates/contact.html:33
-#: MetaGap/app/templates/partials/navbar.html:15
+#: app/templates/contact.html:7 app/templates/contact.html:33
+#: app/templates/partials/navbar.html:15
 msgid "Contact"
 msgstr "Контакты"
-
-#: MetaGap/app/templates/contact.html:14
+#: app/templates/contact.html:14
 msgid "What to include in your request"
 msgstr "Что указать в запросе"
-
-#: MetaGap/app/templates/contact.html:16
+#: app/templates/contact.html:16
 msgid "A concise description of the issue and the behaviour you expected."
 msgstr "Кратко опишите проблему и ожидаемое поведение."
-
-#: MetaGap/app/templates/contact.html:17
-msgid ""
-"A minimal reproducible example such as a small VCF sample (or link), command"
-" parameters, and relevant log excerpts."
-msgstr ""
+#: app/templates/contact.html:17
+"A minimal reproducible example such as a small VCF sample (or link), command "
+"parameters, and relevant log excerpts."
 "Приведите минимальный воспроизводимый пример: небольшой VCF (или ссылку), "
 "параметры команд и важные фрагменты журналов."
-
-#: MetaGap/app/templates/contact.html:18
-#, python-format
-msgid ""
+#: app/templates/contact.html:18
 "Environment versions: Python, bcftools/htslib, operating system, and "
 "%(site_name)s release (commit or tag)."
-msgstr ""
 "Версии окружения: Python, bcftools/htslib, операционная система и релиз "
 "%(site_name)s (коммит или тег)."
-
-#: MetaGap/app/templates/contact.html:23
+#: app/templates/contact.html:23
 msgid "Responsible data handling"
 msgstr "Ответственное обращение с данными"
-
-#: MetaGap/app/templates/contact.html:24
-msgid ""
+#: app/templates/contact.html:24
 "Do not share personal genomic data or PHI. When troubleshooting, provide "
 "synthetic files or de-identified header and metadata excerpts."
-msgstr ""
 "Не передавайте персональные геномные данные или PHI. При устранении "
 "неполадок предоставляйте синтетические файлы или обезличенные части "
 "заголовков и метаданных."
-
-#: MetaGap/app/templates/contact.html:28
+#: app/templates/contact.html:28
 msgid "Collaboration"
 msgstr "Сотрудничество"
-
-#: MetaGap/app/templates/contact.html:29
-msgid ""
+#: app/templates/contact.html:29
 "We welcome research collaborations and pipeline integrations. Use the "
 "subject line 'Collaboration' and describe your idea or request in a few "
 "sentences."
-msgstr ""
 "Мы открыты к научному сотрудничеству и интеграции пайплайнов. Укажите тему "
 "«Collaboration» и кратко опишите идею или запрос."
-
-#: MetaGap/app/templates/contact.html:34
-msgid ""
-"For all enquiries email <a "
-"href=\"mailto:zsteve2911@gmail.com\">zsteve2911@gmail.com</a>."
-msgstr ""
-"По всем вопросам пишите на <a "
-"href=\"mailto:zsteve2911@gmail.com\">zsteve2911@gmail.com</a>."
-
-#: MetaGap/app/templates/contact.html:35
-msgid ""
-"You can also reach us at <a "
-"href=\"mailto:support@metagap.org\">support@metagap.org</a>."
-msgstr ""
-"Также можно написать на <a "
-"href=\"mailto:support@metagap.org\">support@metagap.org</a>."
-
-#: MetaGap/app/templates/contact.html:36
-msgid ""
-"Join the conversation on <a "
-"href=\"https://github.com/Stepanvar/MetaGap/discussions\" target=\"_blank\" "
-"rel=\"noopener\">GitHub Discussions</a>."
-msgstr ""
-"Присоединяйтесь к обсуждению на <a "
-"href=\"https://github.com/Stepanvar/MetaGap/discussions\" target=\"_blank\" "
-"rel=\"noopener\">GitHub Discussions</a>."
-
-#: MetaGap/app/templates/dashboard.html:5
-#, python-format
+#: app/templates/contact.html:34
+"For all enquiries email <a href=\"mailto:zsteve2911@gmail."
+"com\">zsteve2911@gmail.com</a>."
+"По всем вопросам пишите на <a href=\"mailto:zsteve2911@gmail."
+#: app/templates/contact.html:35
+"You can also reach us at <a href=\"mailto:support@metagap."
+"org\">support@metagap.org</a>."
+"Также можно написать на <a href=\"mailto:support@metagap."
+#: app/templates/contact.html:36
+"Join the conversation on <a href=\"https://github.com/Stepanvar/MetaGap/"
+"discussions\" target=\"_blank\" rel=\"noopener\">GitHub Discussions</a>."
+"Присоединяйтесь к обсуждению на <a href=\"https://github.com/Stepanvar/"
+"MetaGap/discussions\" target=\"_blank\" rel=\"noopener\">GitHub Discussions</"
+"a>."
+#: app/templates/dashboard.html:5
 msgid "Dashboard · %(site_name)s"
 msgstr "Панель · %(site_name)s"
-
-#: MetaGap/app/templates/dashboard.html:12
-#, python-format
+#: app/templates/dashboard.html:12
 msgid "Welcome back, %(first_name)s!"
 msgstr "С возвращением, %(first_name)s!"
-
-#: MetaGap/app/templates/dashboard.html:14
+#: app/templates/dashboard.html:14
 msgid "Welcome back!"
 msgstr "С возвращением!"
-
-#: MetaGap/app/templates/dashboard.html:17
+#: app/templates/dashboard.html:17
 msgid "Track your datasets and latest activity across the MetaGaP platform."
-msgstr ""
 "Отслеживайте свои наборы данных и последние действия на платформе MetaGaP."
-
-#: MetaGap/app/templates/dashboard.html:22
+#: app/templates/dashboard.html:22
 msgid "Recent datasets"
 msgstr "Недавние наборы данных"
-
-#: MetaGap/app/templates/dashboard.html:23
+#: app/templates/dashboard.html:23
 msgid "Manage all"
 msgstr "Управлять всеми"
-
-#: MetaGap/app/templates/dashboard.html:50
-#, python-format
+#: app/templates/dashboard.html:50
 msgid "Contains %(sample_count)s samples across uploaded sequencing runs."
 msgstr "Содержит %(sample_count)s образцов в загруженных секвенированиях."
-
-#: MetaGap/app/templates/dashboard.html:52
+#: app/templates/dashboard.html:52
 msgid "Recently curated dataset ready for further analysis."
 msgstr "Недавно подготовленный набор данных, готовый к дальнейшему анализу."
-
-#: MetaGap/app/templates/dashboard.html:58
-#, python-format
+#: app/templates/dashboard.html:58
 msgid "%(sample_count)s samples"
 msgstr "%(sample_count)s образцов"
-
-#: MetaGap/app/templates/dashboard.html:60
-#: MetaGap/app/templates/import_data.html:59
+#: app/templates/dashboard.html:60 app/templates/import_data.html:59
 msgid "Sample count pending"
 msgstr "Количество образцов ожидает расчёта"
-
-#: MetaGap/app/templates/dashboard.html:63
+#: app/templates/dashboard.html:63
 msgid "Open"
 msgstr "Открыть"
-
-#: MetaGap/app/templates/dashboard.html:73
-#, python-format
-msgid ""
+#: app/templates/dashboard.html:73
 "No datasets available yet. Start by <a class=\"alert-link\" "
 "href=\"%(import_url)s\">importing your first dataset</a>."
-msgstr ""
 "Наборы данных пока отсутствуют. <a class=\"alert-link\" "
 "href=\"%(import_url)s\">Импортируйте первый набор данных</a> для начала."
-
-#: MetaGap/app/templates/dashboard.html:80
+#: app/templates/dashboard.html:80
 msgid "Recent actions"
 msgstr "Недавние действия"
-
-#: MetaGap/app/templates/dashboard.html:105
-#, python-format
+#: app/templates/dashboard.html:105
 msgid "Linked to <strong>%(group_name)s</strong>."
 msgstr "Связанно с <strong>%(group_name)s</strong>."
-
-#: MetaGap/app/templates/dashboard.html:107
+#: app/templates/dashboard.html:107
 msgid "Variant record awaiting dataset assignment."
 msgstr "Запись варианта ожидает назначения набора данных."
-
-#: MetaGap/app/templates/dashboard.html:113
-#, python-format
+#: app/templates/dashboard.html:113
 msgid "Quality %(quality)s"
 msgstr "Качество %(quality)s"
-
-#: MetaGap/app/templates/dashboard.html:115
+#: app/templates/dashboard.html:115
 msgid "QC pending"
 msgstr "Контроль качества ожидается"
-
-#: MetaGap/app/templates/dashboard.html:119
+#: app/templates/dashboard.html:119
 msgid "Review"
 msgstr "Проверить"
-
-#: MetaGap/app/templates/dashboard.html:121
+#: app/templates/dashboard.html:121
 msgid "View profile"
 msgstr "Просмотреть профиль"
-
-#: MetaGap/app/templates/dashboard.html:131
-msgid ""
+#: app/templates/dashboard.html:131
 "No recent actions recorded. Import new sequencing data to start tracking "
 "activity."
-msgstr ""
 "Последних действий не зафиксировано. Импортируйте новые данные "
 "секвенирования, чтобы начать отслеживание активности."
-
-#: MetaGap/app/templates/edit_profile.html:4
-#, python-format
+#: app/templates/edit_profile.html:4
 msgid "Edit Profile - %(site_name)s"
 msgstr "Редактирование профиля — %(site_name)s"
-
-#: MetaGap/app/templates/edit_profile.html:7
-#: MetaGap/app/templates/edit_profile.html:13
-#: MetaGap/app/templates/profile.html:68
+#: app/templates/edit_profile.html:7 app/templates/edit_profile.html:13
+#: app/templates/profile.html:68
 msgid "Edit Profile"
 msgstr "Редактировать профиль"
-
-#: MetaGap/app/templates/edit_profile.html:14
-#: MetaGap/app/templates/sample_group_form.html:21
+#: app/templates/edit_profile.html:14 app/templates/sample_group_form.html:21
 msgid "Save Changes"
 msgstr "Сохранить изменения"
-
-#: MetaGap/app/templates/import_data.html:4
-#, python-format
+#: app/templates/import_data.html:4
 msgid "Import Data - %(site_name)s"
 msgstr "Импорт данных — %(site_name)s"
-
-#: MetaGap/app/templates/import_data.html:7
-#: MetaGap/app/templates/partials/navbar.html:18
-#: MetaGap/app/templates/profile.html:20
+#: app/templates/import_data.html:7 app/templates/partials/navbar.html:18
+#: app/templates/profile.html:20
 msgid "Import Data"
 msgstr "Импорт данных"
-
-#: MetaGap/app/templates/import_data.html:14
+#: app/templates/import_data.html:14
 msgid "Import sequencing cohorts"
 msgstr "Импортировать когорты секвенирования"
-
-#: MetaGap/app/templates/import_data.html:15
-msgid ""
+#: app/templates/import_data.html:15
 "Upload VCF or BCF files and MetaGaP will validate the metadata, populate "
 "sample groups, and surface any issues that require your attention."
-msgstr ""
 "Загрузите файлы VCF или BCF, и MetaGaP проверит метаданные, создаст группы "
 "образцов и покажет проблемы, требующие вашего внимания."
-
-#: MetaGap/app/templates/import_data.html:22
+#: app/templates/import_data.html:22
 msgid "Upload and import"
 msgstr "Загрузить и импортировать"
-
-#: MetaGap/app/templates/import_data.html:30
+#: app/templates/import_data.html:30
 msgid "Upload checklist"
 msgstr "Контрольный список загрузки"
-
-#: MetaGap/app/templates/import_data.html:32
-#, python-format
-msgid ""
-"Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, "
-"<code>.vcf.bgz</code>, <code>.bcf</code> up to %(max_size)s&nbsp;MB."
-msgstr ""
-"Допустимые форматы: <code>.vcf</code>, <code>.vcf.gz</code>, "
-"<code>.vcf.bgz</code>, <code>.bcf</code> до %(max_size)s&nbsp;МБ."
-
-#: MetaGap/app/templates/import_data.html:33
-msgid ""
+#: app/templates/import_data.html:32
+"Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</"
+"code>, <code>.bcf</code> up to %(max_size)s&nbsp;MB."
+"Допустимые форматы: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</"
+"code>, <code>.bcf</code> до %(max_size)s&nbsp;МБ."
+#: app/templates/import_data.html:33
 "Include <code>SAMPLE_GROUP</code> metadata in the header so we can build "
 "cohort profiles automatically."
-msgstr ""
 "Добавьте метаданные <code>SAMPLE_GROUP</code> в заголовок, чтобы мы "
 "автоматически сформировали профили когорт."
-
-#: MetaGap/app/templates/import_data.html:34
-msgid ""
+#: app/templates/import_data.html:34
 "Warnings highlight unsupported keys—resubmit after updating your header "
 "comments."
-msgstr ""
-"Предупреждения указывают на неподдерживаемые ключи — отправьте файл повторно"
-" после обновления комментариев в заголовке."
-
-#: MetaGap/app/templates/import_data.html:35
-msgid ""
+"Предупреждения указывают на неподдерживаемые ключи — отправьте файл повторно "
+"после обновления комментариев в заголовке."
+#: app/templates/import_data.html:35
 "Your upload is stored temporarily for processing and removed immediately "
 "after import."
-msgstr ""
 "Загруженный файл временно хранится для обработки и удаляется сразу после "
 "импорта."
-
-#: MetaGap/app/templates/import_data.html:37
-msgid ""
+#: app/templates/import_data.html:37
 "Need a template? Download the demo VCF from your profile to view a fully "
 "annotated header."
-msgstr ""
 "Нужен шаблон? Скачайте демо-VCF из профиля, чтобы увидеть полностью "
 "аннотированный заголовок."
-
-#: MetaGap/app/templates/import_data.html:45
+#: app/templates/import_data.html:45
 msgid "Imported sample groups"
 msgstr "Импортированные группы образцов"
-
-#: MetaGap/app/templates/import_data.html:46
-#, python-format
+#: app/templates/import_data.html:46
 msgid "%(total)s total"
 msgstr "Всего %(total)s"
-
-#: MetaGap/app/templates/import_data.html:57
-#, python-format
+#: app/templates/import_data.html:57
 msgid "%(total)s samples"
 msgstr "%(total)s образцов"
-
-#: MetaGap/app/templates/import_data.html:61
+#: app/templates/import_data.html:61
 msgid "Owner:"
 msgstr "Владелец:"
-
-#: MetaGap/app/templates/import_data.html:65
-#: MetaGap/app/templates/profile.html:33
+#: app/templates/import_data.html:65 app/templates/profile.html:33
 msgid "View"
 msgstr "Просмотр"
-
-#: MetaGap/app/templates/import_data.html:66
-#: MetaGap/app/templates/profile.html:35
+#: app/templates/import_data.html:66 app/templates/profile.html:35
 msgid "Edit"
 msgstr "Редактировать"
-
-#: MetaGap/app/templates/import_data.html:67
-#: MetaGap/app/templates/profile.html:37
+#: app/templates/import_data.html:67 app/templates/profile.html:37
 msgid "Delete"
 msgstr "Удалить"
-
-#: MetaGap/app/templates/import_data.html:74
+#: app/templates/import_data.html:74
 msgid "No cohorts imported yet. Upload your first VCF to populate this list."
-msgstr ""
 "Когорты ещё не импортированы. Загрузите первый VCF, чтобы заполнить этот "
 "список."
-
-#: MetaGap/app/templates/index.html:4
-#, python-format
+#: app/templates/index.html:4
 msgid "Home - %(site_name)s"
 msgstr "Главная — %(site_name)s"
-
-#: MetaGap/app/templates/index.html:12
+#: app/templates/index.html:12
 msgid "A unified workspace for variant frequency data"
 msgstr "Единое рабочее пространство для данных о частотах вариантов"
-
-#: MetaGap/app/templates/index.html:13
-#, python-format
-msgid ""
+#: app/templates/index.html:13
 "%(site_name)s helps laboratories curate sample metadata, compare allele "
 "frequencies across cohorts, and keep sequencing provenance transparent."
-msgstr ""
 "%(site_name)s помогает лабораториям курировать метаданные образцов, "
 "сравнивать частоты аллелей между когортами и сохранять прозрачность "
 "происхождения секвенирования."
-
-#: MetaGap/app/templates/index.html:15
+#: app/templates/index.html:15
 msgid "Import your VCF"
 msgstr "Импортируйте свой VCF"
-
-#: MetaGap/app/templates/index.html:16
+#: app/templates/index.html:16
 msgid "Learn more"
 msgstr "Узнать больше"
-
-#: MetaGap/app/templates/index.html:23
-msgid ""
+#: app/templates/index.html:23
 "Query by variant ID, genomic coordinates, or metadata keywords to surface "
 "relevant cohorts instantly."
-msgstr ""
 "Запрашивайте по ID варианта, геномным координатам или ключевым словам "
 "метаданных, чтобы мгновенно находить нужные когорты."
-
-#: MetaGap/app/templates/index.html:44
-#, python-format
-msgid ""
-"Need advanced filters? Open the <a href=\"%(results_url)s\">results page</a>"
-" to refine by position, quality, or sample metadata."
-msgstr ""
+#: app/templates/index.html:44
+"Need advanced filters? Open the <a href=\"%(results_url)s\">results page</a> "
+"to refine by position, quality, or sample metadata."
 "Нужны расширенные фильтры? Откройте <a href=\"%(results_url)s\">страницу "
 "результатов</a>, чтобы уточнить выбор по позициям, качеству или метаданным "
 "образцов."
-
-#: MetaGap/app/templates/index.html:47
+#: app/templates/index.html:47
 msgid "View full catalogue"
 msgstr "Посмотреть весь каталог"
-
-#: MetaGap/app/templates/index.html:59
+#: app/templates/index.html:59
 msgid "Guided imports"
 msgstr "Пошаговый импорт"
-
-#: MetaGap/app/templates/index.html:60
-msgid ""
+#: app/templates/index.html:60
 "Upload compressed or uncompressed VCF files with immediate validation. "
 "MetaGaP surfaces unsupported metadata keys and highlights missing fields so "
 "you can fix issues before data is published."
-msgstr ""
 "Загружайте сжатые и несжатые VCF с мгновенной проверкой. MetaGaP выявляет "
 "неподдерживаемые ключи метаданных и подсвечивает отсутствующие поля, чтобы "
 "вы исправили их до публикации."
-
-#: MetaGap/app/templates/index.html:67
+#: app/templates/index.html:67
 msgid "Rich sample context"
 msgstr "Полный контекст образцов"
-
-#: MetaGap/app/templates/index.html:68
-msgid ""
-"Track tissue origin, extraction quality metrics, sequencing instruments, and"
-" downstream pipelines for every dataset in one dashboard."
-msgstr ""
-"Отслеживайте происхождение тканей, метрики качества выделения, секвенирующие"
-" приборы и последующие пайплайны для каждого набора данных в одной панели."
-
-#: MetaGap/app/templates/index.html:75
+#: app/templates/index.html:68
+"Track tissue origin, extraction quality metrics, sequencing instruments, and "
+"downstream pipelines for every dataset in one dashboard."
+"Отслеживайте происхождение тканей, метрики качества выделения, секвенирующие "
+"приборы и последующие пайплайны для каждого набора данных в одной панели."
+#: app/templates/index.html:75
 msgid "Actionable results"
 msgstr "Практические результаты"
-
-#: MetaGap/app/templates/index.html:76
-msgid ""
-"Interactive tables expose allele frequencies, counts, and QC statistics with"
-" filtering, pagination, and export options tailored for cross-study "
+#: app/templates/index.html:76
+"Interactive tables expose allele frequencies, counts, and QC statistics with "
+"filtering, pagination, and export options tailored for cross-study "
 "comparisons."
-msgstr ""
-"Интерактивные таблицы показывают частоты аллелей, количества и статистику QC"
-" с фильтрами, пагинацией и экспортом для межисследовательских сравнений."
-
-#: MetaGap/app/templates/index.html:86
+"Интерактивные таблицы показывают частоты аллелей, количества и статистику QC "
+"с фильтрами, пагинацией и экспортом для межисследовательских сравнений."
+#: app/templates/index.html:86
 msgid "Import data in three easy steps"
 msgstr "Импортируйте данные в три простых шага"
-
-#: MetaGap/app/templates/index.html:88
-msgid ""
-"Generate a VCF/BCF file with complete header metadata describing your "
-"cohort."
-msgstr ""
+#: app/templates/index.html:88
+"Generate a VCF/BCF file with complete header metadata describing your cohort."
 "Создайте файл VCF/BCF с полным набором метаданных в заголовке, описывающих "
 "вашу когорту."
-
-#: MetaGap/app/templates/index.html:90
-#, python-format
-msgid ""
+#: app/templates/index.html:90
 "Upload the file via the <a href=\"%(import_url)s\">Import Data</a> page and "
 "review any warnings."
-msgstr ""
 "Загрузите файл на страницу <a href=\"%(import_url)s\">Импорт данных</a> и "
 "изучите предупреждения."
-
-#: MetaGap/app/templates/index.html:91
-msgid ""
+#: app/templates/index.html:91
 "Explore new variants immediately in the dashboard and share curated sample "
 "groups with collaborators."
-msgstr ""
 "Исследуйте новые варианты прямо на панели и делитесь подготовленными "
 "группами образцов с коллегами."
-
-#: MetaGap/app/templates/index.html:97
-msgid ""
+#: app/templates/index.html:97
 "Need an example dataset? Import the bundled demo VCF from your profile page "
 "to see the workflow end to end."
-msgstr ""
 "Нужен пример набора данных? Импортируйте прилагаемый демо-VCF со страницы "
 "профиля, чтобы увидеть весь процесс."
-
-#: MetaGap/app/templates/index.html:105
+#: app/templates/index.html:105
 msgid "Ready to get started?"
 msgstr "Готовы начать?"
-
-#: MetaGap/app/templates/index.html:106
-msgid ""
+#: app/templates/index.html:106
 "Create an account, upload your first dataset, and uncover insights across "
 "your cohorts."
-msgstr ""
 "Создайте учётную запись, загрузите первый набор данных и получайте инсайты "
 "по своим когортам."
-
-#: MetaGap/app/templates/index.html:107
+#: app/templates/index.html:107
 msgid "Create an account"
 msgstr "Создать учётную запись"
-
-#: MetaGap/app/templates/login.html:4
-#, python-format
+#: app/templates/login.html:4
 msgid "Login - %(site_name)s"
 msgstr "Вход — %(site_name)s"
-
-#: MetaGap/app/templates/login.html:7 MetaGap/app/templates/login.html:14
-#: MetaGap/app/templates/loginpartial.html:15
-#: MetaGap/app/templates/partials/navbar.html:34
+#: app/templates/login.html:7 app/templates/login.html:14
+#: app/templates/loginpartial.html:15 app/templates/partials/navbar.html:34
 msgid "Login"
 msgstr "Вход"
-
-#: MetaGap/app/templates/login.html:15
+#: app/templates/login.html:15
 msgid "Log in"
 msgstr "Войти"
-
-#: MetaGap/app/templates/loginpartial.html:5
-#: MetaGap/app/templates/partials/navbar.html:27
-#: MetaGap/app/templates/profile.html:7
-#: MetaGap/app/templates/sample_group_confirm_delete.html:10
-#: MetaGap/app/templates/sample_group_form.html:11
+#: app/templates/loginpartial.html:5 app/templates/partials/navbar.html:27
+#: app/templates/profile.html:7
+#: app/templates/sample_group_confirm_delete.html:10
+#: app/templates/sample_group_form.html:11
 msgid "Profile"
 msgstr "Профиль"
-
-#: MetaGap/app/templates/loginpartial.html:10
-#: MetaGap/app/templates/partials/navbar.html:30
+#: app/templates/loginpartial.html:10 app/templates/partials/navbar.html:30
 msgid "Logout"
 msgstr "Выйти"
-
-#: MetaGap/app/templates/loginpartial.html:18
-#: MetaGap/app/templates/partials/navbar.html:35
-#: MetaGap/app/templates/signup.html:8
+#: app/templates/loginpartial.html:18 app/templates/partials/navbar.html:35
+#: app/templates/signup.html:8
 msgid "Sign Up"
 msgstr "Регистрация"
-
-#: MetaGap/app/templates/partials/alerts.html:7
+#: app/templates/partials/alerts.html:7
 msgid "Close"
 msgstr "Закрыть"
-
-#: MetaGap/app/templates/partials/footer.html:5
-#, python-format
+#: app/templates/partials/footer.html:5
 msgid "© %(year)s %(site_name)s"
 msgstr "© %(year)s %(site_name)s"
-
-#: MetaGap/app/templates/partials/navbar.html:2
+#: app/templates/partials/navbar.html:2
 msgid "Main navigation"
 msgstr "Основная навигация"
-
-#: MetaGap/app/templates/partials/navbar.html:8
+#: app/templates/partials/navbar.html:8
 msgid "Toggle navigation"
 msgstr "Переключить навигацию"
-
-#: MetaGap/app/templates/partials/navbar.html:21
+#: app/templates/partials/navbar.html:21
 msgid "Admin"
 msgstr "Админ"
-
-#: MetaGap/app/templates/partials/navbar.html:43
+#: app/templates/partials/navbar.html:43
 msgid "Select language"
 msgstr "Выберите язык"
-
-#: MetaGap/app/templates/partials/theme-toggle.html:6
+#: app/templates/partials/theme-toggle.html:6
 msgid "Toggle color theme"
 msgstr "Переключить цветовую тему"
-
-#: MetaGap/app/templates/partials/theme-toggle.html:7
-#: MetaGap/app/templates/partials/theme-toggle.html:11
+#: app/templates/partials/theme-toggle.html:7
+#: app/templates/partials/theme-toggle.html:11
 msgid "Light"
 msgstr "Светлая"
-
-#: MetaGap/app/templates/partials/theme-toggle.html:8
+#: app/templates/partials/theme-toggle.html:8
 msgid "Dark"
 msgstr "Тёмная"
-
-#: MetaGap/app/templates/profile.html:4
-#, python-format
+#: app/templates/profile.html:4
 msgid "Profile - %(site_name)s"
 msgstr "Профиль — %(site_name)s"
-
-#: MetaGap/app/templates/profile.html:13
+#: app/templates/profile.html:13
 msgid "Your Profile"
 msgstr "Ваш профиль"
-
-#: MetaGap/app/templates/profile.html:14
+#: app/templates/profile.html:14
 msgid "Username:"
 msgstr "Имя пользователя:"
-
-#: MetaGap/app/templates/profile.html:15
+#: app/templates/profile.html:15
 msgid "Email:"
 msgstr "Email:"
-
-#: MetaGap/app/templates/profile.html:17
+#: app/templates/profile.html:17
 msgid "Organization:"
 msgstr "Организация:"
-
-#: MetaGap/app/templates/profile.html:21
+#: app/templates/profile.html:21
 msgid "Import"
 msgstr "Импорт"
-
-#: MetaGap/app/templates/profile.html:24
-#: MetaGap/app/templates/sample_group_table.html:8
-#: MetaGap/app/templates/sample_group_table.html:14
+#: app/templates/profile.html:24 app/templates/sample_group_table.html:8
+#: app/templates/sample_group_table.html:14
 msgid "Sample Groups"
 msgstr "Группы образцов"
-
-#: MetaGap/app/templates/profile.html:43
+#: app/templates/profile.html:43
 msgid "You haven't added any sample groups yet."
 msgstr "Вы ещё не добавили ни одной группы образцов."
-
-#: MetaGap/app/templates/profile.html:46
+#: app/templates/profile.html:46
 msgid "Export Data"
 msgstr "Экспорт данных"
-
-#: MetaGap/app/templates/profile.html:55
-#, python-format
+#: app/templates/profile.html:55
 msgid "Export options for %(group_name)s"
 msgstr "Параметры экспорта для %(group_name)s"
-
-#: MetaGap/app/templates/profile.html:56
+#: app/templates/profile.html:56
 msgid "Download CSV"
 msgstr "Скачать CSV"
-
-#: MetaGap/app/templates/profile.html:57
+#: app/templates/profile.html:57
 msgid "Download TSV"
 msgstr "Скачать TSV"
-
-#: MetaGap/app/templates/profile.html:64
+#: app/templates/profile.html:64
 msgid "Export options will appear once you add sample groups."
 msgstr "Параметры экспорта появятся, как только вы добавите группы образцов."
-
-#: MetaGap/app/templates/profile.html:67
+#: app/templates/profile.html:67
 msgid "Account Settings"
 msgstr "Настройки учётной записи"
-
-#: MetaGap/app/templates/results.html:5
-#, python-format
+#: app/templates/results.html:5
 msgid "Search Results - %(site_name)s"
 msgstr "Результаты поиска — %(site_name)s"
-
-#: MetaGap/app/templates/results.html:17
+#: app/templates/results.html:17
 msgid "All"
 msgstr "Все"
-
-#: MetaGap/app/templates/results.html:18
-#, python-format
+#: app/templates/results.html:18
 msgid "Column %(number)s"
 msgstr "Столбец %(number)s"
-
-#: MetaGap/app/templates/results.html:19 MetaGap/app/templates/results.html:21
-#, python-format
+#: app/templates/results.html:19 app/templates/results.html:21
 msgid "Filter %(column)s"
 msgstr "Фильтр %(column)s"
-
-#: MetaGap/app/templates/results.html:20
-#, python-format
+#: app/templates/results.html:20
 msgid "Filter %(column)s column"
 msgstr "Фильтр столбца %(column)s"
-
-#: MetaGap/app/templates/results.html:158
-#: MetaGap/app/templates/results.html:164
+#: app/templates/results.html:158 app/templates/results.html:164
 msgid "Search Results"
 msgstr "Результаты поиска"
-
-#: MetaGap/app/templates/results.html:179
+#: app/templates/results.html:179
 msgid "Advanced filters"
 msgstr "Расширенные фильтры"
-
-#: MetaGap/app/templates/results.html:182
+#: app/templates/results.html:182
 msgid "Apply filters"
 msgstr "Применить фильтры"
-
-#: MetaGap/app/templates/results.html:183
+#: app/templates/results.html:183
 msgid "Clear"
 msgstr "Очистить"
-
-#: MetaGap/app/templates/results.html:201
+#: app/templates/results.html:201
 msgid "Variant filters"
 msgstr "Фильтры вариантов"
-
-#: MetaGap/app/templates/results.html:296
+#: app/templates/results.html:296
 msgid "Metadata filters"
 msgstr "Фильтры метаданных"
-
-#: MetaGap/app/templates/results.html:337
-#, python-format
+#: app/templates/results.html:337
 msgid "Showing results for \"%(query)s\""
 msgstr "Показаны результаты для «%(query)s»"
-
-#: MetaGap/app/templates/results.html:340
-msgid ""
+#: app/templates/results.html:340
 "Use the column filters below to narrow results. Clear a filter by removing "
 "its text or selecting \"All\" in dropdowns."
-msgstr ""
-"Используйте фильтры столбцов ниже, чтобы сузить результаты. Очистите фильтр,"
-" удалив текст или выбрав «Все» в списке."
-
-#: MetaGap/app/templates/sample_group_confirm_delete.html:4
-#, python-format
+"Используйте фильтры столбцов ниже, чтобы сузить результаты. Очистите фильтр, "
+"удалив текст или выбрав «Все» в списке."
+#: app/templates/sample_group_confirm_delete.html:4
 msgid "Delete Sample Group - %(site_name)s"
 msgstr "Удаление группы образцов — %(site_name)s"
-
-#: MetaGap/app/templates/sample_group_confirm_delete.html:11
-#: MetaGap/app/templates/sample_group_confirm_delete.html:18
+#: app/templates/sample_group_confirm_delete.html:11
+#: app/templates/sample_group_confirm_delete.html:18
 msgid "Delete Sample Group"
 msgstr "Удалить группу образцов"
-
-#: MetaGap/app/templates/sample_group_confirm_delete.html:19
-#, python-format
-msgid ""
+#: app/templates/sample_group_confirm_delete.html:19
 "This action will remove <strong>%(group_name)s</strong> and its imported "
 "variant data."
-msgstr ""
 "Это действие удалит <strong>%(group_name)s</strong> и все импортированные "
 "данные вариантов."
-
-#: MetaGap/app/templates/sample_group_confirm_delete.html:23
+#: app/templates/sample_group_confirm_delete.html:23
 msgid "Yes, delete this group"
 msgstr "Да, удалить эту группу"
-
-#: MetaGap/app/templates/sample_group_confirm_delete.html:24
-#: MetaGap/app/views.py:400 MetaGap/app/views.py:401 MetaGap/app/views.py:455
-#: MetaGap/app/views.py:456
+#: app/templates/sample_group_confirm_delete.html:24 app/views.py:400
+#: app/views.py:401 app/views.py:455 app/views.py:456
 msgid "Cancel"
 msgstr "Отмена"
-
-#: MetaGap/app/templates/sample_group_detail.html:5
-#, python-format
+#: app/templates/sample_group_detail.html:5
 msgid "Sample Group - %(group_name)s | %(site_name)s"
 msgstr "Группа образцов — %(group_name)s | %(site_name)s"
-
-#: MetaGap/app/templates/sample_group_detail.html:15
+#: app/templates/sample_group_detail.html:15
 msgid "Back to profile"
 msgstr "Назад к профилю"
-
-#: MetaGap/app/templates/sample_group_detail.html:45
+#: app/templates/sample_group_detail.html:45
 msgid "Allele frequencies"
 msgstr "Частоты аллелей"
-
-#: MetaGap/app/templates/sample_group_detail.html:46
-#, python-format
+#: app/templates/sample_group_detail.html:46
 msgid "%(count)s variants"
 msgstr "%(count)s вариантов"
-
-#: MetaGap/app/templates/sample_group_detail.html:53
+#: app/templates/sample_group_detail.html:53
 msgid "No variant data has been imported for this sample group yet."
 msgstr "Для этой группы образцов данные вариантов ещё не импортированы."
-
-#: MetaGap/app/templates/sample_group_form.html:5
-#, python-format
+#: app/templates/sample_group_form.html:5
 msgid "Edit Sample Group - %(site_name)s"
 msgstr "Редактирование группы образцов — %(site_name)s"
-
-#: MetaGap/app/templates/sample_group_form.html:12
-#: MetaGap/app/templates/sample_group_form.html:19
+#: app/templates/sample_group_form.html:12
+#: app/templates/sample_group_form.html:19
 msgid "Edit Sample Group"
 msgstr "Редактировать группу образцов"
-
-#: MetaGap/app/templates/sample_group_form.html:20
-msgid ""
-"Update the descriptive metadata for this cohort. Changes will be immediately"
-" reflected in search results."
-msgstr ""
+#: app/templates/sample_group_form.html:20
+"Update the descriptive metadata for this cohort. Changes will be immediately "
+"reflected in search results."
 "Обновите описательные метаданные этой когорты. Изменения сразу появятся в "
 "результатах поиска."
-
-#: MetaGap/app/templates/sample_group_table.html:5
-#, python-format
+#: app/templates/sample_group_table.html:5
 msgid "Sample Groups - %(site_name)s"
 msgstr "Группы образцов — %(site_name)s"
-
-#: MetaGap/app/templates/sample_group_table.html:20
+#: app/templates/sample_group_table.html:20
 msgid "No sample groups are available."
 msgstr "Группы образцов отсутствуют."
-
-#: MetaGap/app/templates/signup.html:4
-#, python-format
+#: app/templates/signup.html:4
 msgid "Sign Up - %(site_name)s"
 msgstr "Регистрация — %(site_name)s"
-
-#: MetaGap/app/templates/signup.html:9
+#: app/templates/signup.html:9
 msgid "Create Account"
 msgstr "Создать аккаунт"
-
-#: MetaGap/app/views.py:242
+#: app/views.py:242
 msgid "Sample group not found."
 msgstr "Группа образцов не найдена."
-
-#: MetaGap/app/views.py:376
+#: app/views.py:376
 msgid "Your profile has been updated."
 msgstr "Ваш профиль обновлён."
-
-#: MetaGap/app/views.py:389
+#: app/views.py:389
 msgid "Your account has been deleted."
 msgstr "Ваша учётная запись удалена."
-
-#: MetaGap/app/views.py:443
+#: app/views.py:443
 msgid "Sample group metadata updated successfully."
 msgstr "Метаданные группы образцов успешно обновлены."
-
-#: MetaGap/app/views.py:489
-#, python-format
+#: app/views.py:489
 msgid "Deleted %(group)s successfully."
 msgstr "%(group)s успешно удалена."
-
-#: MetaGap/app/views.py:580
+#: app/views.py:580
 msgid "Summary"
 msgstr "Сводка"
-
-#: MetaGap/app/views.py:582
+#: app/views.py:582
 msgid "Name"
 msgstr "Название"
-
-#: MetaGap/app/views.py:589
+#: app/views.py:589
 msgid "Created by"
 msgstr "Создал"
-
-#: MetaGap/app/views.py:597
+#: app/views.py:597
 msgid "Criteria"
 msgstr "Критерии"
-
-#: MetaGap/app/views.py:599
+#: app/views.py:599
 msgid "Inclusion"
 msgstr "Включение"
-
-#: MetaGap/app/views.py:600
+#: app/views.py:600
 msgid "Exclusion"
 msgstr "Исключение"
-
-#: MetaGap/app/views.py:601
+#: app/views.py:601
 msgid "Comments"
 msgstr "Комментарии"
-
-#: MetaGap/app/views.py:605
+#: app/views.py:605
 msgid "Sample & Material"
 msgstr "Образцы и материал"
-
-#: MetaGap/app/views.py:608
+#: app/views.py:608
 msgid "Reference genome build"
 msgstr "Сборка референсного генома"
-
-#: MetaGap/app/views.py:617
+#: app/views.py:617
 msgid "Genome complexity"
 msgstr "Сложность генома"
-
-#: MetaGap/app/views.py:625
+#: app/views.py:625
 msgid "Sample origin"
 msgstr "Происхождение образца"
-
-#: MetaGap/app/views.py:627
+#: app/views.py:627
 msgid "Library construction"
 msgstr "Подготовка библиотеки"
-
-#: MetaGap/app/views.py:631
+#: app/views.py:631
 msgid "Sequencing & Bioinformatics"
 msgstr "Секвенирование и биоинформатика"
-
-#: MetaGap/app/views.py:634
+#: app/views.py:634
 msgid "Alignment"
 msgstr "Выравнивание"
-
-#: MetaGap/app/views.py:635
+#: app/views.py:635
 msgid "Variant calling"
-msgstr "Вызов вариантов"
-
-#: MetaGap/app/views.py:636
+#: app/views.py:636
 msgid "Post-processing"
 msgstr "Постобработка"
-
-#: MetaGap/app/views.py:640
+#: app/views.py:640
 msgid "Input Quality"
 msgstr "Качество исходного материала"
-
-#: MetaGap/app/views.py:643
+#: app/views.py:643
 msgid "A260/A280"
 msgstr "A260/A280"
-
-#: MetaGap/app/views.py:648
+#: app/views.py:648
 msgid "A260/A230"
 msgstr "A260/A230"
-
-#: MetaGap/app/views.py:663
+#: app/views.py:663
 msgid "Notes"
 msgstr "Заметки"
-
-#: MetaGap/app/views.py:675
+#: app/views.py:675
 msgid "Custom metadata"
 msgstr "Пользовательские метаданные"
-
-#: MetaGap/app/views.py:728 MetaGap/app/views.py:788
-msgid ""
+#: app/views.py:728 app/views.py:788
 "We could not import the file because some required metadata was missing or "
 "invalid."
-msgstr ""
 "Не удалось импортировать файл, так как часть обязательных метаданных "
 "отсутствует или некорректна."
-
-#: MetaGap/app/views.py:742
-msgid ""
+#: app/views.py:742
 "An unexpected error occurred while importing the file. Please review the "
 "file and try again."
-msgstr ""
 "При импорте файла произошла непредвиденная ошибка. Проверьте файл и "
 "повторите попытку."
-
-#: MetaGap/app/views.py:748
-msgid ""
+#: app/views.py:748
 "Something went wrong while processing the upload. Check the error above for "
 "details."
-msgstr ""
 "При обработке загрузки возникла ошибка. Подробности смотрите в сообщении "
 "выше."
-
-#: MetaGap/app/views.py:764
-#, python-format
+#: app/views.py:764
 msgid "Imported %(group)s successfully."
 msgstr "%(group)s успешно импортирована."
-
-#: MetaGap/app/views.py:779
+#: app/views.py:779
 msgid "An error occurred while importing the provided file."
 msgstr "При импорте предоставленного файла произошла ошибка."

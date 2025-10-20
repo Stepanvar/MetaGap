@@ -10,7 +10,7 @@ paginate: true
 С.Н. Зуев, Н.А. Кулемин  
 **Организация:**  
 Лаборатория молекулярной генетики человека, ФГБУ ФНКЦ ФХМ им. Ю.М. Лопухина ФМБА России  
-![](images/slide1_image1.png)
+![](images/Trade-off-between-privacy-level-and-utility-level-of-data.png)
 
 ---
 

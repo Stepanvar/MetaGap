@@ -27,7 +27,7 @@ class OrganizationProfile(models.Model):
     organization_name = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"{self.user.username}'s Organization Profile"
+        return _("Organization Profile of %(user)s") % {"user": self.user.username}
 
 
 class ReferenceGenomeBuild(models.Model):

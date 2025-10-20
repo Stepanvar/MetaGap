@@ -19,6 +19,7 @@ from django.db import transaction
 from ..models import Format, Info, OrganizationProfile, SampleGroup
 from .import_exceptions import (
     GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW,
     ImporterConfigurationError,
     ImporterError,
     ImporterValidationError,
@@ -47,21 +48,19 @@ class VCFImporter:
     def import_file(self, file_path: str) -> SampleGroup:
         """Import the provided VCF file and return the created sample group."""
 
+        profile_required_message = _(
+            "Please complete your organization profile before importing data."
+        )
+
         try:
             organization_profile = self.user.organization_profile
         except AttributeError as exc:  # pragma: no cover - defensive fallback
-            raise ImporterConfigurationError(
-                "Please complete your organization profile before importing data."
-            ) from exc
+            raise ImporterConfigurationError(profile_required_message) from exc
         except (OrganizationProfile.DoesNotExist, ObjectDoesNotExist) as exc:
-            raise ImporterConfigurationError(
-                "Please complete your organization profile before importing data."
-            ) from exc
+            raise ImporterConfigurationError(profile_required_message) from exc
 
         if organization_profile is None:
-            raise ImporterConfigurationError(
-                "Please complete your organization profile before importing data."
-            )
+            raise ImporterConfigurationError(profile_required_message)
 
         metadata: Dict[str, Any] = {}
         sample_group: Optional[SampleGroup] = None
@@ -131,7 +130,7 @@ class VCFImporter:
                             if sample_group is not None:
                                 sample_group.delete()
                             raise ValidationError(
-                                GENERIC_FALLBACK_VALIDATION_MESSAGE
+                                GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
                             ) from fallback_exc
             except ImporterError:
                 raise

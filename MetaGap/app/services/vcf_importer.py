@@ -19,6 +19,7 @@ from django.db import transaction
 from ..models import Format, Info, OrganizationProfile, SampleGroup
 from .import_exceptions import (
     GENERIC_FALLBACK_VALIDATION_MESSAGE,
+    GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW,
     ImporterConfigurationError,
     ImporterError,
     ImporterValidationError,
@@ -124,7 +125,7 @@ class VCFImporter:
                             if sample_group is not None:
                                 sample_group.delete()
                             raise ValidationError(
-                                GENERIC_FALLBACK_VALIDATION_MESSAGE
+                                GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
                             ) from fallback_exc
             except ImporterError:
                 raise

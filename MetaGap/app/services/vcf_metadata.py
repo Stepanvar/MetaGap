@@ -12,6 +12,8 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 import pysam
 import yaml
 
+from django.utils.translation import gettext_lazy as _
+
 from ..models import (
     BioinfoAlignment,
     BioinfoPostProc,
@@ -427,10 +429,10 @@ class VCFMetadataParser:
         section = self.configuration.section_map.get(normalized_key)
         if not section:
             if self._is_metadata_section_candidate(normalized_key):
-                warning = (
-                    f"Unsupported metadata section '{key}' encountered in the VCF header; "
-                    "storing raw values in additional metadata."
-                )
+                warning = _(
+                    "Unsupported metadata section '%(section)s' encountered in the VCF "
+                    "header; storing raw values in additional metadata."
+                ) % {"section": key}
                 logger.warning("%s", warning)
                 self.warnings.append(warning)
                 additional = metadata.setdefault("additional_metadata", {})
@@ -455,10 +457,9 @@ class VCFMetadataParser:
             platform_choice = SECTION_PLATFORM_MAP.get(section)
 
         if not section:
-            warning = (
-                "Unsupported sequencing platform "
-                f"{platform_value!r}; storing raw metadata only."
-            )
+            warning = _(
+                "Unsupported sequencing platform %(platform)s; storing raw metadata only."
+            ) % {"platform": repr(platform_value)}
             logger.warning("%s", warning)
             self.warnings.append(warning)
             section = "platform_independent"

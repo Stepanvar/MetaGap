@@ -31,7 +31,7 @@ from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.files.storage import default_storage
 from django.db import models as django_models
 from django.http import Http404, HttpResponse
@@ -239,7 +239,10 @@ def export_sample_group_variants(request, pk: int) -> HttpResponse:
     sample_group = get_object_or_404(
         SampleGroup.objects.select_related("created_by"), pk=pk
     )
-    organization_profile = getattr(request.user, "organization_profile", None)
+    try:
+        organization_profile = getattr(request.user, "organization_profile")
+    except ObjectDoesNotExist:
+        organization_profile = None
 
     if organization_profile is None or sample_group.created_by != organization_profile:
         raise Http404(_("Sample group not found."))
@@ -327,14 +330,14 @@ def export_sample_group_variants(request, pk: int) -> HttpResponse:
     return response
 
 
-class DashboardView(LoginRequiredMixin, TemplateView):
+class DashboardView(LoginRequiredMixin, OrganizationSampleGroupMixin, TemplateView):
     """Authenticated dashboard summarising recent datasets and activity."""
 
     template_name = "dashboard.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        organization_profile = getattr(self.request.user, "organization_profile", None)
+        organization_profile = self.get_organization_profile()
 
         dataset_queryset = (
             SampleGroup.objects.select_related("created_by", "created_by__user")

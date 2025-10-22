@@ -11,7 +11,7 @@ from typing import Optional
 from django import forms
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils.html import format_html, format_html_join
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
@@ -733,7 +733,12 @@ class EditProfileForm(BootstrapFormMixin, _OrganizationProfileFormMixin, UserCha
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        organization_profile = getattr(self.instance, "organization_profile", None)
+        organization_profile = None
+        if getattr(self, "instance", None) is not None:
+            try:
+                organization_profile = getattr(self.instance, "organization_profile")
+            except ObjectDoesNotExist:
+                organization_profile = None
         if organization_profile:
             self.fields["organization_name"].initial = organization_profile.organization_name
 

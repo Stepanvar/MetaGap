@@ -12,6 +12,7 @@ filtering logic.
 
 from __future__ import annotations
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import QuerySet
 
 from .models import SampleGroup
@@ -29,7 +30,10 @@ class OrganizationSampleGroupMixin:
         user = getattr(request, "user", None)
         if user is None:
             return None
-        return getattr(user, "organization_profile", None)
+        try:
+            return getattr(user, "organization_profile")
+        except (AttributeError, ObjectDoesNotExist):
+            return None
 
     def get_owned_sample_groups(self) -> QuerySet[SampleGroup]:
         """Return sample groups owned by the requesting organization."""

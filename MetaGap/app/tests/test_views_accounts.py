@@ -10,7 +10,7 @@ from django.contrib.messages import get_messages
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
-from ..forms import CustomUserCreationForm, ImportDataForm, SearchForm
+from ..forms import CustomUserCreationForm, EditProfileForm, ImportDataForm, SearchForm
 from ..models import SampleGroup
 from ..views import EditProfileView, ProfileView
 
@@ -201,6 +201,18 @@ class ProfileViewTests(TestCase):
             list(queryset.order_by("name")),
         )
 
+    def test_profile_gracefully_handles_missing_organization_profile(self) -> None:
+        self.user.organization_profile.delete()
+        self.user.refresh_from_db()
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["organization_profile"])
+        self.assertEqual(list(response.context["sample_groups"]), [])
+        self.assertIsInstance(response.context["import_form"], ImportDataForm)
+
 
 class EditProfileViewTests(TestCase):
     """Validate the edit profile workflow and form configuration."""
@@ -258,6 +270,14 @@ class EditProfileViewTests(TestCase):
             "Your profile has been updated.",
             [message.message for message in messages],
         )
+
+    def test_form_initialises_without_organization_profile(self) -> None:
+        self.user.organization_profile.delete()
+        self.user.refresh_from_db()
+
+        form = EditProfileForm(instance=self.user)
+
+        self.assertIsNone(form.fields["organization_name"].initial)
 
 
 class DeleteAccountViewTests(TestCase):

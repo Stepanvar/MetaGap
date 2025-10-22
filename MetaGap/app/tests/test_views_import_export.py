@@ -85,6 +85,21 @@ class SampleGroupExportViewTests(SampleGroupViewMatrixMixin, TestCase):
 
         self.assertIn(response.status_code, {403, 404})
 
+    def test_export_handles_user_without_organization_profile(self) -> None:
+        orphan_user = get_user_model().objects.create_user(
+            username="orphan_user",
+            password="export-pass",
+            email="orphan@example.com",
+        )
+        orphan_user.organization_profile.delete()
+        orphan_user.refresh_from_db()
+
+        self.client.force_login(orphan_user)
+
+        response = self.client.get(self.export_url())
+
+        self.assertEqual(response.status_code, 404)
+
 
 class ImportDataViewTests(TestCase):
     """Validate the VCF import workflow end to end."""

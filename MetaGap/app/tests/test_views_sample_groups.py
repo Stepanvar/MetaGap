@@ -58,6 +58,17 @@ class OrganizationSampleGroupMixinTests(TestCase):
             mixin.get_organization_profile(), self.user.organization_profile
         )
 
+    def test_get_organization_profile_handles_missing_related_object(self) -> None:
+        self.user.organization_profile.delete()
+        self.user.refresh_from_db()
+
+        request = self.factory.get("/profile")
+        request.user = self.user
+
+        mixin = self._build_view(request)
+
+        self.assertIsNone(mixin.get_organization_profile())
+
     def test_get_owned_sample_groups_returns_empty_without_profile(self) -> None:
         request = self.factory.get("/profile")
         request.user = SimpleNamespace()

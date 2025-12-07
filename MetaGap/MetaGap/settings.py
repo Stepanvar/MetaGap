@@ -21,6 +21,15 @@ def _split_env_list(name: str, default: str) -> list[str]:
 
     return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
 
+
+def _get_env_bool(name: str, default: bool = False) -> bool:
+    """Return a boolean from an environment variable, respecting common truthy values."""
+
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on", "t", "y"}
+
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -61,6 +70,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     # Third-party apps
+    "corsheaders",
     "django_bootstrap5",
     "django_filters",
     "django_tables2",
@@ -72,13 +82,14 @@ INSTALLED_APPS = [
 # Middleware framework
 # https://docs.djangoproject.com/en/2.1/topics/http/middleware/
 MIDDLEWARE = [
-	"django.middleware.security.SecurityMiddleware",
+        "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
-	"django.middleware.csrf.CsrfViewMiddleware",
-	"django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
 	"django.contrib.messages.middleware.MessageMiddleware",
 	"django.middleware.clickjacking.XFrameOptionsMiddleware",
 
@@ -160,6 +171,28 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = 'profile'
 LOGOUT_REDIRECT_URL = 'home'
 WHITENOISE_MANIFEST_STRICT = False
+
+# CORS
+CORS_ALLOWED_ORIGINS = _split_env_list(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:8000,http://127.0.0.1:8000",
+)
+CORS_ALLOW_CREDENTIALS = _get_env_bool("CORS_ALLOW_CREDENTIALS", False)
+
+# Email
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.example.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _get_env_bool("EMAIL_USE_TLS", True)
+EMAIL_USE_SSL = _get_env_bool("EMAIL_USE_SSL", False)
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "webmaster@localhost")
 
 # Logging
 # ------

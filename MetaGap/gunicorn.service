@@ -6,7 +6,7 @@ After=network.target
 User=s-zuev
 Group=www-data
 WorkingDirectory=/home/s-zuev/MetaGap/MetaGap
-Environment="DJANGO_SETTINGS_MODULE=MetaGap.settings"
+Environment="DJANGO_SETTINGS_MODULE=MetaGap.settings.production"
 ExecStart=/home/s-zuev/MetaGap/MetaGap/venv/bin/gunicorn \
           --access-logfile - \
           --workers 3 \

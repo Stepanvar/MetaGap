@@ -149,6 +149,9 @@ _TeamCity*
 coverage*.json
 coverage*.xml
 coverage*.info
+.env
+.env.*
+!.env.example
 
 # Visual Studio code coverage results
 *.coverage

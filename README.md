@@ -40,7 +40,7 @@ Successful requests update the `metagap_language` cookie so subsequent page
 loads render using the selected locale.
 
 The repository stores editable `.po` message catalogs; compile them locally with
-`django-admin compilemessages` (after setting `DJANGO_SETTINGS_MODULE=MetaGap.settings`)
+`django-admin compilemessages` (after setting `DJANGO_SETTINGS_MODULE=MetaGap.settings.development`)
 whenever translations change so Django can serve the generated `.mo` binaries.
 
 ## Metadata configuration workflow

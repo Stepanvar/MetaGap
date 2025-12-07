@@ -19,7 +19,7 @@ https://docs.djangoproject.com/en/2.1/howto/deployment/wsgi/
 import os
 from django.core.wsgi import get_wsgi_application
 
-SETTINGS_MODULE = "MetaGap.settings"
+SETTINGS_MODULE = "MetaGap.settings.development"
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", SETTINGS_MODULE)
 

@@ -15,7 +15,7 @@ from django.core.management import call_command
 from django.test.utils import setup_test_environment, teardown_test_environment
 
 if not settings.configured:
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MetaGap.settings")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MetaGap.settings.development")
 
 if not apps.ready:
     django.setup()

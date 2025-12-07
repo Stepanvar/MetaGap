@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from MetaGap.settings import _split_env_list
+from MetaGap.settings.base import _split_env_list
 
 
 class SplitEnvListTests(SimpleTestCase):

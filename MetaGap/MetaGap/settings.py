@@ -21,6 +21,12 @@ def _split_env_list(name: str, default: str) -> list[str]:
 
     return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
 
+
+def _env_bool(name: str, default: str = "0") -> bool:
+    """Parse a boolean environment flag."""
+
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -170,6 +176,104 @@ WHITENOISE_MANIFEST_STRICT = False
 # sends structured log messages to stdout and makes sure request exceptions are
 # always recorded together with their traceback information.
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+REQUEST_LOG_LEVEL = os.getenv("DJANGO_REQUEST_LOG_LEVEL", "ERROR").upper()
+LOG_DIR = Path(os.getenv("LOG_DIR", BASE_DIR / "logs"))
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", 5 * 1024 * 1024))
+LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", 5))
+LOG_TO_CONSOLE = _env_bool("LOG_TO_CONSOLE", "1")
+LOG_TO_FILE = _env_bool("LOG_TO_FILE", "0" if DEBUG else "1")
+APP_LOG_FILE = LOG_DIR / os.getenv("APP_LOG_FILE", "application.log")
+DJANGO_REQUEST_LOG_FILE = LOG_DIR / os.getenv(
+    "DJANGO_REQUEST_LOG_FILE", "django_requests.log"
+)
+
+ENABLE_SMTP_LOGS = _env_bool("LOG_ENABLE_SMTP", "0")
+SMTP_HOST = os.getenv("LOG_SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("LOG_SMTP_PORT", 587))
+SMTP_USERNAME = os.getenv("LOG_SMTP_USERNAME")
+SMTP_PASSWORD = os.getenv("LOG_SMTP_PASSWORD")
+SMTP_FROM = os.getenv("LOG_SMTP_FROM", SMTP_USERNAME or "")
+SMTP_TO = _split_env_list("LOG_SMTP_TO", "")
+SMTP_SUBJECT = os.getenv("LOG_SMTP_SUBJECT", "MetaGap error notification")
+SMTP_USE_TLS = _env_bool("LOG_SMTP_USE_TLS", "1")
+
+APM_HOST = os.getenv("LOG_APM_HOST", "")
+APM_URL = os.getenv("LOG_APM_URL", "/")
+APM_METHOD = os.getenv("LOG_APM_METHOD", "POST")
+APM_SECURE = _env_bool("LOG_APM_USE_TLS", "1")
+APM_LEVEL = os.getenv("LOG_APM_LEVEL", "ERROR").upper()
+
+handlers: dict[str, dict] = {}
+if LOG_TO_CONSOLE:
+    handlers["console"] = {
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+    }
+
+if LOG_TO_FILE:
+    handlers.update(
+        {
+            "app_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "verbose",
+                "filename": APP_LOG_FILE,
+                "maxBytes": LOG_MAX_BYTES,
+                "backupCount": LOG_BACKUP_COUNT,
+            },
+            "django_request_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "verbose",
+                "filename": DJANGO_REQUEST_LOG_FILE,
+                "maxBytes": LOG_MAX_BYTES,
+                "backupCount": LOG_BACKUP_COUNT,
+            },
+        }
+    )
+
+error_handlers: list[str] = []
+if ENABLE_SMTP_LOGS and SMTP_HOST and SMTP_TO:
+    handlers["smtp"] = {
+        "class": "logging.handlers.SMTPHandler",
+        "level": os.getenv("LOG_SMTP_LEVEL", "ERROR").upper(),
+        "formatter": "verbose",
+        "mailhost": (SMTP_HOST, SMTP_PORT),
+        "fromaddr": SMTP_FROM,
+        "toaddrs": SMTP_TO,
+        "subject": SMTP_SUBJECT,
+        "credentials": (SMTP_USERNAME, SMTP_PASSWORD)
+        if SMTP_USERNAME and SMTP_PASSWORD
+        else None,
+        "secure": () if SMTP_USE_TLS else None,
+    }
+    error_handlers.append("smtp")
+
+if APM_HOST:
+    handlers["apm_http"] = {
+        "class": "logging.handlers.HTTPHandler",
+        "level": APM_LEVEL,
+        "formatter": "verbose",
+        "host": APM_HOST,
+        "url": APM_URL,
+        "method": APM_METHOD,
+        "secure": APM_SECURE,
+    }
+    error_handlers.append("apm_http")
+
+root_handlers: list[str] = []
+if LOG_TO_CONSOLE:
+    root_handlers.append("console")
+if LOG_TO_FILE:
+    root_handlers.append("app_file")
+root_handlers.extend(error_handlers)
+
+request_handlers: list[str] = []
+if LOG_TO_CONSOLE:
+    request_handlers.append("console")
+if LOG_TO_FILE:
+    request_handlers.append("django_request_file")
+request_handlers.extend(error_handlers)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -178,17 +282,12 @@ LOGGING = {
             "format": "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s",
         }
     },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        }
-    },
-    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "handlers": handlers,
+    "root": {"handlers": root_handlers, "level": LOG_LEVEL},
     "loggers": {
         "django.request": {
-            "handlers": ["console"],
-            "level": "ERROR",
+            "handlers": request_handlers,
+            "level": REQUEST_LOG_LEVEL,
             "propagate": False,
         }
     },

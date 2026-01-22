@@ -1,0 +1,13 @@
+# Coding Standards
+
+## Testing
+The project enforces strict code coverage requirements through continuous integration. The Django application (`MetaGap/app`) must maintain a minimum of 80% line coverage, while the bioinformatics utilities in `MetagapUserCode` require 75% coverage. Tests are executed using pytest and Django's built-in test runner, with specific test modules for import helpers (`test_import_helpers.py`), VCF importer functionality (`test_vcf_importer.py`), and table rendering (`test_tables.py`). Integration tests verify end-to-end workflows, particularly focusing on the metadata configuration loading and validation processes.
+
+## Style
+Code follows Python PEP 8 standards with consistent indentation using 4 spaces. Type hints are extensively used throughout the codebase, particularly in function signatures and variable declarations. The codebase demonstrates modern Python practices including f-strings for string formatting, proper use of context managers, and dataclasses where appropriate. Django-specific patterns are followed consistently, including proper use of model relationships, form handling, and generic views. Docstrings follow Google-style formatting with clear descriptions of classes, methods, and functions.
+
+## Logging
+The application implements a dual logging approach. Web interface logging uses Django's built-in logging framework with configurable log levels controlled by the `LOG_LEVEL` environment variable. The VCF merging workflow in `MetagapUserCode` implements its own logging system with the format: `YYYY-MM-DD HH:MM:SS | LEVEL | vcf_merger | module | message`. Both file and console handlers are configured to ensure errors are captured persistently while providing real-time feedback during execution. The logging configuration in `logging_utils.py` provides a centralized way to adjust log levels and destinations across the merging workflow.
+
+## CI/CD
+GitHub Actions is configured to run the complete test suite on every push and pull request to the main branch. The CI pipeline executes the Django test suite with coverage reporting, archives raw test logs and coverage summaries for failure analysis, and scans test output for specific warnings like "Unhandled metadata key" which surface as CI annotations. The workflow ensures code quality by enforcing the coverage thresholds and providing immediate feedback on test failures before merging.

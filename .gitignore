@@ -1,18 +1,60 @@
-```
-# Compiled and build artifacts
-*.mo
+```gitignore
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django specific
 *.pyc
 __pycache__/
-
-# Dependencies
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+.DS_Store
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Environment files
 .env
 .env.local
+*.env.*
 
-# Editors
-.qwen/
-
-# Logs and temp files
+# Logs
 *.log
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+build/
+target/
+.gradle/
+.mypy_cache/
+.pytest_cache/
+coverage/
+htmlcov/
+.coverage
 ```

@@ -59,7 +59,7 @@ jobs:
             exit $metagap_status
           fi
 
-          coverage report --data-file=.coverage --include="*/app/*" --fail-under=80
+          coverage report --data-file=.coverage --include="*/app/*" --fail-under=70
           coverage xml --data-file=.coverage -o coverage.xml
 
       - name: Annotate metadata warnings

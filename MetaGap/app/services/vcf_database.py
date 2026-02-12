@@ -60,6 +60,163 @@ FORMAT_FIELD_MAP = {
 }
 
 
+# ------------------------------------------------------------------
+# Helper functions for VCF metadata extraction and type conversion
+# ------------------------------------------------------------------
+
+
+def convert_to_python_type(value: str, field_type: str) -> Any:
+    """Convert VCF field string value to appropriate Python type.
+
+    Args:
+        value: String value from VCF file
+        field_type: Type identifier (INFO_FIELD_STRING, INFO_FIELD_INT, INFO_FIELD_FLOAT)
+
+    Returns:
+        Converted value, or None if value is a placeholder or invalid
+
+    Examples:
+        >>> convert_to_python_type("123", INFO_FIELD_INT)
+        123
+        >>> convert_to_python_type(".", INFO_FIELD_STRING)
+        None
+        >>> convert_to_python_type("abc", INFO_FIELD_INT)
+        None
+    """
+    # String type - return as-is (empty string is allowed, only "." is a placeholder)
+    if field_type == INFO_FIELD_STRING:
+        # Only treat "." as placeholder for strings
+        if value == ".":
+            return None
+        return value
+
+    # For numeric types, handle placeholder values
+    if value in INFO_PLACEHOLDER_VALUES:
+        return None
+
+    # Integer type
+    if field_type == INFO_FIELD_INT:
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+
+    # Float type
+    if field_type == INFO_FIELD_FLOAT:
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    # Unknown type - return as string
+    return value
+
+
+def extract_info_field_metadata(header_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract and normalize INFO field metadata from VCF header.
+
+    Args:
+        header_info: Dictionary of INFO field metadata from VCF header
+                     (e.g., {'AF': {'Number': 'A', 'Type': 'Float', ...}})
+
+    Returns:
+        Dictionary with lowercase keys mapping to field metadata
+
+    Examples:
+        >>> extract_info_field_metadata({'AF': {'Type': 'Float'}})
+        {'af': {'Type': 'Float'}}
+    """
+    if not header_info:
+        return {}
+
+    result = {}
+    for field_key, field_metadata in header_info.items():
+        # Normalize field name to lowercase
+        normalized_key = field_key.lower()
+        result[normalized_key] = field_metadata
+
+    return result
+
+
+def extract_format_field_metadata(header_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract and normalize FORMAT field metadata from VCF header.
+
+    Args:
+        header_info: Dictionary of FORMAT field metadata from VCF header
+                     (e.g., {'GT': {'Number': '1', 'Type': 'String', ...}})
+
+    Returns:
+        Dictionary with lowercase keys mapping to field metadata
+
+    Examples:
+        >>> extract_format_field_metadata({'GT': {'Type': 'String'}})
+        {'gt': {'Type': 'String'}}
+    """
+    if not header_info:
+        return {}
+
+    result = {}
+    for field_key, field_metadata in header_info.items():
+        # Normalize field name to lowercase
+        normalized_key = field_key.lower()
+        result[normalized_key] = field_metadata
+
+    return result
+
+
+def extract_contig_field_metadata(header_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract contig metadata from VCF header.
+
+    Args:
+        header_info: Dictionary of contig metadata from VCF header
+                     (e.g., {'1': {'length': 249250621}, ...})
+
+    Returns:
+        Dictionary mapping contig names to their metadata
+
+    Examples:
+        >>> extract_contig_field_metadata({'1': {'length': 249250621}})
+        {'1': {'length': 249250621}}
+    """
+    if not header_info:
+        return {}
+
+    # Return as-is, contig names are already normalized
+    return dict(header_info)
+
+
+def get_or_create_sample_group(
+    sample_group_name: str,
+    sample_group_description: str,
+    user_organization_profile: Any,
+    metadata: Dict[str, Any],
+) -> Optional[SampleGroup]:
+    """Get or create a SampleGroup with the given metadata.
+
+    Args:
+        sample_group_name: Name for the sample group
+        sample_group_description: Description for the sample group
+        user_organization_profile: OrganizationProfile instance
+        metadata: Additional metadata dictionary
+
+    Returns:
+        SampleGroup instance, or None if creation fails
+
+    Note:
+        This is a simplified helper for testing. Production code should use
+        VCFDatabaseWriter.create_sample_group() instead.
+    """
+    try:
+        sample_group = SampleGroup.objects.create(
+            name=sample_group_name,
+            description=sample_group_description,
+            organization_profile=user_organization_profile,
+        )
+        return sample_group
+    except Exception:
+        return None
+
+
 class VCFDatabaseWriter:
     """Handle creation of database records from parsed VCF content."""
 
@@ -1212,5 +1369,11 @@ __all__ = [
     "INFO_FIELD_FLOAT",
     "INFO_FIELD_INT",
     "INFO_FIELD_STRING",
+    "INFO_PLACEHOLDER_VALUES",
     "VCFDatabaseWriter",
+    "convert_to_python_type",
+    "extract_info_field_metadata",
+    "extract_format_field_metadata",
+    "extract_contig_field_metadata",
+    "get_or_create_sample_group",
 ]

@@ -4,10 +4,9 @@
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 msgid ""
-msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-20 08:18+0000\n"
+"POT-Creation-Date: 2026-02-12 08:12+0000\n"
 "PO-Revision-Date: 2025-10-12 21:30+0000\n"
 "Last-Translator: AI Assistant <noreply@example.com>\n"
 "Language-Team: English <LL@li.org>\n"
@@ -20,281 +19,209 @@ msgstr ""
 #: app/filters.py:28 app/filters.py:409 app/templates/index.html:46
 #: app/templates/partials/navbar.html:17 app/templates/search_form.html:5
 msgid "Search"
-msgstr "Search"
 
 #: app/filters.py:29
 msgid "Chrom"
-msgstr "Chrom"
 
 #: app/filters.py:31
 msgid "Position (min)"
-msgstr "Position (min)"
 
 #: app/filters.py:34
 msgid "Position (max)"
-msgstr "Position (max)"
 
 #: app/filters.py:37
 msgid "Position"
-msgstr "Position"
 
 #: app/filters.py:40 app/filters.py:255
 msgid "Reference"
-msgstr "Reference"
 
 #: app/filters.py:43 app/filters.py:260
 msgid "Alternate"
-msgstr "Alternate"
 
 #: app/filters.py:46
 msgid "Filter is PASS"
-msgstr "Filter is PASS"
 
 #: app/filters.py:49
 msgid "QUAL (min)"
-msgstr "QUAL (min)"
 
 #: app/filters.py:52
 msgid "QUAL (max)"
-msgstr "QUAL (max)"
 
 #: app/filters.py:55
 msgid "AF (min)"
-msgstr "AF (min)"
 
 #: app/filters.py:58
 msgid "AF (max)"
-msgstr "AF (max)"
 
 #: app/filters.py:61
 msgid "DP (min)"
-msgstr "DP (min)"
 
 #: app/filters.py:64
 msgid "DP (max)"
-msgstr "DP (max)"
 
 #: app/filters.py:67
 msgid "MQ (min)"
-msgstr "MQ (min)"
 
 #: app/filters.py:70
 msgid "MQ (max)"
-msgstr "MQ (max)"
 
 #: app/filters.py:73
 msgid "QD (min)"
-msgstr "QD (min)"
 
 #: app/filters.py:76
 msgid "QD (max)"
-msgstr "QD (max)"
 
 #: app/filters.py:79
 msgid "FS (min)"
-msgstr "FS (min)"
 
 #: app/filters.py:82
 msgid "FS (max)"
-msgstr "FS (max)"
 
 #: app/filters.py:85
 msgid "SOR (min)"
-msgstr "SOR (min)"
 
 #: app/filters.py:88
 msgid "SOR (max)"
-msgstr "SOR (max)"
 
-#: app/filters.py:94 app/filters.py:305 app/views.py:584
+#: app/filters.py:94 app/filters.py:305 app/views.py:590
 msgid "Source lab"
-msgstr "Source lab"
 
 #: app/filters.py:99 app/tables.py:215
 msgid "Sample tissue"
-msgstr "Sample tissue"
 
 #: app/filters.py:104 app/tables.py:249
 msgid "Variant calling tool"
-msgstr "Variant calling tool"
 
 #: app/filters.py:109
 msgid "Variant calling version"
-msgstr "Variant calling version"
 
 #: app/filters.py:114 app/tables.py:245
 msgid "Alignment tool"
-msgstr "Alignment tool"
 
 #: app/filters.py:119
 msgid "Alignment reference genome"
-msgstr "Alignment reference genome"
 
 #: app/filters.py:124
 msgid "Alignment recalibration"
-msgstr "Alignment recalibration"
 
 #: app/filters.py:235
 msgid "Keyword"
-msgstr "Keyword"
 
 #: app/filters.py:240 app/tables.py:183
 msgid "Chromosome"
-msgstr "Chromosome"
 
 #: app/filters.py:245
 msgid "Position ≥"
-msgstr "Position ≥"
 
 #: app/filters.py:250
 msgid "Position ≤"
-msgstr "Position ≤"
 
 #: app/filters.py:264
 msgid "PASS only"
-msgstr "PASS only"
 
 #: app/filters.py:270
 msgid "Quality ≥"
-msgstr "Quality ≥"
 
 #: app/filters.py:275
 msgid "AF ≥"
-msgstr "AF ≥"
 
 #: app/filters.py:280
 msgid "AC ≥"
-msgstr "AC ≥"
 
 #: app/filters.py:285
 msgid "AN ≥"
-msgstr "AN ≥"
 
 #: app/filters.py:290
 msgid "DP ≥"
-msgstr "DP ≥"
 
 #: app/filters.py:295
 msgid "MQ ≥"
-msgstr "MQ ≥"
 
 #: app/filters.py:300 app/tables.py:201
 msgid "Sample group"
-msgstr "Sample group"
 
-#: app/filters.py:310 app/forms.py:263
+#: app/filters.py:310 app/forms.py:263 app/models.py:69
 msgid "Tissue"
-msgstr "Tissue"
 
 #: app/filters.py:315
 msgid "Variant caller"
-msgstr "Variant caller"
 
 #: app/forms.py:141 app/templates/index.html:22
 msgid "Search the catalogue"
-msgstr "Search the catalogue"
 
 #: app/forms.py:144
 msgid "Variant ID, coordinate, or keyword"
-msgstr "Variant ID, coordinate, or keyword"
 
 #: app/forms.py:153
 msgid "Email address"
-msgstr "Email address"
 
 #: app/forms.py:159
 msgid "Username"
-msgstr "Username"
 
 #: app/forms.py:164 app/forms.py:716
 msgid "Organization name"
-msgstr "Organization name"
 
 #: app/forms.py:166 app/forms.py:718
 msgid "Organization"
-msgstr "Organization"
 
 #: app/forms.py:170 app/forms.py:172
 msgid "Password"
-msgstr "Password"
 
 #: app/forms.py:176 app/forms.py:178
 msgid "Confirm password"
-msgstr "Confirm password"
 
 #: app/forms.py:189
 msgid "Please provide an email address so we can contact you."
-msgstr "Please provide an email address so we can contact you."
 
 #: app/forms.py:191
 msgid "An account with this email address already exists."
-msgstr "An account with this email address already exists."
 
 #: app/forms.py:268 app/tables.py:216
 msgid "Collection method"
-msgstr "Collection method"
 
 #: app/forms.py:273 app/tables.py:217
 msgid "Storage conditions"
-msgstr "Storage conditions"
 
 #: app/forms.py:278 app/tables.py:218
 msgid "Time stored"
-msgstr "Time stored"
 
-#: app/forms.py:283 app/models.py:373 app/models.py:379
+#: app/forms.py:283 app/models.py:383 app/models.py:389
 msgid "Illumina"
-msgstr "Illumina"
 
-#: app/forms.py:284 app/models.py:374
+#: app/forms.py:284 app/models.py:384
 msgid "Oxford Nanopore"
-msgstr "Oxford Nanopore"
 
-#: app/forms.py:285 app/models.py:375 app/models.py:381
+#: app/forms.py:285 app/models.py:385 app/models.py:391
 msgid "PacBio"
-msgstr "PacBio"
 
-#: app/forms.py:288 app/models.py:376 app/models.py:382
+#: app/forms.py:288 app/models.py:386 app/models.py:392
 msgid "Ion Torrent"
-msgstr "Ion Torrent"
 
 #: app/forms.py:291
 msgid "Platform-independent"
-msgstr "Platform-independent"
 
-#: app/forms.py:303 app/forms.py:534 app/views.py:568
+#: app/forms.py:303 app/forms.py:534 app/views.py:574
 msgid "Sequencing platform"
-msgstr "Sequencing platform"
 
 #: app/forms.py:448
 msgid "Total samples must be a positive integer."
-msgstr "Total samples must be a positive integer."
 
 #: app/forms.py:464
 msgid ""
 "Use digits and common separators (spaces, dashes, parentheses) for the phone "
 "number."
-msgstr ""
-"Use digits and common separators (spaces, dashes, parentheses) for the phone "
-"number."
 
 #: app/forms.py:468
 msgid "Enter a phone number with at least six digits."
-msgstr "Enter a phone number with at least six digits."
 
 #: app/forms.py:497
 msgid "Enter or select a value"
-msgstr "Enter or select a value"
 
 #: app/forms.py:502
 msgid "Start typing to select an existing value or enter a new one."
-msgstr "Start typing to select an existing value or enter a new one."
 
 #: app/forms.py:660
 msgid ""
-"Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants "
-"you want to ingest."
-msgstr ""
 "Upload a VCF (.vcf, .vcf.gz, .vcf.bgz) or BCF file containing the variants "
 "you want to ingest."
 
@@ -303,1467 +230,1247 @@ msgstr ""
 msgid ""
 "Files up to %(limit)s MB are accepted. Ensure the header includes metadata "
 "sections for your sample group."
-msgstr ""
-"Files up to %(limit)s MB are accepted. Ensure the header includes metadata "
-"sections for your sample group."
 
 #: app/forms.py:682
 msgid "Select a VCF or BCF file to import."
-msgstr "Select a VCF or BCF file to import."
 
 #: app/forms.py:689
 #, python-format
 msgid "Unsupported file type. Please upload a file ending in %(extensions)s."
-msgstr "Unsupported file type. Please upload a file ending in %(extensions)s."
 
 #: app/forms.py:698
 #, python-format
 msgid "Files larger than %(limit)s MB cannot be imported."
-msgstr "Files larger than %(limit)s MB cannot be imported."
 
 #: app/forms.py:706
 msgid ""
 "The uploaded file does not look like a VCF/BCF file. Please check the format "
 "and try again."
-msgstr ""
-"The uploaded file does not look like a VCF/BCF file. Please check the format "
-"and try again."
-
-#: app/forms.py:743
-msgid "Please provide a valid email address."
-msgstr "Please provide a valid email address."
 
 #: app/forms.py:748
+msgid "Please provide a valid email address."
+
+#: app/forms.py:753
 msgid "Another user is already using this email address."
-msgstr "Another user is already using this email address."
 
-#: app/forms.py:766
+#: app/forms.py:771
 msgid "I confirm that I want to delete my account."
-msgstr "I confirm that I want to delete my account."
 
-#: app/models.py:71
+#: app/models.py:30
+#, python-format
+msgid "Organization Profile of %(user)s"
+
+#: app/models.py:53
+msgid "Size"
+
+#: app/models.py:54
+msgid "Ploidy"
+
+#: app/models.py:55
+#, fuzzy
+#| msgid "Genome GC content"
+msgid "GC content"
+
+#: app/models.py:70
+#, fuzzy
+#| msgid "Collection method"
+msgid "Collection Method"
+
+#: app/models.py:78
 msgid "DNA"
-msgstr ""
 
-#: app/models.py:72
+#: app/models.py:79
 msgid "RNA"
-msgstr ""
 
-#: app/models.py:73
+#: app/models.py:80
 msgid "cDNA"
-msgstr ""
 
-#: app/models.py:108 app/templates/profile.html:17
+#: app/models.py:93
+msgid "Type"
+
+#: app/models.py:94
+#, fuzzy
+#| msgid "Integrity number"
+msgid "Integrity Number"
+
+#: app/models.py:107
+msgid "Kit"
+
+#: app/models.py:107 app/tables.py:222
+msgid "Fragmentation"
+
+#: app/models.py:118 app/templates/profile.html:17
 #: app/templates/sample_group_detail.html:31
 msgid "Not provided"
-msgstr ""
 
-#: app/models.py:132
+#: app/models.py:142
 #, fuzzy
 #| msgid "ONT flow cell"
 msgid "Flow Cell"
-msgstr "ONT flow cell"
 
-#: app/models.py:133
+#: app/models.py:143
 #, fuzzy
 #| msgid "Illumina channel method"
 msgid "Channel method"
-msgstr "Illumina channel method"
 
-#: app/models.py:134
+#: app/models.py:144
 #, fuzzy
 #| msgid "Illumina cluster density"
 msgid "Cluster density"
-msgstr "Illumina cluster density"
 
-#: app/models.py:135
+#: app/models.py:145
 #, fuzzy
 #| msgid "Illumina QC software"
 msgid "QC software"
-msgstr "Illumina QC software"
 
-#: app/models.py:149
+#: app/models.py:159
 #, fuzzy
 #| msgid "ONT flow cell version"
 msgid "Flow Cell Version"
-msgstr "ONT flow cell version"
 
-#: app/models.py:150
+#: app/models.py:160
 #, fuzzy
 #| msgid "ONT pore type"
 msgid "Pore type"
-msgstr "ONT pore type"
 
-#: app/models.py:151
+#: app/models.py:161
 #, fuzzy
 #| msgid "ONT bias voltage"
 msgid "Bias voltage"
-msgstr "ONT bias voltage"
 
-#: app/models.py:164
+#: app/models.py:174
 #, fuzzy
 #| msgid "PacBio SMRT cell type"
 msgid "SMRT Cell Type"
-msgstr "PacBio SMRT cell type"
 
-#: app/models.py:165
+#: app/models.py:175
 #, fuzzy
 #| msgid "PacBio ZMW density"
 msgid "ZMW density"
-msgstr "PacBio ZMW density"
 
-#: app/models.py:180
+#: app/models.py:190
 msgid "Chip Type"
-msgstr ""
 
-#: app/models.py:181
+#: app/models.py:191
 #, fuzzy
 #| msgid "Ion Torrent pH calibration"
 msgid "pH calibration"
-msgstr "Ion Torrent pH calibration"
 
-#: app/models.py:182
+#: app/models.py:192
 msgid "Flow order"
-msgstr ""
 
-#: app/models.py:183
+#: app/models.py:193
 #, fuzzy
 #| msgid "Ion Sphere metrics"
 msgid "Ion sphere metrics"
-msgstr "Ion Sphere metrics"
 
-#: app/models.py:197 app/models.py:215
+#: app/models.py:207 app/models.py:225
 msgid "Tool"
-msgstr ""
 
-#: app/models.py:197
+#: app/models.py:207
 msgid "Unknown"
-msgstr ""
 
-#: app/models.py:198
+#: app/models.py:208
 #, fuzzy
 #| msgid "Alignment parameters"
 msgid "Parameters"
-msgstr "Alignment parameters"
 
-#: app/models.py:199
+#: app/models.py:209
 #, fuzzy
 #| msgid "Reference genome version"
 msgid "Ref Genome Version"
-msgstr "Reference genome version"
 
-#: app/models.py:200 app/tables.py:248
+#: app/models.py:210 app/tables.py:248
 msgid "Recalibration settings"
-msgstr "Recalibration settings"
 
-#: app/models.py:216
+#: app/models.py:226
 msgid "Version"
-msgstr ""
 
-#: app/models.py:217
+#: app/models.py:227
 #, fuzzy
 #| msgid "Variant filtering thresholds"
 msgid "Filtering thresholds"
-msgstr "Variant filtering thresholds"
 
-#: app/models.py:218 app/tables.py:252
+#: app/models.py:228 app/tables.py:252
 msgid "Duplicate handling"
-msgstr "Duplicate handling"
 
-#: app/models.py:219
+#: app/models.py:229
 msgid "MQ"
-msgstr ""
 
-#: app/models.py:231
+#: app/models.py:241
 #, fuzzy
 #| msgid "Organization"
 msgid "Normalization"
-msgstr "Organization"
 
-#: app/models.py:232
+#: app/models.py:242
 #, fuzzy
 #| msgid "Organization"
 msgid "Harmonization"
-msgstr "Organization"
 
-#: app/models.py:380
+#: app/models.py:390
 msgid "ONT"
-msgstr ""
 
-#: app/services/vcf_importer.py:34
+#: app/services/vcf_importer.py:35
 msgid "The uploaded file could not be parsed as a valid VCF."
-msgstr "The uploaded file could not be parsed as a valid VCF."
 
-#: app/services/vcf_importer.py:46
+#: app/services/vcf_importer.py:52
 msgid "Please complete your organization profile before importing data."
-msgstr ""
 
-#: app/services/vcf_importer.py:229
+#: app/services/vcf_importer.py:106
+#, python-format
+msgid ""
+msgstr ""
+"Could not parse VCF metadata with pysam: %(error)s. Falling back to a text "
+"parser."
+
+#: app/services/vcf_importer.py:228
 msgid "The uploaded file is not valid."
-msgstr "The uploaded file is not valid."
+
+#: app/services/vcf_metadata.py:433
+#, python-format
+msgid ""
+msgstr ""
+"Unsupported metadata section '%(section)s' encountered in the VCF header; "
+"storing raw values in additional metadata."
+
+#: app/services/vcf_metadata.py:461
+#, python-format
+msgid ""
+msgstr ""
+"Unsupported sequencing platform %(platform)s; storing raw metadata only."
 
 #: app/tables.py:184
 msgid "Position (bp)"
-msgstr "Position (bp)"
 
 #: app/tables.py:185
 msgid "Reference allele"
-msgstr "Reference allele"
 
 #: app/tables.py:186
 msgid "Alternate allele"
-msgstr "Alternate allele"
 
 #: app/tables.py:187
 msgid "QUAL"
-msgstr "QUAL"
 
 #: app/tables.py:188
 msgid "Filter status"
-msgstr "Filter status"
 
 #: app/tables.py:189
 msgid "Allele frequency (AF)"
-msgstr "Allele frequency (AF)"
 
 #: app/tables.py:190
 msgid "Allele count (AC)"
-msgstr "Allele count (AC)"
 
 #: app/tables.py:191
 msgid "Alleles analysed (AN)"
-msgstr "Alleles analysed (AN)"
 
 #: app/tables.py:192
 msgid "Read depth (DP)"
-msgstr "Read depth (DP)"
 
 #: app/tables.py:193
 msgid "Mapping quality (MQ)"
-msgstr "Mapping quality (MQ)"
 
 #: app/tables.py:194
 msgid "Quality by depth (QD)"
-msgstr "Quality by depth (QD)"
 
 #: app/tables.py:195
 msgid "Fisher strand (FS)"
-msgstr "Fisher strand (FS)"
 
 #: app/tables.py:196
 msgid "Strand odds ratio (SOR)"
-msgstr "Strand odds ratio (SOR)"
 
 #: app/tables.py:197
 msgid "Samples counted (NS)"
-msgstr "Samples counted (NS)"
 
 #: app/tables.py:198
 msgid "Strand bias (SB)"
-msgstr "Strand bias (SB)"
 
 #: app/tables.py:199
 msgid "Variant ID"
-msgstr "Variant ID"
 
 #: app/tables.py:200
 msgid "Variant comments"
-msgstr "Variant comments"
 
 #: app/tables.py:202
 msgid "Source laboratory"
-msgstr "Source laboratory"
 
-#: app/tables.py:203 app/views.py:583
+#: app/tables.py:203 app/views.py:589
 msgid "DOI"
-msgstr "DOI"
 
-#: app/tables.py:204 app/views.py:586
+#: app/tables.py:204 app/views.py:592
 msgid "Contact email"
-msgstr "Contact email"
 
-#: app/tables.py:205 app/views.py:587
+#: app/tables.py:205 app/views.py:593
 msgid "Contact phone"
-msgstr "Contact phone"
 
-#: app/tables.py:206 app/views.py:585
+#: app/tables.py:206 app/views.py:591
 msgid "Total samples"
-msgstr "Total samples"
 
 #: app/tables.py:207
 msgid "Inclusion criteria"
-msgstr "Inclusion criteria"
 
 #: app/tables.py:208
 msgid "Exclusion criteria"
-msgstr "Exclusion criteria"
 
 #: app/tables.py:209
 msgid "Group comments"
-msgstr "Group comments"
 
 #: app/tables.py:210
 msgid "Reference build"
-msgstr "Reference build"
 
 #: app/tables.py:211
 msgid "Reference build version"
-msgstr "Reference build version"
 
 #: app/tables.py:212
 msgid "Genome size"
-msgstr "Genome size"
 
 #: app/tables.py:213
 msgid "Genome ploidy"
-msgstr "Genome ploidy"
 
 #: app/tables.py:214
 msgid "Genome GC content"
-msgstr "Genome GC content"
 
-#: app/tables.py:219 app/views.py:626
+#: app/tables.py:219 app/views.py:632
 msgid "Material type"
-msgstr "Material type"
 
 #: app/tables.py:220
 msgid "Integrity number"
-msgstr "Integrity number"
 
 #: app/tables.py:221
 msgid "Library kit"
-msgstr "Library kit"
-
-#: app/tables.py:222
-msgid "Fragmentation"
-msgstr "Fragmentation"
 
 #: app/tables.py:223
 msgid "Adapter ligation efficiency"
-msgstr "Adapter ligation efficiency"
 
 #: app/tables.py:224
 msgid "PCR cycles"
-msgstr "PCR cycles"
 
 #: app/tables.py:225
 msgid "Illumina instrument"
-msgstr "Illumina instrument"
 
 #: app/tables.py:226
 msgid "Illumina flow cell"
-msgstr "Illumina flow cell"
 
 #: app/tables.py:227
 msgid "Illumina channel method"
-msgstr "Illumina channel method"
 
 #: app/tables.py:228
 msgid "Illumina cluster density"
-msgstr "Illumina cluster density"
 
 #: app/tables.py:229
 msgid "Illumina QC software"
-msgstr "Illumina QC software"
 
 #: app/tables.py:230
 msgid "ONT instrument"
-msgstr "ONT instrument"
 
 #: app/tables.py:231
 msgid "ONT flow cell"
-msgstr "ONT flow cell"
 
 #: app/tables.py:232
 msgid "ONT flow cell version"
-msgstr "ONT flow cell version"
 
 #: app/tables.py:233
 msgid "ONT pore type"
-msgstr "ONT pore type"
 
 #: app/tables.py:234
 msgid "ONT bias voltage"
-msgstr "ONT bias voltage"
 
 #: app/tables.py:235
 msgid "PacBio instrument"
-msgstr "PacBio instrument"
 
 #: app/tables.py:236
 msgid "PacBio flow cell"
-msgstr "PacBio flow cell"
 
 #: app/tables.py:237
 msgid "PacBio SMRT cell type"
-msgstr "PacBio SMRT cell type"
 
 #: app/tables.py:238
 msgid "PacBio ZMW density"
-msgstr "PacBio ZMW density"
 
 #: app/tables.py:239
 msgid "Ion Torrent instrument"
-msgstr "Ion Torrent instrument"
 
 #: app/tables.py:240
 msgid "Ion Torrent flow cell"
-msgstr "Ion Torrent flow cell"
 
 #: app/tables.py:241
 msgid "Ion Torrent chip type"
-msgstr "Ion Torrent chip type"
 
 #: app/tables.py:242
 msgid "Ion Torrent pH calibration"
-msgstr "Ion Torrent pH calibration"
 
 #: app/tables.py:243
 msgid "Ion Torrent flow order"
-msgstr "Ion Torrent flow order"
 
 #: app/tables.py:244
 msgid "Ion Sphere metrics"
-msgstr "Ion Sphere metrics"
 
 #: app/tables.py:246
 msgid "Alignment parameters"
-msgstr "Alignment parameters"
 
 #: app/tables.py:247
 msgid "Reference genome version"
-msgstr "Reference genome version"
 
 #: app/tables.py:250
 msgid "Variant caller version"
-msgstr "Variant caller version"
 
 #: app/tables.py:251
 msgid "Variant filtering thresholds"
-msgstr "Variant filtering thresholds"
 
 #: app/tables.py:253
 msgid "Variant caller MQ"
-msgstr "Variant caller MQ"
 
 #: app/tables.py:254
 msgid "Post-processing normalization"
-msgstr "Post-processing normalization"
 
 #: app/tables.py:255
 msgid "Post-processing harmonization"
-msgstr "Post-processing harmonization"
 
 #: app/tables.py:256
 msgid "Input A260/A280"
-msgstr "Input A260/A280"
 
 #: app/tables.py:257
 msgid "Input A260/A230"
-msgstr "Input A260/A230"
 
-#: app/tables.py:258 app/views.py:653
+#: app/tables.py:258 app/views.py:659
 msgid "DNA concentration"
-msgstr "DNA concentration"
 
-#: app/tables.py:259 app/views.py:658
+#: app/tables.py:259 app/views.py:664
 msgid "RNA concentration"
-msgstr "RNA concentration"
 
 #: app/tables.py:260
 msgid "Input quality notes"
-msgstr "Input quality notes"
 
 #: app/templates/about.html:4
 #, python-format
 msgid "About - %(site_name)s"
-msgstr ""
 
 #: app/templates/about.html:7 app/templates/partials/navbar.html:14
 msgid "About"
-msgstr ""
 
 #: app/templates/about.html:15
 #, python-format
 msgid ""
+msgstr ""
 "%(site_name)s is a web platform for unifying, aggregating, and visualising "
 "variant data from VCF/gVCF files."
-msgstr ""
 
 #: app/templates/about.html:16
 msgid ""
-"MetaGaP is an open platform for exploring cohort-level variant frequencies."
 msgstr ""
+"MetaGaP is an open platform for exploring cohort-level variant frequencies."
 
 #: app/templates/about.html:20
 msgid "Platform capabilities"
-msgstr ""
 
 #: app/templates/about.html:22
 msgid ""
+msgstr ""
 "Import and basic validation of VCF/gVCF files with support for GRCh37 and "
 "GRCh38 assemblies."
-msgstr ""
 
 #: app/templates/about.html:23
 msgid ""
+msgstr ""
 "Merge multiple VCFs into a cohort-level file and recalculate AC/AN/AF tags "
 "using <code>bcftools +fill-tags</code>."
-msgstr ""
 
 #: app/templates/about.html:24
 msgid ""
+msgstr ""
 "Apply filters (QUAL, PASS, and more) and remove genotype columns during "
 "export to support de-identification."
-msgstr ""
 
 #: app/templates/about.html:25
 msgid ""
+msgstr ""
 "Leverage tables and filters (django-tables2, django-filter) for streamlined "
 "browsing and navigation."
-msgstr ""
 
 #: app/templates/about.html:30
 msgid "How it works"
-msgstr ""
 
 #: app/templates/about.html:32
 msgid ""
+msgstr ""
 "Each input VCF is normalised with <code>bgzip + tabix</code> and validated "
 "for readability and a compliant header."
-msgstr ""
 
 #: app/templates/about.html:33
 msgid ""
+msgstr ""
 "Cohort merging runs via <code>bcftools merge -m all</code> followed by "
 "recalculation of summary tags (AC/AN/AF)."
-msgstr ""
 
 #: app/templates/about.html:34
 msgid ""
+msgstr ""
 "Configured filters are applied; genotype data can be stripped with "
 "<code>bcftools view -G</code>. The final VCF and index are then produced."
-msgstr ""
 
 #: app/templates/about.html:39
 msgid "Reliability and quality control"
-msgstr ""
 
 #: app/templates/about.html:41
 msgid ""
+msgstr ""
 "Format validation and error logging for external tools (bcftools, bgzip, "
 "tabix)."
-msgstr ""
 
 #: app/templates/about.html:42
 msgid ""
+msgstr ""
 "Automated tests cover key merge and import scenarios, and community "
 "regression suites are welcome."
-msgstr ""
 
 #: app/templates/about.html:47
 msgid "Limitations and disclaimer"
-msgstr ""
 
 #: app/templates/about.html:48
 msgid ""
+msgstr ""
 "The platform is intended for research use only and is not a medical device. "
 "Do not upload personal or clinical genomic data; use synthetic examples or "
 "de-identified metadata."
-msgstr ""
 
 #: app/templates/about.html:52
 msgid "Technology stack"
-msgstr ""
 
 #: app/templates/about.html:53
 msgid ""
+msgstr ""
 "Django 5, Python 3.12/3.13, bcftools/htslib, pysam, Bootstrap 5, django-"
 "bootstrap5, django-tables2, django-filter, backed by SQLite or PostgreSQL."
-msgstr ""
 
 #: app/templates/about.html:57
 msgid "Community and feedback"
-msgstr ""
 
 #: app/templates/about.html:58
 msgid ""
-"Repository: <a href=\"https://github.com/Stepanvar/MetaGap\" "
-"target=\"_blank\" rel=\"noopener\">github.com/Stepanvar/MetaGap</a>. "
-"Contributions that improve the pipeline, add tests, or enhance the interface "
-"are welcome."
 msgstr ""
+"Repository: <a href=\"https://github.com/Stepanvar/MetaGap\" target=\"_blank"
+"\" rel=\"noopener\">github.com/Stepanvar/MetaGap</a>. Contributions that "
+"improve the pipeline, add tests, or enhance the interface are welcome."
 
 #: app/templates/adddata.html:4
 #, python-format
 msgid "Add Data - %(site_name)s"
-msgstr ""
 
 #: app/templates/adddata.html:7 app/templates/adddata.html:12
 msgid "Add Data"
-msgstr ""
 
 #: app/templates/adddata.html:17 app/templates/form_template.html:37
 #: app/templates/partials/form.html:80
 msgid "Submit"
-msgstr ""
 
 #: app/templates/base.html:40 app/templates/partials/breadcrumbs.html:2
 #: app/templates/sample_group_confirm_delete.html:7
 #: app/templates/sample_group_form.html:8
 msgid "Breadcrumb"
-msgstr ""
 
 #: app/templates/base.html:43 app/templates/partials/breadcrumbs.html:4
 #: app/templates/sample_group_confirm_delete.html:9
 #: app/templates/sample_group_form.html:10
 msgid "Home"
-msgstr ""
 
-#: app/templates/base.html:68
+#: app/templates/base.html:66
+#, python-format
+msgid "© %(year)s %(site)s"
+
+#: app/templates/base.html:69
 msgid "Empowering genomic data management with confidence."
-msgstr ""
 
 #: app/templates/confirm_delete.html:4
 #, python-format
 msgid "Delete Account - %(site_name)s"
-msgstr ""
 
 #: app/templates/confirm_delete.html:7 app/templates/profile.html:69
 msgid "Delete Account"
-msgstr ""
 
 #: app/templates/confirm_delete.html:13
 #, fuzzy
 #| msgid "I confirm that I want to delete my account."
 msgid "Are you sure you want to delete your account?"
-msgstr "I confirm that I want to delete my account."
 
 #: app/templates/confirm_delete.html:14
 msgid "Yes, Delete My Account"
-msgstr ""
 
 #: app/templates/contact.html:4
 #, python-format
 msgid "Contact — %(site_name)s"
-msgstr ""
 
 #: app/templates/contact.html:7 app/templates/contact.html:33
 #: app/templates/partials/navbar.html:15
 #, fuzzy
 #| msgid "Contact email"
 msgid "Contact"
-msgstr "Contact email"
 
 #: app/templates/contact.html:14
 msgid "What to include in your request"
-msgstr ""
 
 #: app/templates/contact.html:16
 msgid "A concise description of the issue and the behaviour you expected."
-msgstr ""
 
 #: app/templates/contact.html:17
 msgid ""
+msgstr ""
 "A minimal reproducible example such as a small VCF sample (or link), command "
 "parameters, and relevant log excerpts."
-msgstr ""
 
 #: app/templates/contact.html:18
 #, python-format
 msgid ""
+msgstr ""
 "Environment versions: Python, bcftools/htslib, operating system, and "
 "%(site_name)s release (commit or tag)."
-msgstr ""
 
 #: app/templates/contact.html:23
 #, fuzzy
 #| msgid "Duplicate handling"
 msgid "Responsible data handling"
-msgstr "Duplicate handling"
 
 #: app/templates/contact.html:24
 msgid ""
+msgstr ""
 "Do not share personal genomic data or PHI. When troubleshooting, provide "
 "synthetic files or de-identified header and metadata excerpts."
-msgstr ""
 
 #: app/templates/contact.html:28
 #, fuzzy
 #| msgid "Source laboratory"
 msgid "Collaboration"
-msgstr "Source laboratory"
 
 #: app/templates/contact.html:29
 msgid ""
+msgstr ""
 "We welcome research collaborations and pipeline integrations. Use the "
 "subject line 'Collaboration' and describe your idea or request in a few "
 "sentences."
-msgstr ""
 
 #: app/templates/contact.html:34
 msgid ""
-"For all enquiries email <a href=\"mailto:zsteve2911@gmail."
-"com\">zsteve2911@gmail.com</a>."
 msgstr ""
+"For all enquiries email <a href=\"mailto:zsteve2911@gmail.com"
+"\">zsteve2911@gmail.com</a>."
 
 #: app/templates/contact.html:35
 msgid ""
-"You can also reach us at <a href=\"mailto:support@metagap."
-"org\">support@metagap.org</a>."
 msgstr ""
+"You can also reach us at <a href=\"mailto:support@metagap.org"
+"\">support@metagap.org</a>."
 
 #: app/templates/contact.html:36
 msgid ""
+msgstr ""
 "Join the conversation on <a href=\"https://github.com/Stepanvar/MetaGap/"
 "discussions\" target=\"_blank\" rel=\"noopener\">GitHub Discussions</a>."
-msgstr ""
 
 #: app/templates/dashboard.html:5
 #, python-format
 msgid "Dashboard · %(site_name)s"
-msgstr ""
 
 #: app/templates/dashboard.html:12
 #, python-format
 msgid "Welcome back, %(first_name)s!"
-msgstr ""
 
 #: app/templates/dashboard.html:14
 msgid "Welcome back!"
-msgstr ""
 
 #: app/templates/dashboard.html:17
 msgid "Track your datasets and latest activity across the MetaGaP platform."
-msgstr ""
 
 #: app/templates/dashboard.html:22
 msgid "Recent datasets"
-msgstr ""
 
 #: app/templates/dashboard.html:23
 msgid "Manage all"
-msgstr ""
 
 #: app/templates/dashboard.html:50
 #, python-format
 msgid "Contains %(sample_count)s samples across uploaded sequencing runs."
-msgstr ""
 
 #: app/templates/dashboard.html:52
 msgid "Recently curated dataset ready for further analysis."
-msgstr ""
 
 #: app/templates/dashboard.html:58
 #, python-format
 msgid "%(sample_count)s samples"
-msgstr ""
 
 #: app/templates/dashboard.html:60 app/templates/import_data.html:59
 #, fuzzy
 #| msgid "Samples counted (NS)"
 msgid "Sample count pending"
-msgstr "Samples counted (NS)"
 
 #: app/templates/dashboard.html:63
 msgid "Open"
-msgstr ""
 
 #: app/templates/dashboard.html:73
 #, python-format
 msgid ""
-"No datasets available yet. Start by <a class=\"alert-link\" "
-"href=\"%(import_url)s\">importing your first dataset</a>."
 msgstr ""
+"No datasets available yet. Start by <a class=\"alert-link\" href="
+"\"%(import_url)s\">importing your first dataset</a>."
 
 #: app/templates/dashboard.html:80
 #, fuzzy
 #| msgid "RNA concentration"
 msgid "Recent actions"
-msgstr "RNA concentration"
 
 #: app/templates/dashboard.html:105
 #, python-format
 msgid "Linked to <strong>%(group_name)s</strong>."
-msgstr ""
 
 #: app/templates/dashboard.html:107
 msgid "Variant record awaiting dataset assignment."
-msgstr ""
 
 #: app/templates/dashboard.html:113
 #, python-format
 msgid "Quality %(quality)s"
-msgstr ""
 
 #: app/templates/dashboard.html:115
 msgid "QC pending"
-msgstr ""
 
 #: app/templates/dashboard.html:119
 msgid "Review"
-msgstr ""
 
 #: app/templates/dashboard.html:121
 msgid "View profile"
-msgstr ""
 
 #: app/templates/dashboard.html:131
 msgid ""
+msgstr ""
 "No recent actions recorded. Import new sequencing data to start tracking "
 "activity."
-msgstr ""
 
 #: app/templates/edit_profile.html:4
 #, python-format
 msgid "Edit Profile - %(site_name)s"
-msgstr ""
 
 #: app/templates/edit_profile.html:7 app/templates/edit_profile.html:13
 #: app/templates/profile.html:68
 msgid "Edit Profile"
-msgstr ""
 
 #: app/templates/edit_profile.html:14 app/templates/sample_group_form.html:21
 msgid "Save Changes"
-msgstr ""
 
 #: app/templates/import_data.html:4
 #, python-format
 msgid "Import Data - %(site_name)s"
-msgstr ""
 
 #: app/templates/import_data.html:7 app/templates/partials/navbar.html:18
 #: app/templates/profile.html:20
 msgid "Import Data"
-msgstr ""
 
 #: app/templates/import_data.html:14
 msgid "Import sequencing cohorts"
-msgstr ""
 
 #: app/templates/import_data.html:15
 msgid ""
+msgstr ""
 "Upload VCF or BCF files and MetaGaP will validate the metadata, populate "
 "sample groups, and surface any issues that require your attention."
-msgstr ""
 
 #: app/templates/import_data.html:22
 msgid "Upload and import"
-msgstr ""
 
 #: app/templates/import_data.html:30
 msgid "Upload checklist"
-msgstr ""
 
 #: app/templates/import_data.html:32
 #, python-format
 msgid ""
+msgstr ""
 "Accepted formats: <code>.vcf</code>, <code>.vcf.gz</code>, <code>.vcf.bgz</"
 "code>, <code>.bcf</code> up to %(max_size)s&nbsp;MB."
-msgstr ""
 
 #: app/templates/import_data.html:33
 msgid ""
+msgstr ""
 "Include <code>SAMPLE_GROUP</code> metadata in the header so we can build "
 "cohort profiles automatically."
-msgstr ""
 
 #: app/templates/import_data.html:34
 msgid ""
+msgstr ""
 "Warnings highlight unsupported keys—resubmit after updating your header "
 "comments."
-msgstr ""
 
 #: app/templates/import_data.html:35
 msgid ""
+msgstr ""
 "Your upload is stored temporarily for processing and removed immediately "
 "after import."
-msgstr ""
 
 #: app/templates/import_data.html:37
 msgid ""
+msgstr ""
 "Need a template? Download the demo VCF from your profile to view a fully "
 "annotated header."
-msgstr ""
 
 #: app/templates/import_data.html:45
 #, fuzzy
 #| msgid "Sample group"
 msgid "Imported sample groups"
-msgstr "Sample group"
 
 #: app/templates/import_data.html:46
 #, python-format
 msgid "%(total)s total"
-msgstr ""
 
 #: app/templates/import_data.html:57
 #, fuzzy, python-format
 #| msgid "Total samples"
 msgid "%(total)s samples"
-msgstr "Total samples"
 
 #: app/templates/import_data.html:61
 msgid "Owner:"
-msgstr ""
 
 #: app/templates/import_data.html:65 app/templates/profile.html:33
 msgid "View"
-msgstr ""
 
 #: app/templates/import_data.html:66 app/templates/profile.html:35
 msgid "Edit"
-msgstr ""
 
 #: app/templates/import_data.html:67 app/templates/profile.html:37
 msgid "Delete"
-msgstr ""
 
 #: app/templates/import_data.html:74
 msgid "No cohorts imported yet. Upload your first VCF to populate this list."
-msgstr ""
 
 #: app/templates/index.html:4
 #, python-format
 msgid "Home - %(site_name)s"
-msgstr ""
 
 #: app/templates/index.html:12
 msgid "A unified workspace for variant frequency data"
-msgstr ""
 
 #: app/templates/index.html:13
 #, python-format
 msgid ""
+msgstr ""
 "%(site_name)s helps laboratories curate sample metadata, compare allele "
 "frequencies across cohorts, and keep sequencing provenance transparent."
-msgstr ""
 
 #: app/templates/index.html:15
 msgid "Import your VCF"
-msgstr ""
 
 #: app/templates/index.html:16
 msgid "Learn more"
-msgstr ""
 
 #: app/templates/index.html:23
 msgid ""
+msgstr ""
 "Query by variant ID, genomic coordinates, or metadata keywords to surface "
 "relevant cohorts instantly."
-msgstr ""
 
 #: app/templates/index.html:44
 #, python-format
 msgid ""
+msgstr ""
 "Need advanced filters? Open the <a href=\"%(results_url)s\">results page</a> "
 "to refine by position, quality, or sample metadata."
-msgstr ""
 
 #: app/templates/index.html:47
 #, fuzzy
 #| msgid "Search the catalogue"
 msgid "View full catalogue"
-msgstr "Search the catalogue"
 
 #: app/templates/index.html:59
 msgid "Guided imports"
-msgstr ""
 
 #: app/templates/index.html:60
 msgid ""
+msgstr ""
 "Upload compressed or uncompressed VCF files with immediate validation. "
 "MetaGaP surfaces unsupported metadata keys and highlights missing fields so "
 "you can fix issues before data is published."
-msgstr ""
 
 #: app/templates/index.html:67
 msgid "Rich sample context"
-msgstr ""
 
 #: app/templates/index.html:68
 msgid ""
+msgstr ""
 "Track tissue origin, extraction quality metrics, sequencing instruments, and "
 "downstream pipelines for every dataset in one dashboard."
-msgstr ""
 
 #: app/templates/index.html:75
 msgid "Actionable results"
-msgstr ""
 
 #: app/templates/index.html:76
 msgid ""
+msgstr ""
 "Interactive tables expose allele frequencies, counts, and QC statistics with "
 "filtering, pagination, and export options tailored for cross-study "
 "comparisons."
-msgstr ""
 
 #: app/templates/index.html:86
 msgid "Import data in three easy steps"
-msgstr ""
 
 #: app/templates/index.html:88
 msgid ""
-"Generate a VCF/BCF file with complete header metadata describing your cohort."
 msgstr ""
+"Generate a VCF/BCF file with complete header metadata describing your cohort."
 
 #: app/templates/index.html:90
 #, python-format
 msgid ""
+msgstr ""
 "Upload the file via the <a href=\"%(import_url)s\">Import Data</a> page and "
 "review any warnings."
-msgstr ""
 
 #: app/templates/index.html:91
 msgid ""
+msgstr ""
 "Explore new variants immediately in the dashboard and share curated sample "
 "groups with collaborators."
-msgstr ""
 
 #: app/templates/index.html:97
 msgid ""
+msgstr ""
 "Need an example dataset? Import the bundled demo VCF from your profile page "
 "to see the workflow end to end."
-msgstr ""
 
 #: app/templates/index.html:105
 msgid "Ready to get started?"
-msgstr ""
 
 #: app/templates/index.html:106
 msgid ""
+msgstr ""
 "Create an account, upload your first dataset, and uncover insights across "
 "your cohorts."
-msgstr ""
 
 #: app/templates/index.html:107
 msgid "Create an account"
-msgstr ""
 
 #: app/templates/login.html:4
 #, python-format
 msgid "Login - %(site_name)s"
-msgstr ""
 
 #: app/templates/login.html:7 app/templates/login.html:14
 #: app/templates/loginpartial.html:15 app/templates/partials/navbar.html:34
 msgid "Login"
-msgstr ""
 
 #: app/templates/login.html:15
 msgid "Log in"
-msgstr ""
 
 #: app/templates/loginpartial.html:5 app/templates/partials/navbar.html:27
 #: app/templates/profile.html:7
 #: app/templates/sample_group_confirm_delete.html:10
 #: app/templates/sample_group_form.html:11
 msgid "Profile"
-msgstr ""
 
 #: app/templates/loginpartial.html:10 app/templates/partials/navbar.html:30
 msgid "Logout"
-msgstr ""
 
 #: app/templates/loginpartial.html:18 app/templates/partials/navbar.html:35
 #: app/templates/signup.html:8
 msgid "Sign Up"
-msgstr ""
 
 #: app/templates/partials/alerts.html:7
 msgid "Close"
-msgstr ""
 
 #: app/templates/partials/footer.html:5
 #, python-format
 msgid "© %(year)s %(site_name)s"
-msgstr ""
 
 #: app/templates/partials/navbar.html:2
 msgid "Main navigation"
-msgstr ""
 
 #: app/templates/partials/navbar.html:8
 msgid "Toggle navigation"
-msgstr ""
 
 #: app/templates/partials/navbar.html:21
 msgid "Admin"
-msgstr ""
 
 #: app/templates/partials/navbar.html:43
 msgid "Select language"
-msgstr ""
 
 #: app/templates/partials/theme-toggle.html:6
 msgid "Toggle color theme"
-msgstr ""
 
 #: app/templates/partials/theme-toggle.html:7
 #: app/templates/partials/theme-toggle.html:11
 msgid "Light"
-msgstr ""
 
 #: app/templates/partials/theme-toggle.html:8
 msgid "Dark"
-msgstr ""
 
 #: app/templates/profile.html:4
 #, python-format
 msgid "Profile - %(site_name)s"
-msgstr ""
 
 #: app/templates/profile.html:13
 msgid "Your Profile"
-msgstr ""
 
 #: app/templates/profile.html:14
 #, fuzzy
 #| msgid "Username"
 msgid "Username:"
-msgstr "Username"
 
 #: app/templates/profile.html:15
 msgid "Email:"
-msgstr ""
 
 #: app/templates/profile.html:17
 #, fuzzy
 #| msgid "Organization"
 msgid "Organization:"
-msgstr "Organization"
 
 #: app/templates/profile.html:21
 msgid "Import"
-msgstr ""
 
 #: app/templates/profile.html:24 app/templates/sample_group_table.html:8
 #: app/templates/sample_group_table.html:14
 #, fuzzy
 #| msgid "Sample group"
 msgid "Sample Groups"
-msgstr "Sample group"
 
 #: app/templates/profile.html:43
 msgid "You haven't added any sample groups yet."
-msgstr ""
 
 #: app/templates/profile.html:46
 msgid "Export Data"
-msgstr ""
 
 #: app/templates/profile.html:55
 #, python-format
 msgid "Export options for %(group_name)s"
-msgstr ""
 
 #: app/templates/profile.html:56
 msgid "Download CSV"
-msgstr ""
 
 #: app/templates/profile.html:57
 msgid "Download TSV"
-msgstr ""
 
 #: app/templates/profile.html:64
 msgid "Export options will appear once you add sample groups."
-msgstr ""
 
 #: app/templates/profile.html:67
 msgid "Account Settings"
-msgstr ""
 
 #: app/templates/results.html:5
 #, python-format
 msgid "Search Results - %(site_name)s"
-msgstr ""
 
 #: app/templates/results.html:17
 msgid "All"
-msgstr ""
 
 #: app/templates/results.html:18
 #, python-format
 msgid "Column %(number)s"
-msgstr ""
 
 #: app/templates/results.html:19 app/templates/results.html:21
 #, fuzzy, python-format
 #| msgid "Filter status"
 msgid "Filter %(column)s"
-msgstr "Filter status"
 
 #: app/templates/results.html:20
 #, python-format
 msgid "Filter %(column)s column"
-msgstr ""
 
 #: app/templates/results.html:158 app/templates/results.html:164
 #, fuzzy
 #| msgid "Search"
 msgid "Search Results"
-msgstr "Search"
 
 #: app/templates/results.html:179
 msgid "Advanced filters"
-msgstr ""
 
 #: app/templates/results.html:182
 msgid "Apply filters"
-msgstr ""
 
 #: app/templates/results.html:183
 msgid "Clear"
-msgstr ""
 
 #: app/templates/results.html:201
 #, fuzzy
 #| msgid "Variant caller"
 msgid "Variant filters"
-msgstr "Variant caller"
 
 #: app/templates/results.html:296
 msgid "Metadata filters"
-msgstr ""
 
 #: app/templates/results.html:337
 #, python-format
 msgid "Showing results for \"%(query)s\""
-msgstr ""
+msgstr "Showing results for \"%(query)s\""
 
 #: app/templates/results.html:340
 msgid ""
+msgstr ""
 "Use the column filters below to narrow results. Clear a filter by removing "
 "its text or selecting \"All\" in dropdowns."
-msgstr ""
 
 #: app/templates/sample_group_confirm_delete.html:4
 #, python-format
 msgid "Delete Sample Group - %(site_name)s"
-msgstr ""
 
 #: app/templates/sample_group_confirm_delete.html:11
 #: app/templates/sample_group_confirm_delete.html:18
 #, fuzzy
 #| msgid "Sample group"
 msgid "Delete Sample Group"
-msgstr "Sample group"
 
 #: app/templates/sample_group_confirm_delete.html:19
 #, python-format
 msgid ""
+msgstr ""
 "This action will remove <strong>%(group_name)s</strong> and its imported "
 "variant data."
-msgstr ""
 
 #: app/templates/sample_group_confirm_delete.html:23
 msgid "Yes, delete this group"
-msgstr ""
 
-#: app/templates/sample_group_confirm_delete.html:24 app/views.py:400
-#: app/views.py:401 app/views.py:455 app/views.py:456
+#: app/templates/sample_group_confirm_delete.html:24 app/views.py:406
+#: app/views.py:407 app/views.py:461 app/views.py:462
 msgid "Cancel"
-msgstr "Cancel"
 
 #: app/templates/sample_group_detail.html:5
 #, python-format
 msgid "Sample Group - %(group_name)s | %(site_name)s"
-msgstr ""
 
 #: app/templates/sample_group_detail.html:15
 msgid "Back to profile"
-msgstr ""
 
 #: app/templates/sample_group_detail.html:45
 #, fuzzy
 #| msgid "Allele frequency (AF)"
 msgid "Allele frequencies"
-msgstr "Allele frequency (AF)"
 
 #: app/templates/sample_group_detail.html:46
 #, python-format
 msgid "%(count)s variants"
-msgstr ""
 
 #: app/templates/sample_group_detail.html:53
 msgid "No variant data has been imported for this sample group yet."
-msgstr ""
 
 #: app/templates/sample_group_form.html:5
 #, python-format
 msgid "Edit Sample Group - %(site_name)s"
-msgstr ""
 
 #: app/templates/sample_group_form.html:12
 #: app/templates/sample_group_form.html:19
 #, fuzzy
 #| msgid "Sample group"
 msgid "Edit Sample Group"
-msgstr "Sample group"
 
 #: app/templates/sample_group_form.html:20
 msgid ""
+msgstr ""
 "Update the descriptive metadata for this cohort. Changes will be immediately "
 "reflected in search results."
-msgstr ""
 
 #: app/templates/sample_group_table.html:5
 #, python-format
 msgid "Sample Groups - %(site_name)s"
-msgstr ""
 
 #: app/templates/sample_group_table.html:20
 msgid "No sample groups are available."
-msgstr ""
 
 #: app/templates/signup.html:4
 #, python-format
 msgid "Sign Up - %(site_name)s"
-msgstr ""
 
 #: app/templates/signup.html:9
 msgid "Create Account"
-msgstr ""
 
-#: app/views.py:242
+#: app/tests/test_views_additional.py:569
+msgid "Test translation"
+
+#: app/views.py:248
 msgid "Sample group not found."
-msgstr "Sample group not found."
 
-#: app/views.py:376
+#: app/views.py:382
 msgid "Your profile has been updated."
-msgstr "Your profile has been updated."
 
-#: app/views.py:389
+#: app/views.py:395
 msgid "Your account has been deleted."
-msgstr "Your account has been deleted."
 
-#: app/views.py:443
+#: app/views.py:449
 msgid "Sample group metadata updated successfully."
-msgstr "Sample group metadata updated successfully."
 
-#: app/views.py:489
+#: app/views.py:495
 #, python-format
 msgid "Deleted %(group)s successfully."
-msgstr "Deleted %(group)s successfully."
 
-#: app/views.py:580
+#: app/views.py:586
 msgid "Summary"
-msgstr "Summary"
 
-#: app/views.py:582
+#: app/views.py:588
 msgid "Name"
-msgstr "Name"
 
-#: app/views.py:589
+#: app/views.py:595
 msgid "Created by"
-msgstr "Created by"
 
-#: app/views.py:597
+#: app/views.py:603
 msgid "Criteria"
-msgstr "Criteria"
-
-#: app/views.py:599
-msgid "Inclusion"
-msgstr "Inclusion"
-
-#: app/views.py:600
-msgid "Exclusion"
-msgstr "Exclusion"
-
-#: app/views.py:601
-msgid "Comments"
-msgstr "Comments"
 
 #: app/views.py:605
+msgid "Inclusion"
+
+#: app/views.py:606
+msgid "Exclusion"
+
+#: app/views.py:607
+msgid "Comments"
+
+#: app/views.py:611
 msgid "Sample & Material"
-msgstr "Sample & Material"
 
-#: app/views.py:608
+#: app/views.py:614
 msgid "Reference genome build"
-msgstr "Reference genome build"
 
-#: app/views.py:617
+#: app/views.py:623
 msgid "Genome complexity"
-msgstr "Genome complexity"
-
-#: app/views.py:625
-msgid "Sample origin"
-msgstr "Sample origin"
-
-#: app/views.py:627
-msgid "Library construction"
-msgstr "Library construction"
 
 #: app/views.py:631
+msgid "Sample origin"
+
+#: app/views.py:633
+msgid "Library construction"
+
+#: app/views.py:637
 msgid "Sequencing & Bioinformatics"
-msgstr "Sequencing & Bioinformatics"
-
-#: app/views.py:634
-msgid "Alignment"
-msgstr "Alignment"
-
-#: app/views.py:635
-msgid "Variant calling"
-msgstr "Variant calling"
-
-#: app/views.py:636
-msgid "Post-processing"
-msgstr "Post-processing"
 
 #: app/views.py:640
+msgid "Alignment"
+
+#: app/views.py:641
+msgid "Variant calling"
+
+#: app/views.py:642
+msgid "Post-processing"
+
+#: app/views.py:646
 msgid "Input Quality"
-msgstr "Input Quality"
 
-#: app/views.py:643
+#: app/views.py:649
 msgid "A260/A280"
-msgstr "A260/A280"
 
-#: app/views.py:648
+#: app/views.py:654
 msgid "A260/A230"
-msgstr "A260/A230"
 
-#: app/views.py:663
+#: app/views.py:669
 msgid "Notes"
-msgstr "Notes"
 
-#: app/views.py:675
+#: app/views.py:681
 msgid "Custom metadata"
-msgstr "Custom metadata"
 
-#: app/views.py:728 app/views.py:788
+#: app/views.py:734 app/views.py:805
 msgid ""
 "We could not import the file because some required metadata was missing or "
 "invalid."
-msgstr ""
-"We could not import the file because some required metadata was missing or "
-"invalid."
-
-#: app/views.py:742
-msgid ""
-"An unexpected error occurred while importing the file. Please review the "
-"file and try again."
-msgstr ""
-"An unexpected error occurred while importing the file. Please review the "
-"file and try again."
 
 #: app/views.py:748
 msgid ""
-"Something went wrong while processing the upload. Check the error above for "
-"details."
-msgstr ""
+"An unexpected error occurred while importing the file. Please review the "
+"file and try again."
+
+#: app/views.py:754
+msgid ""
 "Something went wrong while processing the upload. Check the error above for "
 "details."
 
-#: app/views.py:764
+#: app/views.py:770
 #, python-format
 msgid "Imported %(group)s successfully."
-msgstr "Imported %(group)s successfully."
 
-#: app/services/import_exceptions.py:17
-msgid "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
-msgstr "The uploaded VCF file appears to be invalid or corrupted. Please verify the file contents and try again."
-
-#: app/views.py:779
+#: app/views.py:787
 msgid "An error occurred while importing the provided file."
-msgstr "An error occurred while importing the provided file."

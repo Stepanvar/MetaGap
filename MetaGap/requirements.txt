@@ -1,3 +1,6 @@
+# Python 3.11+ required
+# System dependencies: gettext (for compilemessages)
+
 asgiref==3.8.1
 beautifulsoup4==4.12.3
 certifi==2024.8.30

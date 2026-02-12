@@ -21,6 +21,11 @@ urlpatterns = [
     path("profile/edit/", views.EditProfileView.as_view(), name="edit_profile"),
     path("profile/delete/", views.DeleteAccountView.as_view(), name="delete_account"),
     path(
+        "profile/sample-groups/new/",
+        views.SampleGroupCreateView.as_view(),
+        name="sample_group_create",
+    ),
+    path(
         "profile/sample-groups/<int:pk>/",
         views.SampleGroupDetailView.as_view(),
         name="sample_group_detail",

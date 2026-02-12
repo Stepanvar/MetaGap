@@ -424,6 +424,46 @@ class AboutView(TemplateView):
     template_name = "about.html"
 
 
+class SampleGroupCreateView(
+    LoginRequiredMixin, OrganizationSampleGroupMixin, CreateView
+):
+    """Allow users to manually create new sample groups via web form."""
+
+    model = SampleGroup
+    form_class = SampleGroupForm
+    template_name = "sample_group_form.html"
+    success_url = reverse_lazy("dashboard")
+
+    def get_form_kwargs(self) -> Dict[str, Any]:
+        """Pass the current user to the form for organization association."""
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        """Associate the new sample group with the user's organization."""
+        messages.success(
+            self.request, _("Sample group created successfully.")
+        )
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        """Add cancel button to the form context."""
+        context = super().get_context_data(**kwargs)
+        context.setdefault(
+            "form_extra_actions",
+            [
+                {
+                    "url": reverse_lazy("dashboard"),
+                    "class": "btn btn-outline-secondary",
+                    "label": _("Cancel"),
+                    "text": _("Cancel"),
+                }
+            ],
+        )
+        return context
+
+
 class SampleGroupUpdateView(
     LoginRequiredMixin, OrganizationSampleGroupMixin, UpdateView
 ):

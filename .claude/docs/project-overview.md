@@ -31,35 +31,63 @@ MetaGap is a Django 5.1 web application for managing sample group metadata and a
 ## Project Structure
 
 ```
-MetaGap/                          # Django project root (working directory)
-├── manage.py
-├── requirements.txt
-├── MetaGap/                      # Settings package
-│   ├── settings.py               # All configuration
-│   ├── urls.py                   # Root routing (i18n_patterns wrapper)
-│   └── context_processors.py     # SITE_NAME/SITE_COLORS
-├── app/                          # Main Django application
-│   ├── models.py                 # 13 data models
-│   ├── views.py                  # All views (CBVs)
-│   ├── forms.py                  # BootstrapFormMixin + form classes
-│   ├── filters.py                # django-filter search configs
-│   ├── tables.py                 # django-tables2 table builders
-│   ├── urls.py                   # App URL patterns
-│   ├── signals.py                # Auto-create OrganizationProfile
-│   ├── services/                 # VCF import pipeline
-│   │   ├── vcf_importer.py       # Orchestrator
-│   │   ├── vcf_metadata.py       # YAML config loader + parser
-│   │   ├── vcf_database.py       # Database writer
-│   │   ├── vcf_file_utils.py     # Text fallback parser
-│   │   └── import_exceptions.py  # Custom exceptions
-│   ├── config/
-│   │   └── metadata_fields.yaml  # Metadata mapping config
-│   ├── tests/                    # 20+ test modules, 320+ tests
-│   └── fixtures/demo_data.json   # Demo users + sample groups
-└── MetagapUserCode/              # Standalone VCF merge CLI (separate from Django)
-    ├── merge_vcf/cli.py
-    └── tests/
+/home/szuev/MetaGap/              # Repository root
+├── CLAUDE.md                     # Project guidance for AI agents
+├── README.md                     # User documentation
+├── docs/                         # AI agent docs and planning
+│   └── plans/
+├── .claude/                      # Claude Code configuration
+│   └── docs/                     # Detailed architecture references
+│       ├── project-overview.md   # This file
+│       ├── models.md             # Data model documentation
+│       ├── workflows.md          # User workflows
+│       └── architecture.md       # System architecture
+└── MetaGap/                      # Django project root (working directory)
+    ├── manage.py
+    ├── requirements.txt
+    ├── db.sqlite3                # Development database
+    ├── MetaGap/                  # Settings package
+    │   ├── settings.py           # All configuration
+    │   ├── urls.py               # Root routing (i18n_patterns wrapper)
+    │   ├── context_processors.py # SITE_NAME/SITE_COLORS
+    │   └── locale/               # Project-level translations (en/ru)
+    ├── app/                      # Main Django application
+    │   ├── models.py             # 13 data models
+    │   ├── views.py              # All views (CBVs)
+    │   ├── forms.py              # BootstrapFormMixin + form classes
+    │   ├── filters.py            # django-filter search configs
+    │   ├── tables.py             # django-tables2 table builders
+    │   ├── urls.py               # App URL patterns
+    │   ├── signals.py            # Auto-create OrganizationProfile
+    │   ├── services/             # VCF import pipeline
+    │   │   ├── vcf_importer.py   # Orchestrator
+    │   │   ├── vcf_metadata.py   # YAML config loader + parser
+    │   │   ├── vcf_database.py   # Database writer
+    │   │   ├── vcf_file_utils.py # Text fallback parser
+    │   │   └── import_exceptions.py # Custom exceptions
+    │   ├── config/
+    │   │   └── metadata_fields.yaml # Metadata mapping config
+    │   ├── locale/               # App-level translations (en/ru)
+    │   ├── templates/            # Django templates
+    │   ├── static/               # CSS, JS, images
+    │   ├── tests/                # 20+ test modules, 320+ tests
+    │   └── fixtures/demo_data.json # Demo users + sample groups
+    └── MetagapUserCode/          # **IMPORTANT:** All non-Django project code
+        ├── merge_vcf/            # Standalone VCF merge CLI tool
+        │   ├── cli.py            # Entry point
+        │   ├── __init__.py
+        │   └── __main__.py
+        ├── demo_vcfs/            # Sample VCF files for testing
+        ├── tests/                # Tests for standalone tools
+        └── ...                   # Other utilities (shell scripts, test data)
 ```
+
+**Structure Rules:**
+- **Django web app code:** `/home/szuev/MetaGap/MetaGap/{app,MetaGap}/` ONLY
+- **Non-Django utilities/tools:** `/home/szuev/MetaGap/MetaGap/MetagapUserCode/` ONLY
+- **Documentation:** `/home/szuev/MetaGap/{CLAUDE.md,README.md,docs/,.claude/}`
+- **No loose files in repository root** except documentation
+- **Test VCF files:** Belong in `MetagapUserCode/demo_vcfs/`, NOT in repository root
 
 ## Environment Variables
 

@@ -96,7 +96,10 @@ def test_generate_mo_multiple_entries():
 
 def test_generate_mo_unicode_strings():
     """Test _generate_mo with unicode byte strings."""
-    messages = {b"café": b"coffee", b"naïve": b"simple"}
+    # Using escape sequences for Python 3.10 compatibility
+    # café = caf\xc3\xa9 (UTF-8 encoded)
+    # naïve = na\xc3\xafve (UTF-8 encoded)
+    messages = {b"caf\xc3\xa9": b"coffee", b"na\xc3\xafve": b"simple"}
     result = _generate_mo(messages)
     
     assert len(result) > 0

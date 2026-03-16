@@ -1,17 +1,20 @@
 [Unit]
-Description=Gunicorn daemon for MetaGap
+Description=Gunicorn daemon for MetaGap Django application
 After=network.target
 
 [Service]
-User=s-zuev
+User=metagap
 Group=www-data
-WorkingDirectory=/home/s-zuev/MetaGap/MetaGap
+WorkingDirectory=/var/www/metagap
 Environment="DJANGO_SETTINGS_MODULE=MetaGap.settings"
-ExecStart=/home/s-zuev/MetaGap/MetaGap/venv/bin/gunicorn \
+ExecStart=/usr/local/bin/gunicorn \
           --access-logfile - \
           --workers 3 \
-          --bind 127.0.0.1:8000 \
+          --bind unix:/run/gunicorn.sock \
           MetaGap.wsgi:application
+
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target

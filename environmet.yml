@@ -1,0 +1,45 @@
+name: metagap
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version
+  - python=3.11
+  
+  # Bioinformatics tools (for shell scripts only)
+  - bcftools=1.20
+  - htslib=1.20
+  - tabix=1.11
+  
+  # Core Python packages
+  - pysam>=0.22.1
+  - vcfpy>=0.14.2
+  
+  # Django web framework
+  - django=5.1.1
+  - django-filter=24.3
+  - django-tables2=2.7.0
+  - gunicorn=23.0.0
+  
+  # Supporting packages
+  - beautifulsoup4=4.12.3
+  - requests=2.32.3
+  - python-dotenv=1.1.1
+  - pyyaml=6.0.2
+  - whitenoise=6.11.0
+  - dj-database-url=2.2.0
+  
+  # Authentication
+  - django-allauth=65.0.1
+  
+  # UI components
+  - django-bootstrap5=24.3
+  
+  # Testing
+  - pytest=8.4.2
+  
+  # pip fallback for any missing packages
+  - pip
+  - pip:
+    - asgiref==3.8.1

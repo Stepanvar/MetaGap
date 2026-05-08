@@ -124,6 +124,8 @@ def run_merge_vcf() -> Path | None:
         str(MULTIVCF_BGZ),
         "-m", str(METADATA_TXT),
         "-o", str(MERGED_DIR),
+        "--an-threshold", "-1",   # disable: default 50 silently drops all with <25 samples
+        "--qual-threshold", "-1", # disable: keep all variants for import testing
         "-v",
     ]
 
@@ -164,15 +166,15 @@ def run_merge_vcf() -> Path | None:
     merged = candidates[0]
     ok(f"Merged output: {merged} ({merged.stat().st_size // 1024} KB)")
 
-    # Spot-check merged VCF
+    # Spot-check merged VCF (cohort_final is anonymized — 0 samples by design)
     try:
         import pysam
         with pysam.VariantFile(str(merged)) as vcf:
             n_records = sum(1 for _ in vcf.fetch())
             n_samples = len(vcf.header.samples)
-        ok(f"Merged VCF: {n_records} records, {n_samples} samples")
-        if n_samples != N_SAMPLES:
-            fail(f"Expected {N_SAMPLES} samples in merged VCF, got {n_samples}")
+        ok(f"Merged VCF: {n_records} records, {n_samples} samples (anonymized → samples stripped)")
+        if n_records == 0:
+            fail("Merged VCF has 0 records — all variants were filtered out")
     except Exception as exc:
         fail(f"Cannot open merged VCF with pysam: {exc}")
 
@@ -237,28 +239,43 @@ def import_vcf(merged_vcf: Path) -> Any | None:
         fail(f"Cannot read merged VCF file: {exc}")
         return None
 
-    # POST to /import/
+    # POST to /en/import/ (all app URLs wrapped in i18n_patterns → locale prefix required)
     client = Client()
     client.force_login(user)
     uploaded = SimpleUploadedFile(
         "merged.vcf.gz", vcf_bytes, content_type="application/gzip"
     )
     try:
-        response = client.post("/import/", {"data_file": uploaded}, follow=True)
+        response = client.post("/en/import/", {"data_file": uploaded}, follow=True)
     except Exception as exc:
         fail(f"POST /import/ raised exception: {exc}")
         return None
 
-    print(f"  [POST /import/ → HTTP {response.status_code}]")
+    print(f"  [POST /en/import/ → HTTP {response.status_code}]")
     if response.status_code != 200:
-        fail(f"POST /import/ returned HTTP {response.status_code}")
+        fail(f"POST /en/import/ returned HTTP {response.status_code}")
     else:
-        ok("POST /import/ → HTTP 200")
+        ok("POST /en/import/ → HTTP 200")
 
-    # Flash messages
+    # Flash messages — check context (consumed by template on redirect) + session storage
+    try:
+        ctx_msgs = list(response.context.get("messages", []) if response.context else [])
+    except Exception:
+        ctx_msgs = []
     from django.contrib.messages import get_messages
-    msgs = list(get_messages(response.wsgi_request))
-    for msg in msgs:
+    session_msgs = list(get_messages(response.wsgi_request))
+    all_msgs = ctx_msgs or session_msgs
+    if not all_msgs:
+        # Last resort: peek at response HTML for known error/success markers
+        html = response.content.decode("utf-8", errors="replace")
+        if "alert-success" in html or "successfully" in html.lower():
+            ok("Import success detected in HTML")
+        elif "alert-danger" in html or "error" in html.lower():
+            snippet = html[max(0, html.lower().find("error")-50):html.lower().find("error")+200]
+            fail(f"Import error detected in HTML: ...{snippet}...")
+        else:
+            print("  [flash] no flash messages captured")
+    for msg in all_msgs:
         tag = str(msg.tags)
         print(f"  [flash {tag}] {msg}")
         if "error" in tag:
@@ -346,7 +363,7 @@ def verify_views(sg: Any) -> None:
     client.force_login(user)
 
     # Detail view
-    detail_url = f"/profile/sample-groups/{sg.pk}/"
+    detail_url = f"/en/profile/sample-groups/{sg.pk}/"
     try:
         resp = client.get(detail_url)
         if resp.status_code == 200:
@@ -371,7 +388,7 @@ def verify_views(sg: Any) -> None:
         first_af = sg.allele_frequencies.order_by("pk").first()
         if first_af:
             search_url = (
-                f"/search/?chrom={first_af.chrom}"
+                f"/en/search/?chrom={first_af.chrom}"
                 f"&pos_min={first_af.pos}&pos_max={first_af.pos}"
             )
             resp = client.get(search_url)
@@ -390,7 +407,7 @@ def verify_views(sg: Any) -> None:
         fail(f"Search view raised: {exc}")
 
     # Export endpoint
-    export_url = f"/profile/sample-groups/{sg.pk}/export/?format=csv"
+    export_url = f"/en/profile/sample-groups/{sg.pk}/export/?format=csv"
     try:
         resp = client.get(export_url)
         if resp.status_code == 200:

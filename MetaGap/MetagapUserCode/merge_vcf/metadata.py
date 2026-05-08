@@ -1103,7 +1103,7 @@ def append_metadata_to_merged_vcf(
         if allowed_filter_values is None:
             return True
 
-        if filters in {None, [], (), "", "."}:
+        if filters in (None, [], (), "", "."):
             return True
 
         if isinstance(filters, (list, tuple)):
@@ -1321,14 +1321,11 @@ def append_metadata_to_merged_vcf(
                 handle_critical_error(f"Failed to open merged VCF for finalization: {exc}", exc_cls=MergeConflictError)
 
             try:
+                from .merging import _recompute_ac_an_af as _recompute  # lazy to avoid circular import
                 for record in reader:
-                    _recompute_ac_an_af(record)
-                    if not _record_passes_filters(
-                        record,
-                        qual_threshold=qual_threshold,
-                        an_threshold=an_threshold,
-                        allowed_filter_values=allowed_filter_values,
-                    ):
+                    _recompute(record)
+                    an_value = record.INFO.get("AN") if hasattr(record.INFO, "get") else None
+                    if not _record_passes_filters(record, an_value):
                         continue
                     # anonymize: drop FORMAT and calls
                     record.FORMAT = []

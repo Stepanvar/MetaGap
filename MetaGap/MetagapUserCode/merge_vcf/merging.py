@@ -577,20 +577,11 @@ def merge_vcfs(
     temp_files: List[str] = []
     preprocessed: List[str] = []
 
-    # Preprocess inputs in parallel
+    # Preprocess inputs in parallel (whitespace normalisation only)
     try:
-        def _run_pre(p: str) -> str:
-            return preprocess_vcf(
-                p,
-                qual_threshold=qual_threshold,
-                an_threshold=an_threshold,
-                allowed_filter_values=allowed_filter_values,
-                verbose=verbose,
-            )
-
         max_workers = min(8, max(1, len(valid_files)))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_run_pre, valid_files))
+            results = list(executor.map(preprocess_vcf, valid_files))
     except Exception as exc:
         handle_critical_error(f"Failed to preprocess input VCF files: {exc}", exc_cls=MergeConflictError)
 

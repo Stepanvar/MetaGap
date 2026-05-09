@@ -185,37 +185,6 @@ def extract_contig_field_metadata(header_info: Dict[str, Any]) -> Dict[str, Any]
     return dict(header_info)
 
 
-def get_or_create_sample_group(
-    sample_group_name: str,
-    sample_group_description: str,
-    user_organization_profile: Any,
-    metadata: Dict[str, Any],
-) -> Optional[SampleGroup]:
-    """Get or create a SampleGroup with the given metadata.
-
-    Args:
-        sample_group_name: Name for the sample group
-        sample_group_description: Description for the sample group
-        user_organization_profile: OrganizationProfile instance
-        metadata: Additional metadata dictionary
-
-    Returns:
-        SampleGroup instance, or None if creation fails
-
-    Note:
-        This is a simplified helper for testing. Production code should use
-        VCFDatabaseWriter.create_sample_group() instead.
-    """
-    try:
-        sample_group = SampleGroup.objects.create(
-            name=sample_group_name,
-            description=sample_group_description,
-            organization_profile=user_organization_profile,
-        )
-        return sample_group
-    except Exception:
-        return None
-
 
 class VCFDatabaseWriter:
     """Handle creation of database records from parsed VCF content."""
@@ -1375,5 +1344,4 @@ __all__ = [
     "extract_info_field_metadata",
     "extract_format_field_metadata",
     "extract_contig_field_metadata",
-    "get_or_create_sample_group",
 ]

@@ -330,6 +330,12 @@ def test_merge_colliding_records_inserts_missing_sample_defaults(monkeypatch):
 
     merged = merging._merge_colliding_records(
         [(rec1, 0), (rec2, 1)],
+        header,
+        ["X"],
+    )
+    assert merged is not None
+
+
 def test_merge_colliding_records_pads_missing_samples():
     header = _header_with_formats(["X", "Y"])
 
@@ -1127,7 +1133,7 @@ def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
             self.id = self.mapping.get("ID")
             parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
             super().__init__(f"##contig=<{parts}>")
-      def __iter__(self):
+        def __iter__(self):
             return iter(self._entries)
 
         def close(self):
@@ -1277,7 +1283,7 @@ def test_merge_vcfs_emits_anonymized_gzip(tmp_path, monkeypatch):
         compressed["dest"] = Path(dest)
 
     def fake_tabix_index(path, preset="vcf", force=True):
-        idx = Path(f"{path}.tbi}")
+        idx = Path(f"{path}.tbi")
         idx.write_text("stub-index", encoding="utf-8")
         compressed["index"] = idx
 

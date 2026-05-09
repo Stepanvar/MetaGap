@@ -644,11 +644,11 @@ class AlleleFrequency(models.Model):
         on_delete=models.CASCADE,
         related_name="allele_frequencies",
     )
-    chrom = models.CharField(max_length=10)
+    chrom = models.CharField(max_length=64)
     pos = models.IntegerField()
     variant_id = models.CharField(max_length=100, blank=True, null=True)
-    ref = models.CharField(max_length=50)
-    alt = models.CharField(max_length=50)
+    ref = models.CharField(max_length=255)
+    alt = models.CharField(max_length=255)
     qual = models.FloatField(blank=True, null=True)
     filter = models.CharField(max_length=50, blank=True, null=True)
     info = models.ForeignKey(Info, on_delete=models.CASCADE, blank=True, null=True)

@@ -27,10 +27,16 @@ BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
 
-DEBUG = os.getenv("DEBUG", "1") == "1"
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
+DEBUG = os.getenv("DEBUG", "0") == "1"
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key and not DEBUG:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        "SECRET_KEY environment variable must be set in production (DEBUG=0)."
+    )
+SECRET_KEY = _secret_key or "dev-only-insecure-key-change-me"
 ALLOWED_HOSTS = _split_env_list(
-    "ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,*.github.dev"
+    "ALLOWED_HOSTS", "localhost,127.0.0.1"
 )
 CSRF_TRUSTED_ORIGINS = _split_env_list(
     "CSRF_TRUSTED_ORIGINS",
@@ -72,16 +78,15 @@ INSTALLED_APPS = [
 # Middleware framework
 # https://docs.djangoproject.com/en/2.1/topics/http/middleware/
 MIDDLEWARE = [
-	"django.middleware.security.SecurityMiddleware",
+    "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
-	"django.middleware.csrf.CsrfViewMiddleware",
-	"django.contrib.auth.middleware.AuthenticationMiddleware",
-	"django.contrib.messages.middleware.MessageMiddleware",
-	"django.middleware.clickjacking.XFrameOptionsMiddleware",
-
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "MetaGap.urls"
@@ -89,20 +94,20 @@ ROOT_URLCONF = "MetaGap.urls"
 # Template configuration
 # https://docs.djangoproject.com/en/2.1/topics/templates/
 TEMPLATES = [
-	{
-		"BACKEND": "django.template.backends.django.DjangoTemplates",
-		"DIRS": [],
-		"APP_DIRS": True,
-		"OPTIONS": {
-                        "context_processors": [
-                                "django.template.context_processors.debug",
-                                "django.template.context_processors.request",
-                                "django.contrib.auth.context_processors.auth",
-                                "django.contrib.messages.context_processors.messages",
-                                "MetaGap.context_processors.branding",
-                        ],
-		},
-	},
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "MetaGap.context_processors.branding",
+            ],
+        },
+    },
 ]
 
 WSGI_APPLICATION = "MetaGap.wsgi.application"
@@ -112,18 +117,18 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Password validation
 # https://docs.djangoproject.com/en/2.1/ref/settings/#auth-password-validators
 AUTH_PASSWORD_VALIDATORS = [
-	{
-		"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-	},
-	{
-		"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-	},
-	{
-		"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-	},
-	{
-		"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-	},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
 ]
 
 # Internationalization

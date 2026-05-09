@@ -115,7 +115,7 @@ class SampleGroupTableView(ListView):
         table_class = create_dynamic_table(
             SampleGroup, table_name="SampleGroupTable", include_related=True
         )
-        table = table_class(self.get_queryset())
+        table = table_class(context["object_list"])
         RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(table)
         context["table"] = table
         return context

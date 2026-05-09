@@ -473,6 +473,30 @@ def main():
 
             final_vcf_path = final_target
 
+        # Warn if AN/QUAL thresholds silently wiped all records
+        try:
+            import pysam as _pysam
+            with _pysam.VariantFile(str(final_vcf_path)) as _vf:
+                _n = sum(1 for _ in _vf.fetch())
+            if _n == 0:
+                _parts = []
+                if an_threshold is not None:
+                    _parts.append(
+                        f"--an-threshold {an_threshold} (max possible AN = {len(sample_order) * 2} "
+                        f"for {len(sample_order)} samples — needs cohort ≥ {int(an_threshold / 2 + 1)} samples)"
+                    )
+                if qual_threshold is not None:
+                    _parts.append(f"--qual-threshold {qual_threshold}")
+                _hint = f" Likely cause: {'; '.join(_parts)}." if _parts else ""
+                log_message(
+                    f"WARNING: Final VCF contains 0 records — all variants were filtered out.{_hint} "
+                    f"Use --an-threshold -1 and/or --qual-threshold -1 to disable thresholds.",
+                    verbose=True,
+                    level=logging.WARNING,
+                )
+        except Exception:
+            pass
+
         log_message(
             f"Script execution completed successfully. Final cohort VCF: {final_vcf_path}",
             verbose,

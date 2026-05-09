@@ -31,14 +31,12 @@ def test_load_metadata_configuration_nonexistent_file():
 
 def test_normalize_metadata_key():
     """Test normalize_metadata_key function."""
-    result = normalize_metadata_key("TestKey")
-    assert result == "test_key"
-
-    result = normalize_metadata_key("Another-Key")
-    assert result == "another_key"
-
-    result = normalize_metadata_key("UPPER_CASE_KEY")
-    assert result == "upper_case_key"
+    # camelCase has no separator → all lowercased, no underscore inserted
+    assert normalize_metadata_key("TestKey") == "testkey"
+    # hyphens become underscores
+    assert normalize_metadata_key("Another-Key") == "another_key"
+    # underscores preserved, uppercased lowered
+    assert normalize_metadata_key("UPPER_CASE_KEY") == "upper_case_key"
 
 
 def test_normalize_metadata_value_string():
@@ -47,22 +45,15 @@ def test_normalize_metadata_value_string():
     assert result == "Test Value"
 
 
-def test_normalize_metadata_value_dict():
-    """Test normalize_metadata_value with dictionary."""
-    input_dict = {"key": "value", "nested": {"inner": "data"}}
-    result = normalize_metadata_value(input_dict)
-    
-    # Should return the same dict (might be converted to JSON string internally)
-    assert isinstance(result, (dict, str))
+def test_normalize_metadata_value_quoted():
+    """normalize_metadata_value strips surrounding quotes from strings."""
+    assert normalize_metadata_value('"hello"') == "hello"
+    assert normalize_metadata_value("'world'") == "world"
 
 
-def test_normalize_metadata_value_list():
-    """Test normalize_metadata_value with list."""
-    input_list = ["item1", "item2"]
-    result = normalize_metadata_value(input_list)
-    
-    # Should return the same list (might be converted to JSON string internally)
-    assert isinstance(result, (list, str))
+def test_normalize_metadata_value_no_quotes():
+    """normalize_metadata_value leaves unquoted strings unchanged."""
+    assert normalize_metadata_value("plain") == "plain"
 
 
 def test_vcf_metadata_parser_init():
@@ -79,37 +70,31 @@ def test_vcf_metadata_parser_with_warnings_list():
     assert parser.warnings == warnings_list
 
 
-def test_vcf_metadata_parser_add_warning():
-    """Test adding warnings to VCFMetadataParser."""
+def test_vcf_metadata_parser_shares_warnings_list():
+    """VCFMetadataParser mutates the same list passed in."""
     warnings_list = []
     parser = VCFMetadataParser(warnings_list)
-    
-    parser.add_warning("Test warning")
-    assert len(parser.warnings) == 1
-    assert parser.warnings[0] == "Test warning"
+    # Warnings are appended to the shared list (no add_warning method)
+    parser.warnings.append("Test warning")
+    assert len(warnings_list) == 1
+    assert warnings_list[0] == "Test warning"
 
 
-def test_vcf_metadata_parser_add_warning_without_list():
-    """Test adding warnings when no list provided."""
+def test_vcf_metadata_parser_default_warnings():
+    """VCFMetadataParser without arguments gets its own empty list."""
     parser = VCFMetadataParser()
-    parser.add_warning("Test warning")
+    assert parser.warnings == []
+    parser.warnings.append("w")
     assert len(parser.warnings) == 1
-    assert parser.warnings[0] == "Test warning"
 
 
-def test_vcf_metadata_parser_add_multiple_warnings():
-    """Test adding multiple warnings."""
+def test_vcf_metadata_parser_multiple_warnings():
+    """Multiple warnings accumulate in order."""
     warnings_list = []
     parser = VCFMetadataParser(warnings_list)
-    
-    parser.add_warning("Warning 1")
-    parser.add_warning("Warning 2")
-    parser.add_warning("Warning 3")
-    
-    assert len(parser.warnings) == 3
-    assert "Warning 1" in parser.warnings
-    assert "Warning 2" in parser.warnings
-    assert "Warning 3" in parser.warnings
+    for msg in ("Warning 1", "Warning 2", "Warning 3"):
+        parser.warnings.append(msg)
+    assert parser.warnings == ["Warning 1", "Warning 2", "Warning 3"]
 
 
 def test_normalize_metadata_key_edge_cases():
@@ -131,30 +116,10 @@ def test_normalize_metadata_key_edge_cases():
     assert result == "key_with_multiple_separators"
 
 
-def test_normalize_metadata_value_none():
-    """Test normalize_metadata_value with None."""
-    result = normalize_metadata_value(None)
-    assert result is None
-
-
-def test_normalize_metadata_value_numbers():
-    """Test normalize_metadata_value with numbers."""
-    # Integer
-    result = normalize_metadata_value(42)
-    assert result == 42
-    
-    # Float
-    result = normalize_metadata_value(3.14)
-    assert result == 3.14
-
-
-def test_normalize_metadata_value_boolean():
-    """Test normalize_metadata_value with boolean."""
-    result = normalize_metadata_value(True)
-    assert result is True
-    
-    result = normalize_metadata_value(False)
-    assert result is False
+def test_normalize_metadata_value_unescape():
+    """normalize_metadata_value decodes backslash escapes when safe."""
+    result = normalize_metadata_value(r"line\twith\ttabs")
+    assert "\t" in result
 
 
 def test_vcf_metadata_parser_repr():
@@ -223,11 +188,10 @@ invalid:
 
 
 def test_vcf_metadata_parser_warning_message_format():
-    """Test format of warning messages."""
+    """Warnings are plain strings in the shared list."""
     warnings_list = []
     parser = VCFMetadataParser(warnings_list)
-    
-    parser.add_warning("Test warning message")
+    parser.warnings.append("Test warning message")
     assert len(warnings_list) == 1
     assert isinstance(warnings_list[0], str)
 

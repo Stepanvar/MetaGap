@@ -59,7 +59,11 @@ class PreparedVCFInput:
 
 
 def _iter_candidate_vcfs(input_dir: str) -> List[str]:
-    """Return sorted candidate VCF paths discovered under *input_dir*."""
+    """Return sorted candidate VCF paths discovered under *input_dir*.
+
+    When both ``foo.vcf`` and ``foo.vcf.gz`` exist, keeps only the bgzf
+    version to avoid processing the same data twice.
+    """
 
     candidates: List[str] = []
     for root, _, files in os.walk(input_dir):
@@ -68,7 +72,14 @@ def _iter_candidate_vcfs(input_dir: str) -> List[str]:
             if lower.endswith(".vcf") or lower.endswith(".vcf.gz"):
                 candidates.append(os.path.join(root, name))
     candidates.sort()
-    return candidates
+
+    # Deduplicate: if foo.vcf.gz present, drop foo.vcf
+    gz_set = {p for p in candidates if p.lower().endswith(".vcf.gz")}
+    deduped = [
+        p for p in candidates
+        if p.lower().endswith(".vcf.gz") or (p + ".gz") not in gz_set
+    ]
+    return deduped
 
 
 def _contains_non_ref_alt(record) -> bool:

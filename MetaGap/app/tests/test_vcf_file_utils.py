@@ -92,67 +92,76 @@ def test_extract_metadata_text_fallback_no_warnings_param():
         Path(temp_file_path).unlink()
 
 
-def test_parse_vcf_text_fallback_basic():
-    """Test parse_vcf_text_fallback with basic VCF content."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vcf') as temp_file:
-        temp_file.write("""##fileformat=VCFv4.2
-##contig=<ID=chr1,length=249250621>
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
-chr1	1000	rs12345	A	T	50	PASS	AF=0.5
-""")
-        temp_file_path = temp_file.name
+def test_parse_vcf_text_fallback_basic(db):
+    """parse_vcf_text_fallback persists variants to DB via writer."""
+    from django.contrib.auth.models import User
+    from app.models import AlleleFrequency, SampleGroup
+    from app.services.vcf_database import VCFDatabaseWriter
+
+    user = User.objects.create_user(username="fbu1", password="x")
+    sg = SampleGroup.objects.create(name="fb_basic", created_by=user.organization_profile)
+    writer = VCFDatabaseWriter()
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".vcf") as f:
+        f.write(
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "chr1\t1000\trs12345\tA\tT\t50\tPASS\tAF=0.5\n"
+        )
+        path = f.name
 
     try:
-        result = parse_vcf_text_fallback(temp_file_path)
-        
-        # Check that the result has the expected structure
-        assert 'metadata' in result
-        assert 'samples' in result
-        assert 'variants' in result
-        
-        # Check that we have the expected contig in metadata
-        assert 'contig' in result['metadata']
+        parse_vcf_text_fallback(path, sg, writer)
+        assert AlleleFrequency.objects.filter(sample_group=sg).count() == 1
     finally:
-        Path(temp_file_path).unlink()
+        Path(path).unlink()
 
 
-def test_parse_vcf_text_fallback_with_format():
-    """Test parse_vcf_text_fallback with FORMAT field."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vcf') as temp_file:
-        temp_file.write("""##fileformat=VCFv4.2
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Sample1
-chr1	1000	rs12345	A	T	50	PASS	AF=0.5	GT	0/1
-""")
-        temp_file_path = temp_file.name
+def test_parse_vcf_text_fallback_with_format(db):
+    """parse_vcf_text_fallback handles FORMAT/sample columns."""
+    from django.contrib.auth.models import User
+    from app.models import AlleleFrequency, SampleGroup
+    from app.services.vcf_database import VCFDatabaseWriter
+
+    user = User.objects.create_user(username="fbu2", password="x")
+    sg = SampleGroup.objects.create(name="fb_fmt", created_by=user.organization_profile)
+    writer = VCFDatabaseWriter()
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".vcf") as f:
+        f.write(
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSample1\n"
+            "chr1\t1000\trs12345\tA\tT\t50\tPASS\tAF=0.5\tGT\t0/1\n"
+        )
+        path = f.name
 
     try:
-        result = parse_vcf_text_fallback(temp_file_path)
-        
-        # Check that the result has the expected structure
-        assert 'metadata' in result
-        assert 'samples' in result
-        assert 'variants' in result
+        parse_vcf_text_fallback(path, sg, writer)
+        assert AlleleFrequency.objects.filter(sample_group=sg).count() == 1
     finally:
-        Path(temp_file_path).unlink()
+        Path(path).unlink()
 
 
-def test_parse_vcf_text_fallback_empty_file():
-    """Test parse_vcf_text_fallback with empty file."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vcf') as temp_file:
-        # Write an empty file or just headers
-        temp_file.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
-        temp_file_path = temp_file.name
+def test_parse_vcf_text_fallback_empty_file(db):
+    """parse_vcf_text_fallback raises ValidationError when #CHROM line missing."""
+    from django.contrib.auth.models import User
+    from django.core.exceptions import ValidationError
+    from app.models import SampleGroup
+    from app.services.vcf_database import VCFDatabaseWriter
+
+    user = User.objects.create_user(username="fbu3", password="x")
+    sg = SampleGroup.objects.create(name="fb_empty", created_by=user.organization_profile)
+    writer = VCFDatabaseWriter()
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".vcf") as f:
+        f.write("##fileformat=VCFv4.2\n")
+        path = f.name
 
     try:
-        result = parse_vcf_text_fallback(temp_file_path)
-        
-        # Check that the result has the expected structure even with no variants
-        assert 'metadata' in result
-        assert 'samples' in result
-        assert 'variants' in result
+        with pytest.raises(ValidationError):
+            parse_vcf_text_fallback(path, sg, writer)
     finally:
-        Path(temp_file_path).unlink()
+        Path(path).unlink()
 
 
 def test_parse_vcf_text_fallback_no_header():
@@ -186,10 +195,18 @@ def test_extract_metadata_text_fallback_nonexistent_file():
         extract_metadata_text_fallback("/nonexistent/path/file.vcf")
 
 
-def test_parse_vcf_text_fallback_nonexistent_file():
-    """Test parsing a nonexistent file."""
+def test_parse_vcf_text_fallback_nonexistent_file(db):
+    """parse_vcf_text_fallback raises FileNotFoundError for missing file."""
+    from django.contrib.auth.models import User
+    from app.models import SampleGroup
+    from app.services.vcf_database import VCFDatabaseWriter
+
+    user = User.objects.create_user(username="fbu4", password="x")
+    sg = SampleGroup.objects.create(name="fb_nf", created_by=user.organization_profile)
+    writer = VCFDatabaseWriter()
+
     with pytest.raises(FileNotFoundError):
-        parse_vcf_text_fallback("/nonexistent/path/file.vcf")
+        parse_vcf_text_fallback("/nonexistent/path/file.vcf", sg, writer)
 
 
 def test_open_vcf_text_various_suffixes():

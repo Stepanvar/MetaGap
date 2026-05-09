@@ -2,46 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from uuid import uuid4
 
-import django
 import pytest
-from django.apps import apps
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
-from django.test.utils import setup_test_environment, teardown_test_environment
-
-if not settings.configured:
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MetaGap.settings")
-
-if not apps.ready:
-    django.setup()
-
-if "testserver" not in settings.ALLOWED_HOSTS:
-    settings.ALLOWED_HOSTS.append("testserver")
-
-
-@pytest.fixture(scope="session", autouse=True)
-def django_test_environment():
-    """Ensure Django's test environment helpers are initialised."""
-
-    setup_test_environment()
-    yield
-    teardown_test_environment()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def migrate_django_db():
-    """Create the in-memory SQLite schema required by Django's auth models."""
-
-    call_command("migrate", run_syncdb=True)
 
 
 @pytest.fixture
-def allele_frequency_filter_data() -> SimpleNamespace:
+def allele_frequency_filter_data(db) -> SimpleNamespace:
     """Construct a set of allele frequency records used across filter tests."""
 
     User = get_user_model()
@@ -57,13 +26,6 @@ def allele_frequency_filter_data() -> SimpleNamespace:
         SampleGroup,
         SampleOrigin,
     )
-
-    AlleleFrequency.objects.all().delete()
-    SampleGroup.objects.all().delete()
-    Info.objects.all().delete()
-    BioinfoAlignment.objects.all().delete()
-    BioinfoVariantCalling.objects.all().delete()
-    SampleOrigin.objects.all().delete()
 
     sample_origin = SampleOrigin.objects.create(tissue="Liver")
     other_origin = SampleOrigin.objects.create(tissue="Blood")
@@ -119,12 +81,7 @@ def allele_frequency_filter_data() -> SimpleNamespace:
         mq="55",
         additional={"QD": "15.0", "FS": "0.4", "SOR": "1.5"},
     )
-    info_chr2 = Info.objects.create(
-        af=None,
-        dp=None,
-        mq=None,
-        additional=None,
-    )
+    info_chr2 = Info.objects.create(af=None, dp=None, mq=None, additional=None)
     info_chr3 = Info.objects.create(
         af="0.45",
         dp="100",
@@ -177,13 +134,10 @@ def allele_frequency_filter_data() -> SimpleNamespace:
 
 
 @pytest.fixture
-def sample_group_filter_data() -> SimpleNamespace:
+def sample_group_filter_data(db) -> SimpleNamespace:
     """Create sample groups with different origins for filter coverage."""
 
     from app.models import SampleGroup, SampleOrigin
-
-    SampleGroup.objects.all().delete()
-    SampleOrigin.objects.all().delete()
 
     User = get_user_model()
     user = User.objects.create_user(

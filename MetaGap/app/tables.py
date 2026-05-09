@@ -86,7 +86,7 @@ def create_dynamic_table(
                             register_column(
                                 col_name,
                                 tables.Column(
-                                    accessor=f"{field.name}.{rel_field.name}",
+                                    accessor=f"{field.name}__{rel_field.name}",
                                     attrs=_column_attrs(rel_is_numeric),
                                 ),
                             )

@@ -88,11 +88,18 @@ Use this checklist to verify how MetaGap is working now from setup through the m
 
 ## 7. Search workflow checks
 
-- [ ] Open `/search/` without filters and confirm the page renders.
+Product/security policy: `/search/` is an authenticated organization-private catalogue.
+Search results must be scoped to allele-frequency records whose `sample_group.created_by`
+matches the current user's organization profile; anonymous users must be redirected to
+login and must not see private records.
+
+- [ ] Open `/search/` without filters as an authenticated user and confirm the page renders.
+- [ ] Confirm anonymous access to `/search/` redirects to login without rendering allele-frequency rows.
 - [ ] Search by variant ID.
 - [ ] Search by chromosome and position if supported by the current filters.
-- [ ] Search by sample-group or metadata keyword.
-- [ ] Confirm search results include expected allele-frequency rows.
+- [ ] Search by sample-group or metadata keyword within the current organization.
+- [ ] Confirm search results include expected allele-frequency rows for the current organization.
+- [ ] Confirm search results exclude allele-frequency rows from other organizations.
 - [ ] Confirm result table sorting works.
 - [ ] Confirm pagination or DataTables controls work.
 - [ ] Confirm the clear/reset search action works.
@@ -109,12 +116,18 @@ Use this checklist to verify how MetaGap is working now from setup through the m
 
 ## 9. Authorization and data-isolation checks
 
+Product/security policy: cross-organization public search is not allowed. `/search/` is
+private to the authenticated user's organization and must filter allele-frequency records
+through `sample_group__created_by`; this intentionally prevents user A from seeing user
+B's variants and prevents anonymous users from seeing private allele-frequency records.
+
 - [ ] Create two separate test users or organizations.
 - [ ] Create or import sample groups under each account.
 - [ ] Confirm each user only sees their own profile sample groups.
 - [ ] Attempt direct URL access to another user's sample-group detail page and confirm it is denied or returns not found.
 - [ ] Attempt direct URL access to another user's edit, delete, and export URLs and confirm access is blocked.
-- [ ] Confirm public search behavior matches the intended product policy for cross-organization visibility.
+- [ ] Confirm `/search/` redirects anonymous users to login without rendering private allele-frequency records.
+- [ ] Confirm `/search/` for user A excludes user B's variants, including keyword, variant-ID, chromosome/position, and metadata searches.
 
 ## 10. Admin checks
 

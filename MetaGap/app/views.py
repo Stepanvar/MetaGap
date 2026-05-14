@@ -74,8 +74,8 @@ from .services.import_exceptions import (
 from .services.vcf_importer import VCFImporter
 from .tables import build_allele_frequency_table, create_dynamic_table
 
-
 logger = logging.getLogger(__name__)
+
 
 class SampleGroupTableView(ListView):
     """Display a django-tables2 listing of sample groups."""
@@ -116,11 +116,14 @@ class SampleGroupTableView(ListView):
             SampleGroup, table_name="SampleGroupTable", include_related=True
         )
         table = table_class(context["object_list"])
-        RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(table)
+        RequestConfig(self.request, paginate={"per_page": self.paginate_by}).configure(
+            table
+        )
         context["table"] = table
         return context
 
-class SearchResultsView(SingleTableMixin, FilterView):
+
+class SearchResultsView(LoginRequiredMixin, SingleTableMixin, FilterView):
     template_name = "results.html"
     model = AlleleFrequency
     context_object_name = "allele_frequencies"
@@ -137,27 +140,36 @@ class SearchResultsView(SingleTableMixin, FilterView):
         return False
 
     def get_queryset(self):
-        base_queryset = (
-            AlleleFrequency.objects.select_related(
-                "info",
-                "format",
-                "sample_group",
-                "sample_group__reference_genome_build",
-                "sample_group__genome_complexity",
-                "sample_group__sample_origin",
-                "sample_group__material_type",
-                "sample_group__library_construction",
-                "sample_group__illumina_seq",
-                "sample_group__ont_seq",
-                "sample_group__pacbio_seq",
-                "sample_group__iontorrent_seq",
-                "sample_group__bioinfo_alignment",
-                "sample_group__bioinfo_variant_calling",
-                "sample_group__bioinfo_post_proc",
-                "sample_group__input_quality",
-                "sample_group__created_by",
-            )
+        try:
+            organization_profile = self.request.user.organization_profile
+        except ObjectDoesNotExist:
+            organization_profile = None
+
+        base_queryset = AlleleFrequency.objects.select_related(
+            "info",
+            "format",
+            "sample_group",
+            "sample_group__reference_genome_build",
+            "sample_group__genome_complexity",
+            "sample_group__sample_origin",
+            "sample_group__material_type",
+            "sample_group__library_construction",
+            "sample_group__illumina_seq",
+            "sample_group__ont_seq",
+            "sample_group__pacbio_seq",
+            "sample_group__iontorrent_seq",
+            "sample_group__bioinfo_alignment",
+            "sample_group__bioinfo_variant_calling",
+            "sample_group__bioinfo_post_proc",
+            "sample_group__input_quality",
+            "sample_group__created_by",
         )
+        if organization_profile is None:
+            base_queryset = base_queryset.none()
+        else:
+            base_queryset = base_queryset.filter(
+                sample_group__created_by=organization_profile
+            )
 
         # Instantiate the filter set manually so that we can reuse it in the template context.
         self.filterset = self.filterset_class(
@@ -260,12 +272,12 @@ def export_sample_group_variants(request, pk: int) -> HttpResponse:
     filename = slugify(sample_group.name) or f"sample-group-{sample_group.pk}"
     response = HttpResponse(content_type=content_type)
     response["Content-Disposition"] = (
-        f"attachment; filename=\"{filename}.{file_extension}\""
+        f'attachment; filename="{filename}.{file_extension}"'
     )
 
-    allele_frequencies_qs = sample_group.allele_frequencies.select_related("info").order_by(
-        "chrom", "pos", "pk"
-    )
+    allele_frequencies_qs = sample_group.allele_frequencies.select_related(
+        "info"
+    ).order_by("chrom", "pos", "pk")
     allele_frequencies = list(allele_frequencies_qs)
 
     info_field_columns = [
@@ -339,18 +351,14 @@ class DashboardView(LoginRequiredMixin, OrganizationSampleGroupMixin, TemplateVi
         context = super().get_context_data(**kwargs)
         organization_profile = self.get_organization_profile()
 
-        dataset_queryset = (
-            SampleGroup.objects.select_related("created_by", "created_by__user")
-            .order_by("-pk")
-        )
-        action_queryset = (
-            AlleleFrequency.objects.select_related(
-                "sample_group",
-                "sample_group__created_by",
-                "sample_group__created_by__user",
-            )
-            .order_by("-pk")
-        )
+        dataset_queryset = SampleGroup.objects.select_related(
+            "created_by", "created_by__user"
+        ).order_by("-pk")
+        action_queryset = AlleleFrequency.objects.select_related(
+            "sample_group",
+            "sample_group__created_by",
+            "sample_group__created_by__user",
+        ).order_by("-pk")
 
         if organization_profile is not None:
             dataset_queryset = dataset_queryset.filter(created_by=organization_profile)
@@ -410,6 +418,7 @@ class DeleteAccountView(LoginRequiredMixin, FormView):
         )
         return context
 
+
 class UserRegistrationView(CreateView):
     form_class = CustomUserCreationForm
     template_name = "signup.html"
@@ -442,9 +451,7 @@ class SampleGroupCreateView(
 
     def form_valid(self, form):
         """Associate the new sample group with the user's organization."""
-        messages.success(
-            self.request, _("Sample group created successfully.")
-        )
+        messages.success(self.request, _("Sample group created successfully."))
         return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
@@ -485,9 +492,7 @@ class SampleGroupUpdateView(
         return kwargs
 
     def form_valid(self, form):
-        messages.success(
-            self.request, _("Sample group metadata updated successfully.")
-        )
+        messages.success(self.request, _("Sample group metadata updated successfully."))
         return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
@@ -610,7 +615,9 @@ class SampleGroupDetailView(
                 section["items"].append(item_context)
             return section
 
-        platform_label, platform_instance = sample_group.get_active_sequencing_platform()
+        platform_label, platform_instance = (
+            sample_group.get_active_sequencing_platform()
+        )
         default_platform_label = _("Sequencing platform")
         if platform_instance is None:
             sequencing_platform_row = (default_platform_label, None, None)
@@ -670,7 +677,11 @@ class SampleGroupDetailView(
                     ),
                     (_("Sample origin"), sample_group.sample_origin, None),
                     (_("Material type"), sample_group.material_type, None),
-                    (_("Library construction"), sample_group.library_construction, None),
+                    (
+                        _("Library construction"),
+                        sample_group.library_construction,
+                        None,
+                    ),
                 ],
             ),
             build_section(
@@ -719,10 +730,7 @@ class SampleGroupDetailView(
             metadata_sections.append(
                 build_section(
                     _("Custom metadata"),
-                    [
-                        (key, value, None)
-                        for key, value in additional_metadata.items()
-                    ],
+                    [(key, value, None) for key, value in additional_metadata.items()],
                 )
             )
 
@@ -730,7 +738,6 @@ class SampleGroupDetailView(
         context["allele_frequency_table"] = table
         context["variant_table"] = table
         return context
-
 
 
 class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView):
@@ -807,8 +814,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
 
         messages.success(
             self.request,
-            _("Imported %(group)s successfully.")
-            % {"group": created_group.name},
+            _("Imported %(group)s successfully.") % {"group": created_group.name},
         )
         for warning in importer.warnings:
             self._add_warning_message(warning)
@@ -826,9 +832,7 @@ class ImportDataView(LoginRequiredMixin, OrganizationSampleGroupMixin, FormView)
             message_str = force_str(
                 _("An error occurred while importing the provided file.")
             )
-        is_generic_fallback = (
-            message_str == GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
-        )
+        is_generic_fallback = message_str == GENERIC_FALLBACK_VALIDATION_MESSAGE_RAW
         display_message = (
             force_str(GENERIC_FALLBACK_VALIDATION_MESSAGE)
             if is_generic_fallback

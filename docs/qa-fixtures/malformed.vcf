@@ -1,0 +1,4 @@
+##fileformat=VCFv4.2
+##reference=GRCh38
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	ABC	bad_position	A	C	.	PASS	DP=10

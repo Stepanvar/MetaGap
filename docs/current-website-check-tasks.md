@@ -74,47 +74,55 @@ Use this checklist to verify how MetaGap is working now from setup through the m
 
 ## 6. Import workflow checks
 
+Use the reproducible dataset definitions in [QA Dataset Manifest for Import/Search/Export Checks](qa-dataset-manifest.md) before running this section. Record the positive fixture ID (P1-P4 or a generated positive-format variant) and any negative fixture ID (N1-N4) used for each result.
+
 - [ ] Open `/import/` as an authenticated user.
 - [ ] Attempt to submit without a file and confirm validation appears.
-- [ ] Attempt to upload an unsupported file type and confirm it is rejected.
-- [ ] Attempt to upload a file above the configured size limit and confirm it is rejected safely.
-- [ ] Upload a valid `.vcf` file.
-- [ ] Upload a valid compressed `.vcf.gz` or `.vcf.bgz` file.
-- [ ] Upload a valid `.bcf` file if a test file is available.
+- [ ] Attempt to upload the unsupported-extension negative fixture N1 and confirm it is rejected.
+- [ ] Generate or upload the oversized negative fixture N3 and confirm it is rejected safely.
+- [ ] Upload a valid `.vcf` file using the generated positive-format variant from the manifest.
+- [ ] Upload a valid compressed `.vcf.gz` fixture P1, P2, P3, or P4, and upload a generated `.vcf.bgz` variant if bgzip coverage is required.
+- [ ] Upload a valid generated `.bcf` file if `bcftools` is available in the QA environment.
 - [ ] Confirm a successful import redirects to `/profile/` and shows a success message.
 - [ ] Confirm imported sample-group metadata appears on the profile and detail pages.
-- [ ] Confirm imported allele-frequency records are searchable.
+- [ ] Confirm imported allele-frequency records are searchable by comparing results with the expected row tables in the manifest.
 - [ ] Review logs for import warnings, validation failures, tracebacks, or slow operations.
 
 ## 7. Search workflow checks
+
+Use the expected allele-frequency rows in [QA Dataset Manifest for Import/Search/Export Checks](qa-dataset-manifest.md) for all row-level assertions. Testers should search by visible UI filters only, not by database queries or internal importer behavior.
 
 - [ ] Open `/search/` without filters and confirm the page renders.
 - [ ] Search by variant ID.
 - [ ] Search by chromosome and position if supported by the current filters.
 - [ ] Search by sample-group or metadata keyword.
-- [ ] Confirm search results include expected allele-frequency rows.
+- [ ] Confirm search results include the expected allele-frequency rows from the manifest for the imported fixture.
 - [ ] Confirm result table sorting works.
 - [ ] Confirm pagination or DataTables controls work.
 - [ ] Confirm the clear/reset search action works.
-- [ ] Confirm search performance is acceptable with demo data and with the largest available test dataset.
+- [ ] Confirm search performance is acceptable with demo data and fixture P4, the largest repository fixture in the manifest.
 
 ## 8. Export workflow checks
+
+Use the export column and row expectations in [QA Dataset Manifest for Import/Search/Export Checks](qa-dataset-manifest.md). The tester should be able to validate output by opening the downloaded CSV/TSV and comparing it to the manifest tables.
 
 - [ ] Open a sample-group detail page with imported variants.
 - [ ] Use the export action at `/profile/sample-groups/<id>/export/`.
 - [ ] Confirm the downloaded file opens correctly.
-- [ ] Confirm exported rows match the sample group and do not include another user's data.
+- [ ] Confirm exported rows match the manifest expectations for the sample group and do not include another user's data.
 - [ ] Confirm anonymous users cannot export data.
 - [ ] Confirm users cannot export sample groups owned by another organization.
 
 ## 9. Authorization and data-isolation checks
 
+Use fixtures P1 and P2 from [QA Dataset Manifest for Import/Search/Export Checks](qa-dataset-manifest.md) so each test user imports a small dataset with overlapping positions but different alternate alleles and sample identifiers.
+
 - [ ] Create two separate test users or organizations.
-- [ ] Create or import sample groups under each account.
+- [ ] Import fixture P1 under user/organization A and fixture P2 under user/organization B.
 - [ ] Confirm each user only sees their own profile sample groups.
 - [ ] Attempt direct URL access to another user's sample-group detail page and confirm it is denied or returns not found.
 - [ ] Attempt direct URL access to another user's edit, delete, and export URLs and confirm access is blocked.
-- [ ] Confirm public search behavior matches the intended product policy for cross-organization visibility.
+- [ ] Confirm public search behavior matches the intended product policy for cross-organization visibility, using the P1/P2 row expectations to identify data leakage or intended cross-organization visibility.
 
 ## 10. Admin checks
 

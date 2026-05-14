@@ -28,6 +28,12 @@ class SearchResultsViewTests(TestCase):
             password="search-pass",
             email="search@example.com",
         )
+        self.other_user = User.objects.create_user(
+            username="other_search_user",
+            password="search-pass",
+            email="other-search@example.com",
+        )
+        self.client.force_login(self.user)
 
         self.kidney_origin = SampleOrigin.objects.create(
             tissue="Kidney",
@@ -56,6 +62,13 @@ class SearchResultsViewTests(TestCase):
             sample_origin=self.liver_origin,
             bioinfo_variant_calling=self.variant_caller_b,
             created_by=self.user.organization_profile,
+        )
+        self.other_group = SampleGroup.objects.create(
+            name="External Kidney Cohort",
+            source_lab="Lab Other",
+            sample_origin=self.kidney_origin,
+            bioinfo_variant_calling=self.variant_caller_a,
+            created_by=self.other_user.organization_profile,
         )
 
         self.format = Format.objects.create(genotype="0/1")
@@ -86,6 +99,7 @@ class SearchResultsViewTests(TestCase):
             sample_group=self.kidney_group,
             chrom="1",
             pos=150,
+            variant_id="kidney-pass-1",
             ref="A",
             alt="T",
             qual=180.5,
@@ -115,6 +129,18 @@ class SearchResultsViewTests(TestCase):
             info=self.liver_info,
             format=self.format,
         )
+        self.other_variant = AlleleFrequency.objects.create(
+            sample_group=self.other_group,
+            chrom="4",
+            pos=500,
+            variant_id="external-private-1",
+            ref="T",
+            alt="C",
+            qual=110.0,
+            filter="PASS",
+            info=Info.objects.create(af="0.31", ac="7", an="40", dp="42", mq="50"),
+            format=self.format,
+        )
 
     def test_query_filters_variants_and_prioritises_columns(self) -> None:
         response = self.client.get(reverse("search_results"), {"query": "Kidney"})
@@ -123,7 +149,9 @@ class SearchResultsViewTests(TestCase):
 
         table = response.context["table"]
         records = [row.record for row in table.rows]
-        self.assertEqual(records, [self.kidney_variant_pass, self.kidney_variant_filtered])
+        self.assertEqual(
+            records, [self.kidney_variant_pass, self.kidney_variant_filtered]
+        )
 
         filterset = response.context["filter"]
         self.assertIsInstance(filterset, AlleleFrequencySearchFilter)
@@ -148,6 +176,16 @@ class SearchResultsViewTests(TestCase):
         )
         self.assertNotIn("info__additional", column_names)
         self.assertNotIn("format__payload", column_names)
+
+    def test_query_filters_by_variant_id(self) -> None:
+        response = self.client.get(
+            reverse("search_results"), {"query": "kidney-pass-1"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        table = response.context["table"]
+        records = [row.record for row in table.rows]
+        self.assertEqual(records, [self.kidney_variant_pass])
 
     def test_combined_filters_reduce_results(self) -> None:
         response = self.client.get(
@@ -201,13 +239,36 @@ class SearchResultsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         table = response.context["table"]
-        self.assertEqual(len(table.rows), AlleleFrequency.objects.count())
+        self.assertEqual(
+            len(table.rows),
+            AlleleFrequency.objects.filter(
+                sample_group__created_by=self.user.organization_profile
+            ).count(),
+        )
+
+    def test_user_cannot_see_another_organization_variants(self) -> None:
+        response = self.client.get(reverse("search_results"), {"query": "External"})
+
+        self.assertEqual(response.status_code, 200)
+        table = response.context["table"]
+        records = [row.record for row in table.rows]
+        self.assertEqual(records, [])
+        self.assertNotIn(self.other_variant, records)
+
+    def test_anonymous_users_are_redirected_before_seeing_variants(self) -> None:
+        self.client.logout()
+
+        response = self.client.get(reverse("search_results"), {"query": "Kidney"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("login")))
+        self.assertNotIn("Kidney Cohort", response.content.decode())
 
     def test_search_results_use_advanced_filters_toggle(self) -> None:
         response = self.client.get(reverse("search_results"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "data-bs-target=\"#advancedFiltersCollapse\"")
+        self.assertContains(response, 'data-bs-target="#advancedFiltersCollapse"')
         self.assertContains(response, "Advanced filters")
         self.assertNotContains(response, "filter-card-header")
 
@@ -284,7 +345,12 @@ class DashboardViewTests(TestCase):
         )
 
         self.assertEqual(recent_datasets, expected_datasets)
-        self.assertTrue(all(dataset.created_by == self.user_one.organization_profile for dataset in recent_datasets))
+        self.assertTrue(
+            all(
+                dataset.created_by == self.user_one.organization_profile
+                for dataset in recent_datasets
+            )
+        )
         self.assertLessEqual(len(recent_datasets), 6)
 
         recent_actions = response.context["recent_actions"]

@@ -1,5 +1,24 @@
 # Current Website Check Task List
 
+## Failure report template
+
+Create a separate issue/task for every checklist `FAIL`, except for clearly related duplicates that should be linked to the same root-cause issue. Each failure report must include:
+
+- Checklist section/item
+- Severity: Blocker/Critical/Major/Minor
+- Environment/browser
+- User/account/organization used
+- Dataset/file used
+- Steps to reproduce
+- Expected result
+- Actual result
+- Logs/screenshots
+- Suspected module/path
+- Owner
+- Fix status
+
+Regression verification rule: after a fix is applied, repeat the original failed check and the nearest neighboring workflow checks in the checklist to confirm the fix and surrounding workflow still pass.
+
 Use this checklist to verify how MetaGap is working now from setup through the main website workflows. Record the date, environment, tester, browser, dataset used, and pass/fail notes for each task.
 
 ## 1. Environment and startup checks

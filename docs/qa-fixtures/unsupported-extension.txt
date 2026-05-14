@@ -1,0 +1,1 @@
+This is not a VCF/BCF file. It is intentionally named .txt for unsupported-extension upload validation.

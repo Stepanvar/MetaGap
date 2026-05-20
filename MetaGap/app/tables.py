@@ -1,5 +1,7 @@
 """Build dynamic django-tables2 tables and allele-frequency helpers with curated columns."""
 
+from __future__ import annotations
+
 from typing import Dict, Iterable, List, Sequence
 
 import django_tables2 as tables

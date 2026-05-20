@@ -3,6 +3,7 @@
 *.service
 *.conf
 *.sh
+!scripts/*.sh
 
 # Logs and temporary files
 *.log

@@ -73,6 +73,7 @@ INSTALLED_APPS = [
 
     # Your apps
     "app",
+    "apps.news",
 ]
 
 # Middleware framework

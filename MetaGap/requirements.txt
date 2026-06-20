@@ -16,6 +16,7 @@ gunicorn==23.0.0
 idna==3.10
 iniconfig==2.1.0
 packaging==24.1
+Pillow==10.4.0
 pluggy==1.6.0
 Pygments==2.19.2
 pysam==0.22.1

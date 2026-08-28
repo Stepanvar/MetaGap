@@ -111,6 +111,43 @@ def parse_arguments():
         help="Optional file with extra header lines. One entry per line. Lines without '##' will be prefixed.",
     )
     parser.add_argument(
+        "--ref",
+        help="Expected reference genome build. When omitted the build is auto-detected.",
+    )
+    parser.add_argument(
+        "--vcf-version",
+        dest="vcf_version",
+        help="Expected VCF version (e.g. 4.2). When omitted the version is auto-detected.",
+    )
+    parser.add_argument(
+        "--meta",
+        action="append",
+        default=[],
+        type=_validate_metadata_entry,
+        metavar="KEY=VALUE",
+        help=(
+            "Sample metadata in KEY=VALUE form. Repeat for multiple keys. "
+            "An ID entry is required when metadata is provided."
+        ),
+    )
+    parser.add_argument(
+        "--sample-metadata",
+        dest="sample_metadata_entries",
+        action="append",
+        default=[],
+        type=_validate_metadata_entry,
+        metavar="KEY=VALUE",
+        help="Add a key/value pair to the ##SAMPLE metadata line.",
+    )
+    parser.add_argument(
+        "--header-metadata",
+        dest="header_metadata_lines",
+        action="append",
+        default=[],
+        metavar="LINE",
+        help="Add an arbitrary metadata header line (##key=value); the '##' prefix is optional.",
+    )
+    parser.add_argument(
         "--allow-gvcf",
         action="store_true",
         help="Allow gVCF inputs during validation.",
@@ -166,7 +203,7 @@ def parse_arguments():
             except ValueError:
                 args.input_dir = os.path.dirname(input_files[0]) if input_files else "."
 
-    if not input_files:
+    if not input_files and not args.input_dir:
         parser.error("No input VCF files specified.")
 
     # Output directory
@@ -190,6 +227,7 @@ def parse_arguments():
     # Sanitize lists
     args.header_metadata_lines = _metadata_list(getattr(args, "header_metadata_lines", None))
     args.sample_metadata_entries = _metadata_list(getattr(args, "sample_metadata_entries", None))
+    args.meta = _metadata_list(getattr(args, "meta", None))
 
     # Finalize input list
     args.input_files = [str(Path(p)) for p in input_files]
@@ -201,7 +239,9 @@ def _normalize_argument_namespace(args):
 
     # Sample metadata: convert list of KEY=VALUE to dict
     sample_mapping: dict[str, str] = {}
-    for entry in getattr(args, "sample_metadata_entries", []) or []:
+    _entries = list(getattr(args, "sample_metadata_entries", []) or [])
+    _entries += list(getattr(args, "meta", []) or [])
+    for entry in _entries:
         if "=" not in entry:
             continue
         key, value = entry.split("=", 1)
@@ -316,24 +356,37 @@ def main():
         log_message(f"Input directory: {input_dir}")
         log_message(f"Output directory: {output_dir}")
 
-        # Detect reference and VCF version from first readable VCF
+        # Use explicit --ref/--vcf-version when given; auto-detect only the rest.
         detected_file = None
         detected_fileformat = None
         detected_reference = None
 
-        (
-            detected_file,
-            detected_fileformat,
-            detected_reference,
-        ) = validation.find_first_vcf_with_header(input_dir, verbose)
+        _ref_arg = getattr(args, "ref", None)
+        _version_arg = getattr(args, "vcf_version", None)
+        ref_genome = _ref_arg.strip() if _ref_arg else None
+        vcf_version = (
+            validation.normalize_vcf_version(_version_arg) if _version_arg else None
+        )
 
-        ref_genome = detected_reference
-        vcf_version = validation.normalize_vcf_version(detected_fileformat)
+        if not ref_genome or not vcf_version:
+            (
+                detected_file,
+                detected_fileformat,
+                detected_reference,
+            ) = validation.find_first_vcf_with_header(input_dir, verbose)
+            if not ref_genome:
+                ref_genome = detected_reference
+            if not vcf_version:
+                vcf_version = validation.normalize_vcf_version(detected_fileformat)
 
         if not ref_genome:
-            raise ValidationError("Reference genome build must be auto-detectable from input files.")
+            raise ValidationError(
+                "Reference genome build must be provided via --ref or auto-detectable from input files."
+            )
         if not vcf_version:
-            raise ValidationError("VCF version must be auto-detectable from input files.")
+            raise ValidationError(
+                "VCF version must be provided via --vcf-version or auto-detectable from input files."
+            )
 
         if detected_file:
             log_message(

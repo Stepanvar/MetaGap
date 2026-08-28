@@ -364,7 +364,7 @@ def test_merge_colliding_records_pads_missing_samples():
     missing = merged.call_for_sample["Y"].data
     assert missing["GT"] == "./."
     assert missing["DP"] is None
-    assert missing["GQ"] is None
+    assert "GQ" not in missing  # declared by neither shard nor the header
     assert missing["AD"] == []
 
 
@@ -904,7 +904,9 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
     _write_merged_vcf(merged_vcf)
 
     try:
-        final_vcf = metadata_module.append_metadata_to_merged_vcf(str(merged_vcf))
+        final_vcf = metadata_module.append_metadata_to_merged_vcf(
+            str(merged_vcf), qual_threshold=None, an_threshold=None
+        )
     finally:
         patcher.undo()
 

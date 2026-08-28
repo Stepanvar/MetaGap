@@ -25,6 +25,7 @@ if __package__ in {None, ""} and __name__ == "__main__":
     __package__ = "merge_vcf"
 
 from . import merging, metadata as metadata_module, validation
+from . import vcfpy as _package_vcfpy
 from .filtering import DEFAULT_ALLOWED_FILTER_VALUES
 from .logging_utils import (
     LOG_FILE,
@@ -37,9 +38,12 @@ from .logging_utils import (
 )
 
 # Re-export helpers for tests/patching.
+vcfpy = _package_vcfpy
 merge_vcfs = merging.merge_vcfs
 union_headers = merging.union_headers
+validate_vcf = validation.validate_vcf
 append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
+parse_metadata_arguments = metadata_module.parse_metadata_arguments
 validate_all_vcfs = validation.validate_all_vcfs
 validate_merged_vcf = validation.validate_merged_vcf
 

@@ -33,12 +33,19 @@ def metadata_module(monkeypatch):
             self.key = key
             self.value = value
 
+    class HeaderLine:
+        def __init__(self, key, value):
+            self.key = key
+            self.value = value
+
     stub.SampleHeaderLine = SampleHeaderLine
     stub.SimpleHeaderLine = SimpleHeaderLine
+    stub.HeaderLine = HeaderLine
     stub.header = types.SimpleNamespace(InfoHeaderLine=type("InfoHeaderLine", (), {}))
     monkeypatch.setitem(sys.modules, "vcfpy", stub)
 
     module = importlib.import_module("MetagapUserCode.merge_vcf.metadata")
+    monkeypatch.setattr(module, "vcfpy", stub)
 
     monkeypatch.setattr(module, "template_sample_mapping", None, raising=False)
     monkeypatch.setattr(module, "template_simple_lines", [], raising=False)

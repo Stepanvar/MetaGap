@@ -694,11 +694,13 @@ def merge_vcfs(
                 fmt_keys = _order_format(list(cont["format_keys"]))
 
                 calls_out: List[vcfpy.Call] = []
+                _missing_call = _create_missing_call_factory(fmt_keys, header)
                 for s in final_sample_order:
                     data = cont["calls"].get(s, {})
+                    defaults = _missing_call()
                     filled: dict[str, object] = {}
                     for fk in fmt_keys:
-                        filled[fk] = data.get(fk, "./." if fk == "GT" else ".")
+                        filled[fk] = data.get(fk, defaults.get(fk))
                     calls_out.append(vcfpy.Call(sample=s, data=filled))
 
                 out_rec = vcfpy.Record(
@@ -713,6 +715,7 @@ def merge_vcfs(
                     FORMAT=fmt_keys,
                     calls=calls_out,
                 )
+                _recompute_ac_an_af(out_rec)
                 writer.write_record(out_rec)
 
         pysam.tabix_compress(base_vcf, gz_vcf, force=True)

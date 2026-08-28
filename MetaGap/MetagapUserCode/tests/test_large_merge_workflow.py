@@ -49,7 +49,10 @@ class _FormatHeaderLine(_HeaderDefinition):
         self.key = "FORMAT"
         self.mapping = dict(mapping)
         self.id = self.mapping.get("ID")
-        self.number = self.mapping.get("Number") or self.mapping.get("NUMBER")
+        _number = self.mapping.get("Number") or self.mapping.get("NUMBER")
+        if isinstance(_number, str) and _number.strip().lstrip("-").isdigit():
+            _number = int(_number)
+        self.number = _number
         parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
         super().__init__(f"##FORMAT=<{parts}>")
 

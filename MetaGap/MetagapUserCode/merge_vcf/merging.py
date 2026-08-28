@@ -718,6 +718,11 @@ def merge_vcfs(
                 _recompute_ac_an_af(out_rec)
                 writer.write_record(out_rec)
 
+        log_message(
+            f"Compressing and indexing merged VCF: {gz_vcf}",
+            verbose,
+            level=logging.INFO,
+        )
         pysam.tabix_compress(base_vcf, gz_vcf, force=True)
         pysam.tabix_index(gz_vcf, preset="vcf", force=True)
         try:

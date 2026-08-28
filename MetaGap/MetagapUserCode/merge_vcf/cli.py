@@ -38,6 +38,7 @@ from .logging_utils import (
 
 # Re-export helpers for tests/patching.
 merge_vcfs = merging.merge_vcfs
+union_headers = merging.union_headers
 append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
 validate_all_vcfs = validation.validate_all_vcfs
 validate_merged_vcf = validation.validate_merged_vcf

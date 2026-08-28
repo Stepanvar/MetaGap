@@ -15,8 +15,7 @@ if str(PACKAGE_ROOT) not in sys.path:
 def metadata_module(monkeypatch):
     """Load the metadata module with stubbed dependencies for testing."""
 
-    sys.modules.pop("vcfpy", None)
-    sys.modules.pop("MetagapUserCode.merge_vcf.metadata", None)
+    monkeypatch.delitem(sys.modules, "MetagapUserCode.merge_vcf.metadata", raising=False)
 
     stub = types.ModuleType("vcfpy")
 
@@ -37,7 +36,7 @@ def metadata_module(monkeypatch):
     stub.SampleHeaderLine = SampleHeaderLine
     stub.SimpleHeaderLine = SimpleHeaderLine
     stub.header = types.SimpleNamespace(InfoHeaderLine=type("InfoHeaderLine", (), {}))
-    sys.modules["vcfpy"] = stub
+    monkeypatch.setitem(sys.modules, "vcfpy", stub)
 
     module = importlib.import_module("MetagapUserCode.merge_vcf.metadata")
 

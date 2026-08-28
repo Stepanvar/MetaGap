@@ -30,7 +30,7 @@ def test_validate_vcf_flags_missing_sample_id(tmp_path, monkeypatch, merge_scrip
     shard = _copy_fixture(tmp_path, "malformed_sample_metadata.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     is_valid = module.validate_vcf(
         str(shard),
@@ -63,7 +63,7 @@ def test_validate_all_vcfs_skips_malformed_sample_metadata(
     _copy_fixture(tmp_path, "malformed_sample_metadata.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     valid_files, samples = module.validate_all_vcfs(
         str(tmp_path),

@@ -33,6 +33,7 @@ from . import vcfpy
 from .filtering import DEFAULT_ALLOWED_FILTER_VALUES, prepare_allowed_filter_set
 from .logging_utils import (
     MergeConflictError,
+    MergeVCFError,
     handle_critical_error,
     log_message,
 )

@@ -267,8 +267,8 @@ def test_pad_record_samples_adds_missing_calls(monkeypatch):
     assert record.call_for_sample["S2"].data["GT"] == "./."
     assert record.call_for_sample["S2"].data["DP"] is None
 
-    # Existing numeric scalars are normalized to single-element lists
-    assert record.call_for_sample["S1"].data["DP"] == [5]
+    # DP is declared Number=1, so it stays a scalar (see the S2 assertion above)
+    assert record.call_for_sample["S1"].data["DP"] == 5
 
 
 def test_pad_record_samples_normalizes_blank_genotypes():

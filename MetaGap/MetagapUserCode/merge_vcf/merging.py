@@ -186,9 +186,12 @@ def _merge_colliding_records(
             val = _alt_value(alt)
             if val not in alt_objects:
                 alt_objects[val] = copy.deepcopy(alt)
-    base.ALT = list(alt_objects.values())
+    # Sort so the merged ALT list (and therefore the remapped genotypes) does not
+    # depend on the order the shards were supplied in.
+    ordered_alt_values = sorted(alt_objects)
+    base.ALT = [alt_objects[val] for val in ordered_alt_values]
     # Mapping from original allele value to new allele index (for genotype remapping)
-    allele_map_global = {val: i for i, val in enumerate(alt_objects.keys(), start=1)}
+    allele_map_global = {val: i for i, val in enumerate(ordered_alt_values, start=1)}
     # Union of all FORMAT keys across records
     fmt_keys: List[str] = []
     for record, _ in grouped_records:
@@ -625,6 +628,7 @@ def merge_vcfs(
         for path in preprocessed:
             with vcfpy.Reader.from_path(path) as reader:
                 for rec in reader:
+                    _sort_record_alts(rec)
                     key = _rec_key(rec)
                     container = record_store.get(key)
                     if container is None:

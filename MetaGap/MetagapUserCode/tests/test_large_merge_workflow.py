@@ -15,6 +15,9 @@ class _HeaderDefinition:
     def to_line(self):
         return self.text
 
+    def serialize(self):
+        return self.text
+
     def copy(self):
         return _HeaderDefinition(self.text)
 
@@ -177,6 +180,9 @@ class _FakeHeader:
 
     def get_format_field_info(self, key):
         return self._format_fields.get(key)
+
+    def get_info_field_info(self, key):
+        return SimpleNamespace(type="String", number=1)
 
     def to_columns_line(self):
         return self._columns_line

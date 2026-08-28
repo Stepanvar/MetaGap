@@ -705,7 +705,9 @@ def validate_all_vcfs(
                             + "\n".join(lines)
                         )
                     if error_sections:
-                        handle_critical_error("\n".join(error_sections))
+                        handle_critical_error(
+                            "\n".join(error_sections), exc_cls=ValidationError
+                        )
 
                 contig_order = {name: idx for idx, name in enumerate(current_contigs.keys())}
                 last_contig_index = None

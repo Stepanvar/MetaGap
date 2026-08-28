@@ -297,8 +297,13 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
     return str(fallback_path.parent), fallback_path.name, 1
 
 
-def main():
-    args = _normalize_argument_namespace(parse_arguments())
+def run_workflow(args):
+    """Execute the merge workflow for an already-parsed argument namespace.
+
+    Split out of :func:`main` so the workflow can be driven without ``sys.argv``.
+    Returns the path of the final cohort VCF.
+    """
+
     verbose = args.verbose
     ref_genome = None
     vcf_version = None
@@ -560,9 +565,14 @@ def main():
             verbose,
         )
         print(f"Wrote: {final_vcf_path} x 1.")
+        return str(final_vcf_path)
     except (ValidationError, MergeConflictError, MergeVCFError) as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)
+
+
+def main():
+    return run_workflow(_normalize_argument_namespace(parse_arguments()))
 
 
 if __name__ == "__main__":

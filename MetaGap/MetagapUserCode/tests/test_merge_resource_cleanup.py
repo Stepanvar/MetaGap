@@ -97,9 +97,9 @@ def test_merge_handles_many_shards_without_leaving_artifacts(tmp_path, monkeypat
     fake_vcfpy.Writer = _Writer
 
     class _Call(fake_vcfpy.Call):  # type: ignore[misc]
-        def __init__(self, name, data):
-            super().__init__(name, data)
-            self.sample = self.name
+        def __init__(self, sample, data):
+            super().__init__(sample, data)
+            self.sample = getattr(self, "name", sample)
 
         def copy(self):  # pragma: no cover - simple delegation
             duplicate = super().copy()

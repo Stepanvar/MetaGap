@@ -564,7 +564,6 @@ def merge_vcfs(
 ) -> str:
     """Merge multiple VCF files into one .vcf.gz and index it."""
     import os, copy, datetime, concurrent.futures
-    import vcfpy, pysam
 
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

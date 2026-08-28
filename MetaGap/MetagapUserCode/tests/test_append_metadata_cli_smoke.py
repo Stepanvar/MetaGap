@@ -1,5 +1,6 @@
 import gzip
 import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,70 +16,36 @@ SAMPLE_BODY_TRIMMED = "1\t100\t.\tA\tG\t.\tPASS\tAC=1;AN=2;AF=0.5\n"
 SAMPLE_VCF = SAMPLE_HEADER + SAMPLE_BODY_WITH_FORMAT
 
 
-def _configure_fake_bcftools(monkeypatch, module, header_checks, call_log=None):
-    def fake_run(cmd, check=True, stdout=None, stdin=None, **kwargs):
-        if call_log is not None:
-            call_log.append(list(cmd))
-        if cmd[:2] == ["bcftools", "+fill-tags"]:
-            output_path = Path(cmd[cmd.index("-o") + 1])
-            output_path.write_text(SAMPLE_VCF)
-            return None
+def _write_merged_vcf(path: Path) -> None:
+    """Write a realistic merged VCF for the native (vcfpy/pysam) finalize path.
 
-        if cmd[:2] == ["bcftools", "view"] and "-i" in cmd:
-            output_path = Path(cmd[cmd.index("-o") + 1])
-            output_path.write_text(SAMPLE_VCF)
-            return None
+    The merge pipeline no longer shells out to bcftools/bgzip/tabix -- and
+    ``merge_vcf/__init__.py`` statically forbids it -- so these tests drive the
+    real implementation instead of faking a subprocess that is never spawned.
+    """
 
-        if cmd[:3] == ["bcftools", "view", "-h"] and stdout not in (
-            None,
-            module.subprocess.PIPE,
-        ):
-            stdout.write(SAMPLE_HEADER)
-            return None
+    if str(path).endswith(".gz"):
+        with gzip.open(path, "wt", encoding="utf-8") as handle:
+            handle.write(SAMPLE_VCF)
+    else:
+        path.write_text(SAMPLE_VCF)
 
-        if cmd[:3] == ["bcftools", "view", "-h"] and stdout == module.subprocess.PIPE:
-            header_checks.append(Path(cmd[-1]))
-            return None
 
-        if cmd and cmd[0] == "cut":
-            if stdout is None:
-                raise AssertionError("cut command requires stdout to be provided")
-            stdout.write(SAMPLE_BODY_TRIMMED)
-            return None
+def _metadata_module(module):
+    return sys.modules[module.append_metadata_to_merged_vcf.__module__]
 
-        if cmd and cmd[0] == "bgzip":
-            if len(cmd) < 2:
-                raise AssertionError("bgzip command missing target path")
-            target = Path(cmd[-1])
-            compressed = target.with_name(target.name + ".gz")
-            data = target.read_bytes()
-            with gzip.open(compressed, "wb") as handle:
-                handle.write(data)
-            return None
 
-        if cmd and cmd[0] == "tabix":
-            if "-f" not in cmd:
-                raise AssertionError("tabix command missing -f flag")
-            target = Path(cmd[-1])
-            index_path = target.with_suffix(target.suffix + ".tbi")
-            index_path.write_text("index")
-            return None
+def _spy_header_validation(monkeypatch, module, header_checks):
+    """Record which artifact the anonymized-header validation runs against."""
 
-        raise AssertionError(f"Unexpected command: {cmd}")
+    metadata_module = _metadata_module(module)
+    original = metadata_module._validate_anonymized_vcf_header
 
-    class FakePopen:
-        def __init__(self, cmd, stdout=None, **kwargs):
-            if cmd[:3] != ["bcftools", "view", "-H"]:
-                raise AssertionError(f"Unexpected Popen command: {cmd}")
-            if stdout != module.subprocess.PIPE:
-                raise AssertionError("Popen must be called with stdout=PIPE")
-            self.stdout = io.BytesIO(SAMPLE_BODY_WITH_FORMAT.encode("utf-8"))
+    def spy(final_vcf_path, *args, **kwargs):
+        header_checks.append(Path(final_vcf_path))
+        return original(final_vcf_path, *args, **kwargs)
 
-        def wait(self):
-            return 0
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
-    monkeypatch.setattr(module.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(metadata_module, "_validate_anonymized_vcf_header", spy)
 
 
 def test_append_metadata_runs_header_validation_for_gzip(
@@ -86,10 +53,10 @@ def test_append_metadata_runs_header_validation_for_gzip(
 ):
     module = merge_script_module
     header_checks = []
-    _configure_fake_bcftools(monkeypatch, module, header_checks)
+    _spy_header_validation(monkeypatch, module, header_checks)
 
     merged_vcf = tmp_path / "merged.vcf.gz"
-    merged_vcf.write_text("placeholder")
+    _write_merged_vcf(merged_vcf)
 
     final_vcf = module.append_metadata_to_merged_vcf(str(merged_vcf))
 
@@ -109,10 +76,10 @@ def test_append_metadata_runs_header_validation_for_plain_vcf(
 ):
     module = merge_script_module
     header_checks = []
-    _configure_fake_bcftools(monkeypatch, module, header_checks)
+    _spy_header_validation(monkeypatch, module, header_checks)
 
     merged_vcf = tmp_path / "merged.vcf"
-    merged_vcf.write_text("placeholder")
+    _write_merged_vcf(merged_vcf)
 
     final_vcf = module.append_metadata_to_merged_vcf(str(merged_vcf))
 
@@ -124,23 +91,23 @@ def test_append_metadata_runs_header_validation_for_plain_vcf(
     assert "##SAMPLE=" not in contents
 
 
-def test_append_metadata_triggers_bgzip_and_tabix(
-    monkeypatch, tmp_path, merge_script_module
-):
+def test_append_metadata_compresses_and_indexes(tmp_path, merge_script_module):
+    """Was ``test_append_metadata_triggers_bgzip_and_tabix``.
+
+    Same requirement -- the gzip artifact is BGZF-compressed, tabix-indexed, and
+    the plain intermediate is removed -- asserted against the pysam calls that
+    replaced the bgzip/tabix subprocesses.
+    """
+
     module = merge_script_module
-    header_checks = []
-    call_log = []
-    _configure_fake_bcftools(monkeypatch, module, header_checks, call_log=call_log)
 
     merged_vcf = tmp_path / "merged.vcf.gz"
-    merged_vcf.write_text("placeholder")
+    _write_merged_vcf(merged_vcf)
 
     final_vcf = module.append_metadata_to_merged_vcf(str(merged_vcf))
 
-    assert any(cmd[0] == "bgzip" for cmd in call_log)
-    assert any(cmd[0] == "tabix" for cmd in call_log)
-
     final_path = Path(final_vcf)
+    assert final_path.suffix == ".gz"
     assert final_path.exists()
     assert final_path.with_suffix(final_path.suffix + ".tbi").exists()
 
@@ -148,11 +115,9 @@ def test_append_metadata_triggers_bgzip_and_tabix(
     assert not plain_path.exists()
 
 
-def test_validate_header_failure_raises(monkeypatch, merge_script_module):
+def test_validate_header_failure_raises(monkeypatch, tmp_path, merge_script_module):
     module = merge_script_module
-
-    def fake_run(cmd, check=True, **kwargs):
-        raise module.subprocess.CalledProcessError(1, cmd)
+    metadata_module = _metadata_module(module)
 
     captured = {}
 
@@ -160,10 +125,12 @@ def test_validate_header_failure_raises(monkeypatch, merge_script_module):
         captured["message"] = message
         raise RuntimeError("critical failure")
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
-    monkeypatch.setattr(module, "handle_critical_error", fake_handle_error)
+    monkeypatch.setattr(metadata_module, "handle_critical_error", fake_handle_error)
+
+    unreadable = tmp_path / "broken.vcf.gz"
+    unreadable.write_bytes(b"this is not a VCF")
 
     with pytest.raises(RuntimeError):
-        module._validate_anonymized_vcf_header("output.vcf.gz")
+        metadata_module._validate_anonymized_vcf_header(str(unreadable))
 
-    assert "bcftools" in captured["message"]
+    assert "vcfpy" in captured["message"]

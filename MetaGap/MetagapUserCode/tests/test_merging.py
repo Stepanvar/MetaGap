@@ -24,7 +24,7 @@ from MetagapUserCode.merge_vcf import merging
 from MetagapUserCode.merge_vcf import metadata as metadata_module
 from MetagapUserCode.tests.test_append_metadata_cli_smoke import (
     SAMPLE_BODY_TRIMMED,
-    _configure_fake_bcftools,
+    _write_merged_vcf,
 )
 from MetagapUserCode.tests.test_large_merge_workflow import (
     _FakeCall,
@@ -858,10 +858,8 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
 
         patcher.setattr(cls, "from_mapping", classmethod(_from_mapping), raising=False)
 
-    _configure_fake_bcftools(patcher, metadata_module, header_checks)
-
     merged_vcf = tmp_path / "merged.vcf"
-    merged_vcf.write_text("placeholder")
+    _write_merged_vcf(merged_vcf)
 
     try:
         final_vcf = metadata_module.append_metadata_to_merged_vcf(str(merged_vcf))

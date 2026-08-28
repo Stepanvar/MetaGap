@@ -1029,6 +1029,8 @@ def append_metadata_to_merged_vcf(
             continue
         if stripped.startswith("##SAMPLE="):
             continue  # drop per-sample meta; we'll add cohort SAMPLE
+        if stripped.startswith("##FORMAT="):
+            continue  # anonymized output has no FORMAT/sample columns
         remaining_header_lines.append(stripped)
 
     final_header_lines: list[str] = [
@@ -1355,6 +1357,8 @@ def append_metadata_to_merged_vcf(
             continue
         if s.startswith("##SAMPLE="):
             continue  # drop per-sample meta; we'll add cohort SAMPLE
+        if s.startswith("##FORMAT="):
+            continue  # anonymized output has no FORMAT/sample columns
         remaining_header_lines.append(s)
 
     final_header_lines: list[str] = [fileformat_line or "##fileformat=VCFv4.2", *remaining_header_lines]
@@ -1481,6 +1485,12 @@ def append_metadata_to_merged_vcf(
         try:
             pysam.tabix_compress(final_plain_vcf, final_vcf, force=True)
             pysam.tabix_index(final_vcf, preset="vcf", force=True)
+            # Drop the uncompressed intermediate; cli.py does the same after
+            # compressing the final artifact.
+            try:
+                os.remove(final_plain_vcf)
+            except OSError:
+                pass
         except Exception as exc:
             for p in (final_plain_vcf, final_vcf):
                 if p and os.path.exists(p):
@@ -1491,6 +1501,8 @@ def append_metadata_to_merged_vcf(
             handle_critical_error(f"Failed to compress or index anonymized VCF: {exc}", exc_cls=MergeConflictError)
     else:
         final_vcf = final_plain_vcf
+
+    _validate_anonymized_vcf_header(final_vcf)
 
     log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
     return final_vcf

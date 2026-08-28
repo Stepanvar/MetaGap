@@ -105,6 +105,13 @@ def test_append_metadata_deduplicates_split_lines(metadata_module, tmp_path, mon
     monkeypatch.setattr(metadata_module, "VCFPY_AVAILABLE", True, raising=False)
 
     class _StubReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path):
             self.path = path
             self.header = types.SimpleNamespace(lines=[])

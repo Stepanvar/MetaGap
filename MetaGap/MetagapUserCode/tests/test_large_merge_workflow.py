@@ -336,6 +336,13 @@ def _register_vcf(path, header_lines, columns_line, records, format_fields, *, w
 
 
 class _FakeReader:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def __init__(self, path):
         _ensure_vcf_loaded(path)
         data = _VCF_STORAGE[path]
@@ -372,6 +379,13 @@ class _FakeReader:
 
 
 class _FakeWriter:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def __init__(self, path, header):
         self._path = path
         self._header = header

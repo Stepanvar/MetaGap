@@ -406,6 +406,13 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     headers_by_path: dict[str, SimpleNamespace] = {}
 
     class _Reader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, header, records):
             self.header = header
             self._records = [rec.copy() for rec in records]
@@ -418,6 +425,13 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
             return None
 
     class _Writer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path, header):
             self.path = Path(path)
             self.header = header
@@ -562,6 +576,13 @@ def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path
     writer_instances = []
 
     class _FakeReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path):
             assert str(path) == str(input_path)
             self.header = SimpleNamespace()
@@ -582,6 +603,13 @@ def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path
             return reader
 
     class _FakeWriter:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path, header):
             assert path.endswith(".filtered")
             self.path = Path(path)
@@ -673,6 +701,13 @@ def test_filter_vcf_records_applies_thresholds(tmp_path, monkeypatch, caplog):
     written_records = []
 
     class _StubReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, entries):
             self.header = SimpleNamespace()
             self._entries = entries
@@ -685,6 +720,13 @@ def test_filter_vcf_records_applies_thresholds(tmp_path, monkeypatch, caplog):
             return None
 
     class _StubWriter:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path, header):
             self.path = Path(path)
             self.header = header
@@ -1138,6 +1180,13 @@ def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
         def close(self):
             pass
     class _StubReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, entries):
             self._entries = entries
             self.header = SimpleNamespace()

@@ -983,36 +983,6 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         if s not in computed_sample_order:
                             computed_sample_order.append(s)
 
-                # Merge header lines with conflict checks
-                for line in hdr.lines:
-                    if isinstance(line, vcfpy.header.InfoHeaderLine):
-                        existing = info_lines.get(line.id)
-                        if existing is None:
-                            info_lines[line.id] = copy.deepcopy(line)
-                            combined_header.add_line(copy.deepcopy(line))
-                        else:
-                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
-                            for field in ("Number", "Type", "Description"):
-                                if exist_map.get(field) != new_map.get(field):
-                                    handle_critical_error(
-                                        "INFO header definitions conflict across shards. "
-                                        f"Field '{field}' for INFO '{line.id}' differs: "
-                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
-                                        exc_cls=MergeConflictError,
-                                    )
-
-                    elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                        filter_lines[line.id] = copy.deepcopy(line)
-                    elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                        contig_lines[line.id] = copy.deepcopy(line)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        format_lines[line.id] = copy.deepcopy(line)
-                    elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                        # Keep sample metadata line for merging
-                        mapping = _line_mapping(line)
-                        if mapping.get("ID"):
-                            merged_sample_metadata = dict(mapping)
-                continue  # move to next file
             # For subsequent files, merge header lines:
             if hasattr(hdr, "samples") and hasattr(hdr.samples, "names"):
                 for s in hdr.samples.names:
@@ -1030,11 +1000,26 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         for field in ("Number", "Type", "Description"):
                             if exist_map.get(field) != new_map.get(field):
                                 handle_critical_error(
-                                    "FILTER header definitions conflict across shards. "
-                                    f"Description for FILTER '{line.id}' differs: "
-                                    f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
+                                    "INFO header definitions conflict across shards. "
+                                    f"Field '{field}' for INFO '{line.id}' differs: "
+                                    f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
                                     exc_cls=MergeConflictError,
                                 )
+
+                elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                    existing = filter_lines.get(line.id)
+                    if existing is None:
+                        filter_lines[line.id] = copy.deepcopy(line)
+                        combined_header.add_line(copy.deepcopy(line))
+                    else:
+                        exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                        if exist_map.get("Description") != new_map.get("Description"):
+                            handle_critical_error(
+                                "FILTER header definitions conflict across shards. "
+                                f"Description for FILTER '{line.id}' differs: "
+                                f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
+                                exc_cls=MergeConflictError,
+                            )
 
                 elif isinstance(line, vcfpy.header.ContigHeaderLine):
                     existing = contig_lines.get(line.id)

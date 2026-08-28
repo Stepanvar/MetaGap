@@ -610,8 +610,10 @@ def _configure_fake_subprocess(monkeypatch, module):
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         raise AssertionError(f"Unexpected command: {cmd}")
 
-    monkeypatch.setattr(merging_module, "subprocess", module.subprocess, raising=False)
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    # The merge pipeline is native pysam/vcfpy now; nothing spawns bcftools,
+    # bgzip or tabix, so fake_run has no subprocess to attach to. The shutil.move
+    # tracking above is what this helper still provides.
+    _ = fake_run
 
 
 def test_large_cohort_merge_workflow(tmp_path, monkeypatch, merge_script_module):

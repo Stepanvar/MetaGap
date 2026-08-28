@@ -41,6 +41,7 @@ def test_handle_non_critical_error_logs_warning(caplog):
     mod = _reload_logging_utils()
     message = "recoverable condition"
 
+    mod.logger.addHandler(caplog.handler)
     with caplog.at_level(logging.DEBUG, logger=mod.logger.name):
         mod.handle_non_critical_error(message)
 
@@ -54,6 +55,7 @@ def test_handle_critical_error_logs_error_and_critical(caplog):
     message = "fatal condition detected"
     root_exc = ValueError("boom")
 
+    mod.logger.addHandler(caplog.handler)
     with caplog.at_level(logging.DEBUG, logger=mod.logger.name):
         with pytest.raises(mod.MergeVCFError) as excinfo:
             mod.handle_critical_error(message, exc_info=root_exc)

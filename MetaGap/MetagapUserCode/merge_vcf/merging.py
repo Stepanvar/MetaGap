@@ -1062,6 +1062,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                             if k not in merged_sample_metadata or not merged_sample_metadata[k]:
                                 merged_sample_metadata[k] = v
 
+        except MergeVCFError:
+            raise
         except Exception as exc:
             handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}", exc_cls=MergeConflictError)
         finally:

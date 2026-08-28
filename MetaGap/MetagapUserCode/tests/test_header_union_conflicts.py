@@ -147,7 +147,7 @@ def test_union_headers_detects_conflicting_info_definitions(
         + "\n"
     )
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(module.MergeConflictError):
         module.union_headers([str(vcf_one), str(vcf_two)])
 
 
@@ -189,7 +189,7 @@ def test_validate_all_vcfs_detects_conflicting_format_definitions(
         + "\n"
     )
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(module.ValidationError):
         module.validate_all_vcfs(
             str(tmp_path),
             ref_genome="GRCh38",

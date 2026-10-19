@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "django_tables2",
 
     # Your apps
+    "apps.products",
     "app",
 ]
 

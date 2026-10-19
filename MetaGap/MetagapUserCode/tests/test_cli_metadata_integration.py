@@ -93,6 +93,7 @@ def test_cli_metadata_integration(tmp_path, monkeypatch, cli_module):
         header_metadata_lines=None,
         serialized_sample_line=None,
         verbose=False,
+        **_kwargs,
     ):
         header_metadata_lines = list(header_metadata_lines or [])
         final_path = os.path.join(output_dir, "final_output.vcf")

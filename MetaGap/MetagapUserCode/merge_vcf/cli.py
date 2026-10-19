@@ -25,6 +25,7 @@ if __package__ in {None, ""} and __name__ == "__main__":
     __package__ = "merge_vcf"
 
 from . import merging, metadata as metadata_module, validation
+from . import vcfpy as _package_vcfpy
 from .filtering import DEFAULT_ALLOWED_FILTER_VALUES
 from .logging_utils import (
     LOG_FILE,
@@ -37,8 +38,12 @@ from .logging_utils import (
 )
 
 # Re-export helpers for tests/patching.
+vcfpy = _package_vcfpy
 merge_vcfs = merging.merge_vcfs
+union_headers = merging.union_headers
+validate_vcf = validation.validate_vcf
 append_metadata_to_merged_vcf = metadata_module.append_metadata_to_merged_vcf
+parse_metadata_arguments = metadata_module.parse_metadata_arguments
 validate_all_vcfs = validation.validate_all_vcfs
 validate_merged_vcf = validation.validate_merged_vcf
 
@@ -106,6 +111,43 @@ def parse_arguments():
         help="Optional file with extra header lines. One entry per line. Lines without '##' will be prefixed.",
     )
     parser.add_argument(
+        "--ref",
+        help="Expected reference genome build. When omitted the build is auto-detected.",
+    )
+    parser.add_argument(
+        "--vcf-version",
+        dest="vcf_version",
+        help="Expected VCF version (e.g. 4.2). When omitted the version is auto-detected.",
+    )
+    parser.add_argument(
+        "--meta",
+        action="append",
+        default=[],
+        type=_validate_metadata_entry,
+        metavar="KEY=VALUE",
+        help=(
+            "Sample metadata in KEY=VALUE form. Repeat for multiple keys. "
+            "An ID entry is required when metadata is provided."
+        ),
+    )
+    parser.add_argument(
+        "--sample-metadata",
+        dest="sample_metadata_entries",
+        action="append",
+        default=[],
+        type=_validate_metadata_entry,
+        metavar="KEY=VALUE",
+        help="Add a key/value pair to the ##SAMPLE metadata line.",
+    )
+    parser.add_argument(
+        "--header-metadata",
+        dest="header_metadata_lines",
+        action="append",
+        default=[],
+        metavar="LINE",
+        help="Add an arbitrary metadata header line (##key=value); the '##' prefix is optional.",
+    )
+    parser.add_argument(
         "--allow-gvcf",
         action="store_true",
         help="Allow gVCF inputs during validation.",
@@ -161,7 +203,7 @@ def parse_arguments():
             except ValueError:
                 args.input_dir = os.path.dirname(input_files[0]) if input_files else "."
 
-    if not input_files:
+    if not input_files and not args.input_dir:
         parser.error("No input VCF files specified.")
 
     # Output directory
@@ -185,6 +227,7 @@ def parse_arguments():
     # Sanitize lists
     args.header_metadata_lines = _metadata_list(getattr(args, "header_metadata_lines", None))
     args.sample_metadata_entries = _metadata_list(getattr(args, "sample_metadata_entries", None))
+    args.meta = _metadata_list(getattr(args, "meta", None))
 
     # Finalize input list
     args.input_files = [str(Path(p)) for p in input_files]
@@ -196,7 +239,9 @@ def _normalize_argument_namespace(args):
 
     # Sample metadata: convert list of KEY=VALUE to dict
     sample_mapping: dict[str, str] = {}
-    for entry in getattr(args, "sample_metadata_entries", []) or []:
+    _entries = list(getattr(args, "sample_metadata_entries", []) or [])
+    _entries += list(getattr(args, "meta", []) or [])
+    for entry in _entries:
         if "=" not in entry:
             continue
         key, value = entry.split("=", 1)
@@ -252,8 +297,13 @@ def summarize_produced_vcfs(output_dir: str, fallback_vcf: str):
     return str(fallback_path.parent), fallback_path.name, 1
 
 
-def main():
-    args = _normalize_argument_namespace(parse_arguments())
+def run_workflow(args):
+    """Execute the merge workflow for an already-parsed argument namespace.
+
+    Split out of :func:`main` so the workflow can be driven without ``sys.argv``.
+    Returns the path of the final cohort VCF.
+    """
+
     verbose = args.verbose
     ref_genome = None
     vcf_version = None
@@ -311,24 +361,37 @@ def main():
         log_message(f"Input directory: {input_dir}")
         log_message(f"Output directory: {output_dir}")
 
-        # Detect reference and VCF version from first readable VCF
+        # Use explicit --ref/--vcf-version when given; auto-detect only the rest.
         detected_file = None
         detected_fileformat = None
         detected_reference = None
 
-        (
-            detected_file,
-            detected_fileformat,
-            detected_reference,
-        ) = validation.find_first_vcf_with_header(input_dir, verbose)
+        _ref_arg = getattr(args, "ref", None)
+        _version_arg = getattr(args, "vcf_version", None)
+        ref_genome = _ref_arg.strip() if _ref_arg else None
+        vcf_version = (
+            validation.normalize_vcf_version(_version_arg) if _version_arg else None
+        )
 
-        ref_genome = detected_reference
-        vcf_version = validation.normalize_vcf_version(detected_fileformat)
+        if not ref_genome or not vcf_version:
+            (
+                detected_file,
+                detected_fileformat,
+                detected_reference,
+            ) = validation.find_first_vcf_with_header(input_dir, verbose)
+            if not ref_genome:
+                ref_genome = detected_reference
+            if not vcf_version:
+                vcf_version = validation.normalize_vcf_version(detected_fileformat)
 
         if not ref_genome:
-            raise ValidationError("Reference genome build must be auto-detectable from input files.")
+            raise ValidationError(
+                "Reference genome build must be provided via --ref or auto-detectable from input files."
+            )
         if not vcf_version:
-            raise ValidationError("VCF version must be auto-detectable from input files.")
+            raise ValidationError(
+                "VCF version must be provided via --vcf-version or auto-detectable from input files."
+            )
 
         if detected_file:
             log_message(
@@ -502,9 +565,14 @@ def main():
             verbose,
         )
         print(f"Wrote: {final_vcf_path} x 1.")
+        return str(final_vcf_path)
     except (ValidationError, MergeConflictError, MergeVCFError) as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)
+
+
+def main():
+    return run_workflow(_normalize_argument_namespace(parse_arguments()))
 
 
 if __name__ == "__main__":

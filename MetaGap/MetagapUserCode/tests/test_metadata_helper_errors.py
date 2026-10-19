@@ -15,8 +15,7 @@ if str(PACKAGE_ROOT) not in sys.path:
 def metadata_module(monkeypatch):
     """Load the metadata module with stubbed dependencies for testing."""
 
-    sys.modules.pop("vcfpy", None)
-    sys.modules.pop("MetagapUserCode.merge_vcf.metadata", None)
+    monkeypatch.delitem(sys.modules, "MetagapUserCode.merge_vcf.metadata", raising=False)
 
     stub = types.ModuleType("vcfpy")
 
@@ -34,12 +33,19 @@ def metadata_module(monkeypatch):
             self.key = key
             self.value = value
 
+    class HeaderLine:
+        def __init__(self, key, value):
+            self.key = key
+            self.value = value
+
     stub.SampleHeaderLine = SampleHeaderLine
     stub.SimpleHeaderLine = SimpleHeaderLine
+    stub.HeaderLine = HeaderLine
     stub.header = types.SimpleNamespace(InfoHeaderLine=type("InfoHeaderLine", (), {}))
-    sys.modules["vcfpy"] = stub
+    monkeypatch.setitem(sys.modules, "vcfpy", stub)
 
     module = importlib.import_module("MetagapUserCode.merge_vcf.metadata")
+    monkeypatch.setattr(module, "vcfpy", stub)
 
     monkeypatch.setattr(module, "template_sample_mapping", None, raising=False)
     monkeypatch.setattr(module, "template_simple_lines", [], raising=False)
@@ -99,6 +105,13 @@ def test_append_metadata_deduplicates_split_lines(metadata_module, tmp_path, mon
     monkeypatch.setattr(metadata_module, "VCFPY_AVAILABLE", True, raising=False)
 
     class _StubReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path):
             self.path = path
             self.header = types.SimpleNamespace(lines=[])

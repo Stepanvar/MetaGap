@@ -63,33 +63,6 @@ class _SequenceDateTime(_dt.datetime):
         return value
 
 
-def _install_fake_subprocess(patcher, module):
-    def fake_run(cmd, *args, **kwargs):
-        if cmd[:2] == ["bcftools", "merge"]:
-            output_path = Path(cmd[cmd.index("-o") + 1])
-            output_path.write_text("", encoding="utf-8")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if cmd[:1] == ["bgzip"]:
-            target = Path(cmd[-1])
-            gz_path = target.with_suffix(target.suffix + ".gz") if target.suffix else Path(
-                str(target) + ".gz"
-            )
-            with open(target, "rb") as src, gzip.open(gz_path, "wb") as dest:
-                dest.write(src.read())
-            target.unlink()
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if cmd[:1] == ["tabix"]:
-            index_path = Path(cmd[-1] + ".tbi")
-            index_path.write_bytes(b"")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        raise AssertionError(f"Unexpected command: {cmd}")
-
-    from types import SimpleNamespace
-    
-    merging_module = sys.modules[module.merge_vcfs.__module__]
-    patcher.setattr(merging_module.subprocess, "run", fake_run)
-
-
 def test_merge_outputs_are_deterministic(tmp_path):
     sample_a = tmp_path / "sample_a.vcf"
     sample_b = tmp_path / "sample_b.vcf"
@@ -105,7 +78,6 @@ def test_merge_outputs_are_deterministic(tmp_path):
         if not getattr(module, "VCFPY_AVAILABLE", True):
             pytest.skip("vcfpy dependency is required for merge ordering tests")
 
-        _install_fake_subprocess(patcher, module)
         patcher.setattr(module.datetime, "datetime", _SequenceDateTime)
         _SequenceDateTime._counter = 0
 

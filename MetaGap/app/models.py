@@ -9,6 +9,8 @@ cleanup logic on :class:`SampleGroup` deletions to ensure related,
 unshared metadata is removed alongside the group record.
 """
 
+from __future__ import annotations
+
 from typing import Any, ClassVar, Dict, Iterable, Optional, Tuple
 
 from django.conf import settings

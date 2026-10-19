@@ -57,7 +57,7 @@ def test_validate_all_vcfs_reports_number_type_conflicts(tmp_path):
 
     original_handle_critical_error = validation.handle_critical_error
     try:
-        def fake_handle_critical_error(message: str) -> None:
+        def fake_handle_critical_error(message: str, *args, **kwargs) -> None:
             messages.append(message)
             raise SystemExit(message)
 

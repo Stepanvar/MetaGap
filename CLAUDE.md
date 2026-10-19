@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MetaGap is a Django 5.1 web application for managing sample group metadata and allele frequency information from sequencing workflows. It provides VCF file import/export, metadata management, and search capabilities for genomic variant data. Python 3.11.
+MetaGap is a Django 4.2 web application for managing sample group metadata and allele frequency information from sequencing workflows. It provides VCF file import/export, metadata management, and search capabilities for genomic variant data. Python 3.11.
 
 ## Commands
 

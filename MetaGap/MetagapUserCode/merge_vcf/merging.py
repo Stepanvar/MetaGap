@@ -33,6 +33,7 @@ from . import vcfpy
 from .filtering import DEFAULT_ALLOWED_FILTER_VALUES, prepare_allowed_filter_set
 from .logging_utils import (
     MergeConflictError,
+    MergeVCFError,
     handle_critical_error,
     log_message,
 )
@@ -185,9 +186,12 @@ def _merge_colliding_records(
             val = _alt_value(alt)
             if val not in alt_objects:
                 alt_objects[val] = copy.deepcopy(alt)
-    base.ALT = list(alt_objects.values())
+    # Sort so the merged ALT list (and therefore the remapped genotypes) does not
+    # depend on the order the shards were supplied in.
+    ordered_alt_values = sorted(alt_objects)
+    base.ALT = [alt_objects[val] for val in ordered_alt_values]
     # Mapping from original allele value to new allele index (for genotype remapping)
-    allele_map_global = {val: i for i, val in enumerate(alt_objects.keys(), start=1)}
+    allele_map_global = {val: i for i, val in enumerate(ordered_alt_values, start=1)}
     # Union of all FORMAT keys across records
     fmt_keys: List[str] = []
     for record, _ in grouped_records:
@@ -624,6 +628,7 @@ def merge_vcfs(
         for path in preprocessed:
             with vcfpy.Reader.from_path(path) as reader:
                 for rec in reader:
+                    _sort_record_alts(rec)
                     key = _rec_key(rec)
                     container = record_store.get(key)
                     if container is None:
@@ -689,11 +694,13 @@ def merge_vcfs(
                 fmt_keys = _order_format(list(cont["format_keys"]))
 
                 calls_out: List[vcfpy.Call] = []
+                _missing_call = _create_missing_call_factory(fmt_keys, header)
                 for s in final_sample_order:
                     data = cont["calls"].get(s, {})
+                    defaults = _missing_call()
                     filled: dict[str, object] = {}
                     for fk in fmt_keys:
-                        filled[fk] = data.get(fk, "./." if fk == "GT" else ".")
+                        filled[fk] = data.get(fk, defaults.get(fk))
                     calls_out.append(vcfpy.Call(sample=s, data=filled))
 
                 out_rec = vcfpy.Record(
@@ -708,8 +715,14 @@ def merge_vcfs(
                     FORMAT=fmt_keys,
                     calls=calls_out,
                 )
+                _recompute_ac_an_af(out_rec)
                 writer.write_record(out_rec)
 
+        log_message(
+            f"Compressing and indexing merged VCF: {gz_vcf}",
+            verbose,
+            level=logging.INFO,
+        )
         pysam.tabix_compress(base_vcf, gz_vcf, force=True)
         pysam.tabix_index(gz_vcf, preset="vcf", force=True)
         try:
@@ -982,36 +995,6 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         if s not in computed_sample_order:
                             computed_sample_order.append(s)
 
-                # Merge header lines with conflict checks
-                for line in hdr.lines:
-                    if isinstance(line, vcfpy.header.InfoHeaderLine):
-                        existing = info_lines.get(line.id)
-                        if existing is None:
-                            info_lines[line.id] = copy.deepcopy(line)
-                            combined_header.add_line(copy.deepcopy(line))
-                        else:
-                            exist_map, new_map = _line_mapping(existing), _line_mapping(line)
-                            for field in ("Number", "Type", "Description"):
-                                if exist_map.get(field) != new_map.get(field):
-                                    handle_critical_error(
-                                        "INFO header definitions conflict across shards. "
-                                        f"Field '{field}' for INFO '{line.id}' differs: "
-                                        f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
-                                        exc_cls=MergeConflictError,
-                                    )
-
-                    elif isinstance(line, vcfpy.header.FilterHeaderLine):
-                        filter_lines[line.id] = copy.deepcopy(line)
-                    elif isinstance(line, vcfpy.header.ContigHeaderLine):
-                        contig_lines[line.id] = copy.deepcopy(line)
-                    elif isinstance(line, vcfpy.header.FormatHeaderLine):
-                        format_lines[line.id] = copy.deepcopy(line)
-                    elif isinstance(line, vcfpy.header.SampleHeaderLine):
-                        # Keep sample metadata line for merging
-                        mapping = _line_mapping(line)
-                        if mapping.get("ID"):
-                            merged_sample_metadata = dict(mapping)
-                continue  # move to next file
             # For subsequent files, merge header lines:
             if hasattr(hdr, "samples") and hasattr(hdr.samples, "names"):
                 for s in hdr.samples.names:
@@ -1029,11 +1012,26 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                         for field in ("Number", "Type", "Description"):
                             if exist_map.get(field) != new_map.get(field):
                                 handle_critical_error(
-                                    "FILTER header definitions conflict across shards. "
-                                    f"Description for FILTER '{line.id}' differs: "
-                                    f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
+                                    "INFO header definitions conflict across shards. "
+                                    f"Field '{field}' for INFO '{line.id}' differs: "
+                                    f"{exist_map.get(field)!r} vs {new_map.get(field)!r} (in {file_path}).",
                                     exc_cls=MergeConflictError,
                                 )
+
+                elif isinstance(line, vcfpy.header.FilterHeaderLine):
+                    existing = filter_lines.get(line.id)
+                    if existing is None:
+                        filter_lines[line.id] = copy.deepcopy(line)
+                        combined_header.add_line(copy.deepcopy(line))
+                    else:
+                        exist_map, new_map = _line_mapping(existing), _line_mapping(line)
+                        if exist_map.get("Description") != new_map.get("Description"):
+                            handle_critical_error(
+                                "FILTER header definitions conflict across shards. "
+                                f"Description for FILTER '{line.id}' differs: "
+                                f"{exist_map.get('Description')!r} vs {new_map.get('Description')!r} (in {file_path}).",
+                                exc_cls=MergeConflictError,
+                            )
 
                 elif isinstance(line, vcfpy.header.ContigHeaderLine):
                     existing = contig_lines.get(line.id)
@@ -1076,6 +1074,8 @@ def union_headers(valid_files: Sequence[str], sample_order: Optional[Sequence[st
                             if k not in merged_sample_metadata or not merged_sample_metadata[k]:
                                 merged_sample_metadata[k] = v
 
+        except MergeVCFError:
+            raise
         except Exception as exc:
             handle_critical_error(f"Failed to read VCF header from {file_path}: {exc}", exc_cls=MergeConflictError)
         finally:

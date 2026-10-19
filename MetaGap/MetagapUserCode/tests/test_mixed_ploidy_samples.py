@@ -38,7 +38,7 @@ def test_validate_vcf_rejects_mixed_depth_encoding(
     shard = _copy_fixture(tmp_path, "mixed_ploidy_depth.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     with warnings.catch_warnings():
         _filter_integer_conversion()
@@ -73,7 +73,7 @@ def test_validate_all_vcfs_skips_mixed_ploidy_shard(
     _copy_fixture(tmp_path, "mixed_ploidy_depth.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     with warnings.catch_warnings():
         _filter_integer_conversion()

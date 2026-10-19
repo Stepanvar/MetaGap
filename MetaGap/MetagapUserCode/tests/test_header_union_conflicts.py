@@ -35,7 +35,7 @@ def test_duplicate_format_ids_fail_validation(tmp_path, monkeypatch, merge_scrip
     shard = _copy_fixture(tmp_path, "duplicate_format_conflict.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     with warnings.catch_warnings():
         warnings.simplefilter(
@@ -72,7 +72,7 @@ def test_validate_all_vcfs_skips_duplicate_format_shards(
     _copy_fixture(tmp_path, "duplicate_format_conflict.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     with warnings.catch_warnings():
         warnings.simplefilter(
@@ -97,7 +97,7 @@ def test_inconsistent_contig_definitions_are_reported(
     shard = _copy_fixture(tmp_path, "inconsistent_contigs.vcf")
 
     messages: list[str] = []
-    monkeypatch.setattr(module, "handle_non_critical_error", messages.append)
+    monkeypatch.setattr(module.validation, "handle_non_critical_error", messages.append)
 
     with warnings.catch_warnings():
         warnings.simplefilter(
@@ -147,7 +147,7 @@ def test_union_headers_detects_conflicting_info_definitions(
         + "\n"
     )
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(module.MergeConflictError):
         module.union_headers([str(vcf_one), str(vcf_two)])
 
 
@@ -189,7 +189,7 @@ def test_validate_all_vcfs_detects_conflicting_format_definitions(
         + "\n"
     )
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(module.ValidationError):
         module.validate_all_vcfs(
             str(tmp_path),
             ref_genome="GRCh38",

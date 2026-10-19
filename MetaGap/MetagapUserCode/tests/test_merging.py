@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import shutil
 from typing import Callable
 import datetime
@@ -23,7 +24,7 @@ from MetagapUserCode.merge_vcf import merging
 from MetagapUserCode.merge_vcf import metadata as metadata_module
 from MetagapUserCode.tests.test_append_metadata_cli_smoke import (
     SAMPLE_BODY_TRIMMED,
-    _configure_fake_bcftools,
+    _write_merged_vcf,
 )
 from MetagapUserCode.tests.test_large_merge_workflow import (
     _FakeCall,
@@ -266,8 +267,8 @@ def test_pad_record_samples_adds_missing_calls(monkeypatch):
     assert record.call_for_sample["S2"].data["GT"] == "./."
     assert record.call_for_sample["S2"].data["DP"] is None
 
-    # Existing numeric scalars are normalized to single-element lists
-    assert record.call_for_sample["S1"].data["DP"] == [5]
+    # DP is declared Number=1, so it stays a scalar (see the S2 assertion above)
+    assert record.call_for_sample["S1"].data["DP"] == 5
 
 
 def test_pad_record_samples_normalizes_blank_genotypes():
@@ -363,7 +364,7 @@ def test_merge_colliding_records_pads_missing_samples():
     missing = merged.call_for_sample["Y"].data
     assert missing["GT"] == "./."
     assert missing["DP"] is None
-    assert missing["GQ"] is None
+    assert "GQ" not in missing  # declared by neither shard nor the header
     assert missing["AD"] == []
 
 
@@ -405,6 +406,13 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
     headers_by_path: dict[str, SimpleNamespace] = {}
 
     class _Reader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, header, records):
             self.header = header
             self._records = [rec.copy() for rec in records]
@@ -417,6 +425,13 @@ def test_merge_vcfs_pads_missing_samples(monkeypatch, tmp_path):
             return None
 
     class _Writer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path, header):
             self.path = Path(path)
             self.header = header
@@ -561,6 +576,13 @@ def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path
     writer_instances = []
 
     class _FakeReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path):
             assert str(path) == str(input_path)
             self.header = SimpleNamespace()
@@ -581,6 +603,13 @@ def test_filter_vcf_records_applies_thresholds_and_filters(monkeypatch, tmp_path
             return reader
 
     class _FakeWriter:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path, header):
             assert path.endswith(".filtered")
             self.path = Path(path)
@@ -672,6 +701,13 @@ def test_filter_vcf_records_applies_thresholds(tmp_path, monkeypatch, caplog):
     written_records = []
 
     class _StubReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, entries):
             self.header = SimpleNamespace()
             self._entries = entries
@@ -684,6 +720,13 @@ def test_filter_vcf_records_applies_thresholds(tmp_path, monkeypatch, caplog):
             return None
 
     class _StubWriter:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, path, header):
             self.path = Path(path)
             self.header = header
@@ -857,13 +900,13 @@ def test_append_metadata_to_merged_vcf_strips_sample_columns(tmp_path):
 
         patcher.setattr(cls, "from_mapping", classmethod(_from_mapping), raising=False)
 
-    _configure_fake_bcftools(patcher, metadata_module, header_checks)
-
     merged_vcf = tmp_path / "merged.vcf"
-    merged_vcf.write_text("placeholder")
+    _write_merged_vcf(merged_vcf)
 
     try:
-        final_vcf = metadata_module.append_metadata_to_merged_vcf(str(merged_vcf))
+        final_vcf = metadata_module.append_metadata_to_merged_vcf(
+            str(merged_vcf), qual_threshold=None, an_threshold=None
+        )
     finally:
         patcher.undo()
 
@@ -1139,6 +1182,13 @@ def test_merge_vcfs_emits_anonymized_gzip(monkeypatch, tmp_path):
         def close(self):
             pass
     class _StubReader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
         def __init__(self, entries):
             self._entries = entries
             self.header = SimpleNamespace()

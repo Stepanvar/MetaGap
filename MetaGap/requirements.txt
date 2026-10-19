@@ -1,13 +1,12 @@
-# Python 3.11+ required
+# Python 3.9 required (Jino shared-hosting ceiling)
 # System dependencies: gettext (for compilemessages)
 
-asgiref==3.8.1
+asgiref==3.7.2
 beautifulsoup4==4.12.3
 certifi==2024.8.30
 charset-normalizer==3.3.2
 dj-database-url==2.2.0
-Django==5.1.1
-django-allauth==65.0.1
+Django==4.2.16
 django-bootstrap5==24.3
 django-filter==24.3
 django-tables2==2.7.0
@@ -20,14 +19,14 @@ pluggy==1.6.0
 Pygments==2.19.2
 pysam==0.22.1
 pytest==8.4.2
-pytest-django==4.12.0
+pytest-django==4.11.1
 python-dotenv==1.1.1
 PyYAML==6.0.2
 requests==2.32.3
 soupsieve==2.6
-sqlparse==0.5.1
+sqlparse==0.4.4
 typing_extensions==4.12.2
 tzdata==2024.2
 urllib3==2.2.3
-vcfpy==0.14.2
+vcfpy==0.13.8
 whitenoise==6.11.0

@@ -71,6 +71,13 @@ class _StubHeader:
 
 
 class _StubReader:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def __init__(self, path: str) -> None:
         self.path = path
         self.header = _StubHeader()

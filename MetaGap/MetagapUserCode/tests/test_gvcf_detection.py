@@ -25,7 +25,7 @@ def test_validate_vcf_rejects_gvcf_header(monkeypatch, gvcf_path, merge_script_m
     def capture_warning(message):
         messages.append(message)
 
-    monkeypatch.setattr(merge_script_module, "handle_non_critical_error", capture_warning)
+    monkeypatch.setattr(merge_script_module.validation, "handle_non_critical_error", capture_warning)
 
     is_valid = merge_script_module.validate_vcf(
         str(gvcf_path),
@@ -48,7 +48,7 @@ def test_validate_vcf_rejects_non_ref_alt(monkeypatch, tmp_path, merge_script_mo
     def capture_warning(message):
         messages.append(message)
 
-    monkeypatch.setattr(merge_script_module, "handle_non_critical_error", capture_warning)
+    monkeypatch.setattr(merge_script_module.validation, "handle_non_critical_error", capture_warning)
 
     is_valid = merge_script_module.validate_vcf(
         str(alt_only_path),

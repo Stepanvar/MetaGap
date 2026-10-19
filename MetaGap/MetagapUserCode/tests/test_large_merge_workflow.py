@@ -15,6 +15,9 @@ class _HeaderDefinition:
     def to_line(self):
         return self.text
 
+    def serialize(self):
+        return self.text
+
     def copy(self):
         return _HeaderDefinition(self.text)
 
@@ -46,7 +49,10 @@ class _FormatHeaderLine(_HeaderDefinition):
         self.key = "FORMAT"
         self.mapping = dict(mapping)
         self.id = self.mapping.get("ID")
-        self.number = self.mapping.get("Number") or self.mapping.get("NUMBER")
+        _number = self.mapping.get("Number") or self.mapping.get("NUMBER")
+        if isinstance(_number, str) and _number.strip().lstrip("-").isdigit():
+            _number = int(_number)
+        self.number = _number
         parts = ",".join(f"{k}={v}" for k, v in self.mapping.items())
         super().__init__(f"##FORMAT=<{parts}>")
 
@@ -177,6 +183,9 @@ class _FakeHeader:
 
     def get_format_field_info(self, key):
         return self._format_fields.get(key)
+
+    def get_info_field_info(self, key):
+        return SimpleNamespace(type="String", number=1)
 
     def to_columns_line(self):
         return self._columns_line
@@ -336,6 +345,13 @@ def _register_vcf(path, header_lines, columns_line, records, format_fields, *, w
 
 
 class _FakeReader:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def __init__(self, path):
         _ensure_vcf_loaded(path)
         data = _VCF_STORAGE[path]
@@ -372,6 +388,13 @@ class _FakeReader:
 
 
 class _FakeWriter:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def __init__(self, path, header):
         self._path = path
         self._header = header
@@ -610,8 +633,10 @@ def _configure_fake_subprocess(monkeypatch, module):
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         raise AssertionError(f"Unexpected command: {cmd}")
 
-    monkeypatch.setattr(merging_module, "subprocess", module.subprocess, raising=False)
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    # The merge pipeline is native pysam/vcfpy now; nothing spawns bcftools,
+    # bgzip or tabix, so fake_run has no subprocess to attach to. The shutil.move
+    # tracking above is what this helper still provides.
+    _ = fake_run
 
 
 def test_large_cohort_merge_workflow(tmp_path, monkeypatch, merge_script_module):

@@ -547,7 +547,7 @@ def validate_all_vcfs(
                             f"{list(current_contigs.keys())}.",
                             exc_cls=ValidationError,
                         )
-                    if current_info_defs != reference_info_defs:
+                    if set(current_info_defs) != set(reference_info_defs or {}):
                         handle_critical_error(
                             "INFO field definitions differ between VCF shards. MetaGap assumes "
                             "vertical concatenation of shards, so headers must match across shards. "
@@ -555,7 +555,7 @@ def validate_all_vcfs(
                             f"{list(current_info_defs.keys())}.",
                             exc_cls=ValidationError,
                         )
-                    if current_format_defs != reference_format_defs:
+                    if set(current_format_defs) != set(reference_format_defs or {}):
                         handle_critical_error(
                             "FORMAT field definitions differ between VCF shards. MetaGap assumes "
                             "vertical concatenation of shards, so headers must match across shards. "
@@ -705,7 +705,9 @@ def validate_all_vcfs(
                             + "\n".join(lines)
                         )
                     if error_sections:
-                        handle_critical_error("\n".join(error_sections))
+                        handle_critical_error(
+                            "\n".join(error_sections), exc_cls=ValidationError
+                        )
 
                 contig_order = {name: idx for idx, name in enumerate(current_contigs.keys())}
                 last_contig_index = None

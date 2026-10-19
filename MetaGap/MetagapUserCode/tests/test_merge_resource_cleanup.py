@@ -117,7 +117,7 @@ def test_merge_handles_many_shards_without_leaving_artifacts(tmp_path, monkeypat
     # Capture verbose logging to assert progress reporting occurred.
     captured_logs: list[str] = []
 
-    def _capture(message: str, verbose: bool = False):
+    def _capture(message: str, verbose: bool = False, *args, **kwargs):
         if verbose:
             captured_logs.append(str(message))
 

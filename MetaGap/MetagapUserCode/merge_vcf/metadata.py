@@ -601,7 +601,7 @@ def _load_metadata_template(
                     existing_sanitized.add(sanitized)
 
                 try:
-                    simple_line = vcfpy.SimpleHeaderLine(key, value)
+                    simple_line = vcfpy.HeaderLine(key, value)
                 except Exception as exc:  # pragma: no cover - defensive logging
                     log_message(
                         f"Failed to parse metadata template line '{sanitized}': {exc}",
@@ -741,6 +741,130 @@ def load_metadata_lines(metadata_file: str, verbose: bool = False) -> list[str]:
     return sanitized_lines
 
 
+# Template metadata state. ``parse_metadata_arguments`` reads these when the
+# caller supplies no ``metadata_template_path``; they are the injection seam the
+# unit tests drive directly.
+template_sample_mapping: Optional[Mapping[str, str]] = None
+template_serialized_sample: Optional[str] = None
+template_simple_lines: list = []
+template_header_lines: List[str] = []
+
+
+def parse_metadata_arguments(args, verbose: bool = False):
+    """Return header metadata derived from CLI arguments.
+
+    Combines any ``--metadata-template`` file with the ``--sample-metadata`` /
+    ``--meta`` / ``--header-metadata`` overrides and returns the tuple
+    ``(sample_header_line, simple_header_lines, sample_mapping,
+    sanitized_header_lines, serialized_sample_line)``.
+    """
+
+    template_path = getattr(args, "metadata_template_path", None)
+    if template_path:
+        (
+            tpl_sample_mapping,
+            tpl_simple_lines,
+            tpl_header_lines,
+            tpl_serialized_sample,
+        ) = _load_metadata_template(template_path, verbose)
+    else:
+        tpl_sample_mapping = template_sample_mapping
+        tpl_simple_lines = list(template_simple_lines)
+        tpl_header_lines = list(template_header_lines)
+        tpl_serialized_sample = template_serialized_sample
+
+    sample_entries = []
+    for attr in ("sample_metadata_entries", "meta"):
+        values = getattr(args, attr, None)
+        if not values:
+            continue
+        if isinstance(values, (list, tuple)):
+            sample_entries.extend(values)
+        else:
+            sample_entries.append(values)
+    additional_lines = getattr(args, "header_metadata_lines", None) or []
+
+    sample_mapping: "OrderedDict[str, str]" = OrderedDict()
+    serialized_sample_line = tpl_serialized_sample
+    if tpl_sample_mapping:
+        sample_mapping.update(tpl_sample_mapping)
+
+    for raw_entry in sample_entries:
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            handle_critical_error(
+                f"Invalid sample metadata entry '{raw_entry}'. Expected KEY=VALUE format.",
+                exc_cls=ValidationError,
+            )
+        key, value = entry.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            handle_critical_error(
+                "Sample metadata keys cannot be empty.", exc_cls=ValidationError
+            )
+        sample_mapping[key] = value
+        serialized_sample_line = None
+
+    sample_header_line = None
+    if sample_mapping:
+        try:
+            sample_line = build_sample_metadata_line(sample_mapping)
+        except ValueError as exc:
+            handle_critical_error(str(exc), exc_cls=ValidationError)
+        log_message(f"Using sample metadata: {sample_line}", verbose)
+        serialized_sample_line = sample_line
+        sample_header_line = vcfpy.SampleHeaderLine.from_mapping(sample_mapping)
+
+    simple_header_lines = list(tpl_simple_lines)
+    sanitized_header_lines: List[str] = list(tpl_header_lines)
+    existing_simple = {
+        (line.key, getattr(line, "value", None)) for line in simple_header_lines
+    }
+    existing_sanitized = set(sanitized_header_lines)
+    cli_added_lines: List[str] = []
+    for raw_line in additional_lines:
+        normalized = raw_line.strip()
+        if not normalized:
+            continue
+        if not normalized.startswith("##"):
+            normalized = "##" + normalized
+        parsed = _parse_simple_metadata_line(normalized)
+        if not parsed:
+            handle_critical_error(
+                f"Additional metadata '{raw_line}' must be in '##key=value' format.",
+                exc_cls=ValidationError,
+            )
+        key, value = parsed
+        sanitized = f"##{key}={value}"
+        cli_added_lines.append(sanitized)
+        if sanitized not in existing_sanitized:
+            sanitized_header_lines.append(sanitized)
+            existing_sanitized.add(sanitized)
+        identifier = (key, value)
+        if identifier not in existing_simple:
+            simple_header_lines.append(vcfpy.HeaderLine(key, value))
+            existing_simple.add(identifier)
+
+    if cli_added_lines:
+        log_message(
+            "Using CLI header metadata lines: " + ", ".join(cli_added_lines),
+            verbose,
+        )
+
+    sample_mapping_copy = OrderedDict(sample_mapping) if sample_mapping else None
+
+    return (
+        sample_header_line,
+        simple_header_lines,
+        sample_mapping_copy,
+        sanitized_header_lines,
+        serialized_sample_line,
+    )
+
+
 def apply_metadata_to_header(
     header,
     sample_header_line=None,
@@ -758,7 +882,7 @@ def apply_metadata_to_header(
         existing_simple = {
             (line.key, getattr(line, "value", None))
             for line in header.lines
-            if isinstance(line, vcfpy.SimpleHeaderLine)
+            if isinstance(line, vcfpy.HeaderLine)
         }
         for simple_line in simple_header_lines:
             identifier = (simple_line.key, simple_line.value)
@@ -905,6 +1029,8 @@ def append_metadata_to_merged_vcf(
             continue
         if stripped.startswith("##SAMPLE="):
             continue  # drop per-sample meta; we'll add cohort SAMPLE
+        if stripped.startswith("##FORMAT="):
+            continue  # anonymized output has no FORMAT/sample columns
         remaining_header_lines.append(stripped)
 
     final_header_lines: list[str] = [
@@ -1231,6 +1357,8 @@ def append_metadata_to_merged_vcf(
             continue
         if s.startswith("##SAMPLE="):
             continue  # drop per-sample meta; we'll add cohort SAMPLE
+        if s.startswith("##FORMAT="):
+            continue  # anonymized output has no FORMAT/sample columns
         remaining_header_lines.append(s)
 
     final_header_lines: list[str] = [fileformat_line or "##fileformat=VCFv4.2", *remaining_header_lines]
@@ -1357,6 +1485,12 @@ def append_metadata_to_merged_vcf(
         try:
             pysam.tabix_compress(final_plain_vcf, final_vcf, force=True)
             pysam.tabix_index(final_vcf, preset="vcf", force=True)
+            # Drop the uncompressed intermediate; cli.py does the same after
+            # compressing the final artifact.
+            try:
+                os.remove(final_plain_vcf)
+            except OSError:
+                pass
         except Exception as exc:
             for p in (final_plain_vcf, final_vcf):
                 if p and os.path.exists(p):
@@ -1367,6 +1501,8 @@ def append_metadata_to_merged_vcf(
             handle_critical_error(f"Failed to compress or index anonymized VCF: {exc}", exc_cls=MergeConflictError)
     else:
         final_vcf = final_plain_vcf
+
+    _validate_anonymized_vcf_header(final_vcf)
 
     log_message(f"Anonymized merged VCF written to: {final_vcf}", verbose)
     return final_vcf
@@ -1625,6 +1761,7 @@ __all__ = [
     "_parse_sample_metadata_line",
     "_parse_simple_metadata_line",
     "load_metadata_lines",
+    "parse_metadata_arguments",
     "apply_metadata_to_header",
     "_validate_anonymized_vcf_header",
     "append_metadata_to_merged_vcf",

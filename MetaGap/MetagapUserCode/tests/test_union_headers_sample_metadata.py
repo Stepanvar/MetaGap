@@ -8,6 +8,21 @@ def _skip_without_vcfpy(merge_script_module):
         pytest.skip("vcfpy dependency is required for header union tests")
 
 
+def _contig_ids(module, header):
+    """Contig IDs in header order.
+
+    ``vcfpy.Header`` exposes no ``.contigs`` mapping in either version this repo
+    pins (0.13.8 or 0.14.2); the contig order lives in the ContigHeaderLine
+    entries, which is exactly how merging.py reads it back.
+    """
+
+    return [
+        line.id
+        for line in header.lines
+        if isinstance(line, module.vcfpy.header.ContigHeaderLine)
+    ]
+
+
 def _write_vcf(path, sample_line):
     content = """##fileformat=VCFv4.2
 ##reference=GRCh38
@@ -112,7 +127,7 @@ def test_union_headers_preserves_contig_and_sample_order(tmp_path, merge_script_
 
     header = module.union_headers([str(vcf_one), str(vcf_two)])
 
-    assert list(header.contigs.keys()) == ["1", "2", "3", "4"]
+    assert _contig_ids(module, header) == ["1", "2", "3", "4"]
     assert header.samples.names == ["A", "B", "C"]
 
 
@@ -129,10 +144,10 @@ def test_union_headers_respects_explicit_sample_order(tmp_path, merge_script_mod
         [str(vcf_one), str(vcf_two)], sample_order=["C", "B", "A"]
     )
 
-    assert list(header.contigs.keys()) == ["1", "2", "3", "4"]
+    assert _contig_ids(module, header) == ["1", "2", "3", "4"]
     assert header.samples.names == ["C", "B", "A"]
     reordered = module.union_headers(
-        [str(vcf_ab), str(vcf_c)], sample_order=["C", "B", "A"]
+        [str(vcf_one), str(vcf_two)], sample_order=["C", "B", "A"]
     )
 
     assert reordered.samples.names == ["C", "B", "A"]

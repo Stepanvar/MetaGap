@@ -1,12 +1,13 @@
-"""Utilities for normalizing allowed FILTER values when merging VCF records.
+"""Filtering utilities for interpreting allowed FILTER values in the VCF merge workflow.
 
-This module centralizes the logic for interpreting the user-provided
-``allowed-filter`` configuration that controls which FILTER codes are permitted
-during merges. ``DEFAULT_ALLOWED_FILTER_VALUES`` records the canonical set of
-FILTER values to trust when no overrides are supplied, and the helper functions
-expose consistent ways to turn the configuration into tuples or sets that are
-ready for membership checks when validating merged calls.
+This module centralizes logic that handles the ``FILTER`` field of VCF records.
+``DEFAULT_ALLOWED_FILTER_VALUES`` defines the canonical whitelist used when no
+overrides are provided. Helper functions such as
+:func:`prepare_allowed_filter_values` and :func:`prepare_allowed_filter_set`
+normalize user-supplied configurations into ready-to-use tuples or sets for
+membership checks during validation and merging.
 """
+
 
 from __future__ import annotations
 
